@@ -902,7 +902,6 @@ int cal_utils_dealloc_cal(size_t data_size, void *data,
 	int ret = 0;
 	struct cal_block_data *cal_block;
 	struct audio_cal_type_dealloc *dealloc_data = data;
-	unsigned long flags = 0;
 
 	pr_debug("%s\n", __func__);
 
