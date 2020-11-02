@@ -1063,7 +1063,6 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_component *component = NULL;
 	struct snd_soc_dapm_context *dapm = NULL;
 	int ret = 0;
-	int codec_variant = -1;
 	struct snd_info_entry *entry;
 	struct snd_card *card = NULL;
 	struct msm_asoc_mach_data *pdata;
