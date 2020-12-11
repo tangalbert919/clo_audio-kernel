@@ -44,6 +44,7 @@ COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
 # for CC Codec
 ifdef CONFIG_SND_SOC_CC
 	CC_OBJS += cc_codec.o
+	CC_OBJS += cc_pktzr.o
 endif
 
 LINUX_INC +=	-Iinclude/linux
