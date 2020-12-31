@@ -108,7 +108,8 @@ int gpr_send_pkt(struct gpr_device *adev, struct gpr_pkt *pkt)
 	spin_lock_irqsave(&adev->lock, flags);
 
 	hdr = &pkt->hdr;
-	hdr->dst_domain_id = adev->domain_id;
+	if (adev->domain_id == GPR_DOMAIN_MODEM)
+		hdr->dst_domain_id = GPR_IDS_DOMAIN_ID_MODEM_V;
 	pkt_size = GPR_PKT_GET_PACKET_BYTE_SIZE(hdr->header);
 
 	dev_dbg(gpr->dev, "SVC_ID %d %s packet size %d\n",
@@ -141,6 +142,7 @@ static void gpr_modem_down(unsigned long opcode)
 
 static void gpr_modem_up(void)
 {
+	gpr_set_modem_state(GPR_SUBSYS_LOADED);
 	//if (apr_cmpxchg_modem_state(APR_SUBSYS_DOWN, APR_SUBSYS_UP) ==
 	//						APR_SUBSYS_DOWN)
 	//	wake_up(&modem_wait);
@@ -496,6 +498,9 @@ static int gpr_probe(struct rpmsg_device *rpdev)
 		dev_err(dev, "GPR Domain ID not specified in DT\n");
 		return ret;
 	}
+
+	if (GPR_DOMAIN_MODEM == gpr_priv->dest_domain_id)
+		gpr_set_modem_state(GPR_SUBSYS_UP);
 
 	of_register_gpr_devices(dev);
 
