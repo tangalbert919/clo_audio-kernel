@@ -1,7 +1,7 @@
 # auto-detect subdirs
 ifneq ($(CONFIG_ARCH_QTI_VM), y)
 ifeq ($(CONFIG_QTI_QUIN_GVM), y)
-include $(srctree)/techpack/audio/config/gvmauto.conf
+include $(srctree)/techpack/audio-ar/config/gvmauto.conf
 export
 endif
 ifeq ($(CONFIG_ARCH_SDXPOORWILLS), y)
@@ -30,6 +30,19 @@ include $(srctree)/techpack/audio/config/sa8155auto.conf
 export
 endif
 endif
+
+ifeq ($(CONFIG_QTI_QUIN_GVM), y)
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(srctree)/techpack/audio-ar/include/uapi/audio
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio-ar/include/uapi \
+                -I$(srctree)/techpack/audio-ar/include/uapi/audio \
+                -I$(srctree)/techpack/audio-ar/include
+else
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \
                 -I$(srctree)/techpack/audio/include/uapi/audio
@@ -40,10 +53,11 @@ LINUXINCLUDE    += \
                 -I$(srctree)/techpack/audio/include/uapi \
                 -I$(srctree)/techpack/audio/include/uapi/audio \
                 -I$(srctree)/techpack/audio/include
+endif
 
 ifeq ($(CONFIG_QTI_QUIN_GVM), y)
 LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/gvmautoconf.h
+                -include $(srctree)/techpack/audio-ar/config/gvmautoconf.h
 endif
 ifeq ($(CONFIG_ARCH_SDXPOORWILLS), y)
 LINUXINCLUDE    += \

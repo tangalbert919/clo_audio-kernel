@@ -13,18 +13,6 @@ ifeq ($(KERNEL_BUILD), 1)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 endif
 
-ifeq ($(CONFIG_SND_SOC_AUTO), y)
-	ifdef CONFIG_SND_SOC_SA8155
-		include $(AUDIO_ROOT)/config/sa8155auto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sa8155autoconf.h
-	endif
-	ifdef CONFIG_SND_SOC_SA6155
-		include $(AUDIO_ROOT)/config/sa6155auto.conf
-		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sa6155autoconf.h
-	endif
-else
 ifeq ($(KERNEL_BUILD), 0)
 	ifeq ($(CONFIG_ARCH_SM8150), y)
 		ifdef CONFIG_SND_SOC_SA8155
@@ -88,7 +76,6 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/gvmautoconf.h
 	endif
-endif
 endif
 
 # As per target team, build is done as follows:
@@ -165,9 +152,9 @@ ifdef CONFIG_SND_SOC_BENGAL
 	MACHINE_OBJS += bengal.o
 endif
 
-# for sa8155 sound card driver
-ifdef CONFIG_SND_SOC_SA8155
-	MACHINE_OBJS += sa8155.o
+# for gvm sound card driver
+ifdef CONFIG_SND_SOC_GVM_AUTO_SPF
+    MACHINE_OBJS += gvm_auto_spf_dummy.o
 endif
 
 ifdef CONFIG_SND_SOC_QDSP6V2
@@ -246,8 +233,8 @@ machine_dlkm-y := $(MACHINE_OBJS)
 obj-$(CONFIG_SND_SOC_BENGAL) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)
 
-obj-$(CONFIG_SND_SOC_SA8155) += machine_dlkm.o
-machine_dlkm-y := $(MACHINE_OBJS)
+obj-$(CONFIG_SND_SOC_GVM_AUTO_SPF) += spf_machine_dlkm.o
+spf_machine_dlkm-y := $(MACHINE_OBJS)
 
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

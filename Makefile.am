@@ -38,19 +38,13 @@ obj-m += asoc/codecs/bolero/
 obj-m += asoc/codecs/wcd937x/
 endif
 
-ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa8155 sa8155ivi sa6155 sa8195 qtiquingvm))
-KBUILD_OPTIONS += CONFIG_SND_SOC_AUTO=y
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), qtiquingvm8295))
+KBUILD_OPTIONS += CONFIG_QTI_QUIN_GVM=y
 obj-m := ipc/
 obj-m += dsp/
 obj-m += asoc/
 obj-m += asoc/codecs/
 obj-m += soc/
-ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa8155 sa8155ivi sa8195 qtiquingvm))
-KBUILD_OPTIONS += CONFIG_SND_SOC_SA8155=m
-endif
-ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa6155))
-KBUILD_OPTIONS += CONFIG_SND_SOC_SA6155=m
-endif
 endif
 
 define PROCESS_HEADERS
