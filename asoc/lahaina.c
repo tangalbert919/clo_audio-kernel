@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -322,7 +322,7 @@ static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 	unsigned int rx_ch[WCN_CDC_SLIM_RX_CH_MAX] = {157, 158};
 	unsigned int tx_ch[WCN_CDC_SLIM_TX_CH_MAX]  = {159, 160};
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-    int ret = 0;
+	int ret = 0;
 
 	ret = snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
 					   tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
@@ -330,7 +330,7 @@ static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 
 	msm_common_dai_link_init(rtd);
-    return ret;
+	return ret;
 }
 
 static struct snd_info_entry *msm_snd_info_create_subdir(struct module *mod,
@@ -1121,10 +1121,9 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 	bolero_info_create_codec_entry(pdata->codec_root, component);
 	bolero_register_wake_irq(component, false);
 
-	if (pdata->wcd_disabled) {
-		codec_reg_done = true;
-		return 0;
-	}
+	if (pdata->wcd_disabled)
+		goto done;
+
 	component = snd_soc_rtdcom_lookup(rtd, WCD938X_DRV_NAME);
 	if (!component) {
 		pr_err("%s component is NULL\n", __func__);
@@ -1163,7 +1162,7 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 #endif
-
+done:
 	codec_reg_done = true;
 	msm_common_dai_link_init(rtd);
 	return 0;
