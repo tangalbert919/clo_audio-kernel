@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -940,13 +940,13 @@ static int wcd9xxx_i2c_write_device(struct wcd9xxx *wcd9xxx, u16 reg, u8 *value,
 						wcd9xxx_i2c->xfer_msg, 1);
 		if (ret != 1) {
 			pr_err("failed to write the device\n");
-			goto fail;
+			kfree(data);
+			return ret;
 		}
 	}
 	pr_debug("write success register = %x val = %x\n", reg, data[1]);
-fail:
 	kfree(data);
-	return ret;
+	return 0;
 }
 
 
