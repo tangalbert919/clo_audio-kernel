@@ -29,6 +29,10 @@ ifeq ($(CONFIG_ARCH_SDXLEMUR), y)
 include $(srctree)/techpack/audio/config/sdxlemurauto.conf
 export
 endif
+ifeq ($(CONFIG_ARCH_MONACO), y)
+include $(srctree)/techpack/audio/config/monacoauto.conf
+export
+endif
 endif
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
@@ -74,6 +78,11 @@ endif
 ifeq ($(CONFIG_ARCH_SDXLEMUR), y)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/sdxlemurautoconf.h
+endif
+
+ifeq ($(CONFIG_ARCH_MONACO), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/monacoautoconf.h
 endif
 
 obj-y += soc/
