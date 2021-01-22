@@ -1,4 +1,4 @@
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -227,7 +227,7 @@ void msm_common_snd_shutdown(struct snd_pcm_substream *substream)
 		if (pdata->mi2s_gpio_p[index]) {
 			atomic_dec(&pdata->mi2s_gpio_ref_cnt[index]);
 			if (atomic_read(&pdata->mi2s_gpio_ref_cnt[index]) == 0) {
-				ret = msm_cdc_pinctrl_select_active_state(
+				ret = msm_cdc_pinctrl_select_sleep_state(
 						pdata->mi2s_gpio_p[index]);
 				if (ret)
 					dev_err(card->dev,
