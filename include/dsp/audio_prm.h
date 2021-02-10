@@ -1,4 +1,4 @@
-/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -510,5 +510,6 @@ typedef struct prm_cmd_request_hw_core_t
 
 int audio_prm_set_lpass_clk_cfg(struct clk_cfg *cfg, uint8_t enable);
 int audio_prm_set_lpass_hw_core_req(struct clk_cfg *cfg, uint32_t hw_core_id, uint8_t enable);
+int audio_prm_set_lpass_core_clk_req(struct clk_cfg *cfg, uint32_t hw_core_id, uint8_t enable);
 
 #endif
