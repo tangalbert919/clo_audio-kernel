@@ -1182,6 +1182,7 @@ static int wcd9xxx_i2c_probe(struct i2c_client *client,
 			wcd9xxx_assign_irq(&wcd9xxx->core_res,
 					pdata->irq, pdata->irq_base);
 
+		wcd9xxx_set_intf_type(WCD9XXX_INTERFACE_TYPE_I2C);
 		ret = wcd9xxx_device_init(wcd9xxx);
 		if (ret) {
 			pr_err("%s: error, initializing device failed (%d)\n",
@@ -1197,7 +1198,6 @@ static int wcd9xxx_i2c_probe(struct i2c_client *client,
 		if (val != wcd9xxx->codec_type->i2c_chip_status)
 			pr_err("%s: unknown chip status 0x%x\n", __func__, val);
 
-		wcd9xxx_set_intf_type(WCD9XXX_INTERFACE_TYPE_I2C);
 
 		return ret;
 	}

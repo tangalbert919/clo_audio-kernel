@@ -1560,7 +1560,7 @@ static int wsa881x_swr_probe(struct swr_device *pdev)
 	memcpy(wsa881x->dai_driver, wsa_dai, sizeof(struct snd_soc_dai_driver));
 
 	/* Get last digit from HEX format */
-	dev_index = (int)((char)(pdev->addr & 0xF));
+	dev_index = pdev->dev_num;
 
 	snprintf(buffer, sizeof(buffer), "wsa-codec.%d", dev_index);
 	wsa881x->driver->name = kstrndup(buffer, strlen(buffer), GFP_KERNEL);

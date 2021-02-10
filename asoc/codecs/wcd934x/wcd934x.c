@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/init.h>
@@ -11076,7 +11076,8 @@ static void tavil_add_child_devices(struct work_struct *work)
 		}
 
 		/* Parse other child device nodes and add platform device */
-		if (!strcmp(node->name, "swr_master"))
+		if (strnstr(node->name, "swr_master",
+				 strlen("swr_master")) != NULL)
 			strlcpy(plat_dev_name, "tavil_swr_ctrl",
 				(WCD934X_STRING_LEN - 1));
 		else if (strnstr(node->name, "msm_cdc_pinctrl",
