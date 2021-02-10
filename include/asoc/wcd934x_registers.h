@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016, 2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _WCD934X_REGISTERS_H
@@ -30,8 +30,9 @@ enum {
 };
 
 enum {
-	WCD934X_WRITE = 0,
+	WCD934X_UNACCESSIBLE = 0,
 	WCD934X_READ,
+	WCD934X_WRITE,
 	WCD934X_READ_WRITE,
 };
 
