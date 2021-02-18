@@ -25,7 +25,11 @@
 
 #include "msm_common.h"
 
-struct snd_card_pdata *snd_card_pdata;
+struct snd_card_pdata {
+	struct kobject snd_card_kobj;
+	int card_status;
+}*snd_card_pdata;
+
 #define to_asoc_mach_common_pdata(kobj) \
 	container_of((kobj), struct msm_common_pdata, aud_dev_kobj)
 

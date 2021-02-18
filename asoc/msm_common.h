@@ -41,11 +41,6 @@ struct msm_common_pdata {
 	atomic_t mi2s_gpio_ref_cnt[MI2S_TDM_AUXPCM_MAX];
 };
 
-struct snd_card_pdata {
-	struct kobject snd_card_kobj;
-	int card_status;
-};
-
 int snd_card_notify_user(int card_status);
 struct msm_common_pdata *msm_common_get_pdata(struct snd_soc_card *card);
 
