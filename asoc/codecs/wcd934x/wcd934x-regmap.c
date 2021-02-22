@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, 2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/regmap.h>
@@ -1858,7 +1858,7 @@ static bool wcd934x_is_readable_register(struct device *dev, unsigned int reg)
 	reg_tbl = wcd934x_reg[pg_num];
 	reg_offset = reg & 0xFF;
 
-	if (reg_tbl && reg_tbl[reg_offset])
+	if (reg_tbl && (reg_tbl[reg_offset] & WCD934X_READ))
 		return true;
 	else
 		return false;
@@ -1880,7 +1880,7 @@ static bool wcd934x_is_volatile_register(struct device *dev, unsigned int reg)
 	reg_tbl = wcd934x_reg[pg_num];
 	reg_offset = reg & 0xFF;
 
-	if (reg_tbl && reg_tbl[reg_offset] == WCD934X_READ)
+	if (reg_tbl && (reg_tbl[reg_offset] == WCD934X_READ))
 		return true;
 
 	/* IIR Coeff registers are not cacheable */

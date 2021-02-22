@@ -662,6 +662,16 @@ static struct snd_soc_dai_link msm_mi2s_dai_links[] = {
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(quat_mi2s_tx),
 	},
+	{
+		.name = LPASS_BE_TERT_MI2S_TX,
+		.stream_name = LPASS_BE_TERT_MI2S_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(tert_mi2s_tx),
+	},
 };
 
 static struct snd_soc_dai_link msm_tdm_dai_links[] = {
@@ -1186,6 +1196,7 @@ static int lahaina_ssr_enable(struct device *dev, void *data)
 	}
 
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
+	snd_card_notify_user(1);
 	snd_soc_card_change_online_state(card, 1);
 #endif /* CONFIG_AUDIO_QGKI */
 	dev_dbg(dev, "%s: setting snd_card to ONLINE\n", __func__);
@@ -1206,6 +1217,7 @@ static void lahaina_ssr_disable(struct device *dev, void *data)
 
 	dev_dbg(dev, "%s: setting snd_card to OFFLINE\n", __func__);
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
+	snd_card_notify_user(0);
 	snd_soc_card_change_online_state(card, 0);
 #endif /* CONFIG_AUDIO_QGKI */
 
@@ -1509,7 +1521,19 @@ static struct platform_driver lahaina_asoc_machine_driver = {
 	.probe = msm_asoc_machine_probe,
 	.remove = msm_asoc_machine_remove,
 };
-module_platform_driver(lahaina_asoc_machine_driver);
+
+static int __init msm_asoc_machine_init(void)
+{
+	snd_card_sysfs_init();
+	return platform_driver_register(&lahaina_asoc_machine_driver);
+}
+module_init(msm_asoc_machine_init);
+
+static void __exit msm_asoc_machine_exit(void)
+{
+	platform_driver_unregister(&lahaina_asoc_machine_driver);
+}
+module_exit(msm_asoc_machine_exit);
 
 MODULE_SOFTDEP("pre: bt_fm_slim");
 MODULE_DESCRIPTION("ALSA SoC msm");

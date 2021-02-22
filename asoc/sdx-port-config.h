@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
-#ifndef _LAHAINA_PORT_CONFIG
-#define _LAHAINA_PORT_CONFIG
+#ifndef _SDX_PORT_CONFIG
+#define _SDX_PORT_CONFIG
 
 #include <soc/swr-common.h>
 
@@ -65,4 +65,4 @@ static struct port_params tx_frame_params_4p8MHz[SWR_MSTR_PORT_LEN] = {
 	{3,  2,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0x00, 0x00}, /* TX3 */
 };
 
-#endif /* _LAHAINA_PORT_CONFIG */
+#endif /* _SDX_PORT_CONFIG */

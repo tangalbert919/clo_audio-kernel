@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -54,25 +54,46 @@
 #define WCN_CDC_SLIM_TX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX_LITO 3
 
+#define LPAIF_OFFSET 0x01a00000
+#define LPAIF_PRI_MODE_MUXSEL (LPAIF_OFFSET + 0x2008)
+#define LPAIF_SEC_MODE_MUXSEL (LPAIF_OFFSET + 0x200c)
+#define LPASS_CSR_GP_IO_MUX_SPKR_CTL (LPAIF_OFFSET + 0x2004)
+#define LPASS_CSR_GP_IO_MUX_MIC_CTL  (LPAIF_OFFSET + 0x2000)
+
+#define I2S_SEL 0
+#define PCM_SEL 1
+#define I2S_PCM_SEL_OFFSET 0
+#define I2S_PCM_MASTER_MODE 1
+#define I2S_PCM_SLAVE_MODE 0
+
+#define PRI_TLMM_CLKS_EN_MASTER 0x4
+#define SEC_TLMM_CLKS_EN_MASTER 0x2
+#define PRI_TLMM_CLKS_EN_SLAVE 0x100000
+#define SEC_TLMM_CLKS_EN_SLAVE 0x800000
+#define CLOCK_ON  1
+#define CLOCK_OFF 0
+
 struct msm_asoc_mach_data {
 	struct snd_info_entry *codec_root;
-    struct msm_common_pdata *common_pdata;
+	struct msm_common_pdata *common_pdata;
 	int usbc_en2_gpio; /* used by gpio driver API */
 	struct device_node *dmic01_gpio_p; /* used by pinctrl API */
 	struct device_node *dmic23_gpio_p; /* used by pinctrl API */
 	struct device_node *dmic45_gpio_p; /* used by pinctrl API */
 	struct device_node *us_euro_gpio_p; /* used by pinctrl API */
-	struct pinctrl *usbc_en2_gpio_p; /* used by pinctrl API */
 	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
-	bool is_afe_config_done;
-	struct device_node *fsa_handle;
-	struct clk *lpass_audio_hw_vote;
-	int core_audio_vote_count;
 	u32 wsa_max_devs;
+	u16 prim_mi2s_mode;
+	struct device_node *prim_master_p;
+	void __iomem *lpaif_pri_muxsel_virt_addr;
+	void __iomem *lpaif_sec_muxsel_virt_addr;
+	void __iomem *lpass_mux_spkr_ctl_virt_addr;
+	void __iomem *lpass_mux_mic_ctl_virt_addr;
 };
 
-static bool is_initial_boot;
+static atomic_t mi2s_ref_count;
+static int sdx_mi2s_mode = I2S_PCM_MASTER_MODE;
 static bool codec_reg_done;
 static struct snd_soc_card snd_soc_card_sdx_msm;
 
@@ -108,200 +129,119 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.moisture_duty_cycle_en = true,
 };
 
-/* set audio task affinity to core 1 & 2 */
-static const unsigned int audio_core_list[] = {1, 2};
-static cpumask_t audio_cpu_map = CPU_MASK_NONE;
-static struct dev_pm_qos_request *msm_audio_req = NULL;
-
-static void msm_audio_add_qos_request()
-{
-	int i;
-	int cpu = 0;
-
-	msm_audio_req = kzalloc(sizeof(struct dev_pm_qos_request) * NR_CPUS,
-				 GFP_KERNEL);
-	if (!msm_audio_req) {
-		pr_err("%s failed to alloc mem for qos req.\n", __func__);
-		return;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(audio_core_list); i++) {
-		if (audio_core_list[i] >= NR_CPUS)
-			pr_err("%s incorrect cpu id: %d specified.\n", __func__, audio_core_list[i]);
-		else
-			cpumask_set_cpu(audio_core_list[i], &audio_cpu_map);
-	}
-
-	for_each_cpu(cpu, &audio_cpu_map) {
-		dev_pm_qos_add_request(get_cpu_device(cpu),
-			&msm_audio_req[cpu],
-			DEV_PM_QOS_RESUME_LATENCY,
-			PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE);
-		pr_debug("%s set cpu affinity to core %d.\n", __func__, cpu);
-	}
-}
-
-static void msm_audio_remove_qos_request()
-{
-	int cpu = 0;
-
-	if (msm_audio_req) {
-		for_each_cpu(cpu, &audio_cpu_map) {
-			dev_pm_qos_remove_request(
-				&msm_audio_req[cpu]);
-			pr_debug("%s remove cpu affinity of core %d.\n", __func__, cpu);
-		}
-		kfree(msm_audio_req);
-	}
-}
-
-static bool msm_usbc_swap_gnd_mic(struct snd_soc_component *component, bool active)
-{
-	struct snd_soc_card *card = component->card;
-	struct msm_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-
-	if (!pdata->fsa_handle)
-		return false;
-
-	return fsa4480_switch_event(pdata->fsa_handle, FSA_MIC_GND_SWAP);
-}
-
-static bool msm_swap_gnd_mic(struct snd_soc_component *component, bool active)
-{
-	int value = 0;
-	bool ret = false;
-	struct snd_soc_card *card;
-	struct msm_asoc_mach_data *pdata;
-
-	if (!component) {
-		pr_err("%s component is NULL\n", __func__);
-		return false;
-	}
-	card = component->card;
-	pdata = snd_soc_card_get_drvdata(card);
-
-	if (!pdata)
-		return false;
-
-	if (wcd_mbhc_cfg.enable_usbc_analog)
-		return msm_usbc_swap_gnd_mic(component, active);
-
-	/* if usbc is not defined, swap using us_euro_gpio_p */
-	if (pdata->us_euro_gpio_p) {
-		value = msm_cdc_pinctrl_get_state(
-				pdata->us_euro_gpio_p);
-		if (value)
-			msm_cdc_pinctrl_select_sleep_state(
-					pdata->us_euro_gpio_p);
-		else
-			msm_cdc_pinctrl_select_active_state(
-					pdata->us_euro_gpio_p);
-		dev_dbg(component->dev, "%s: swap select switch %d to %d\n",
-			__func__, value, !value);
-		ret = true;
-	}
-
-	return ret;
-}
-
 static struct snd_soc_ops msm_common_be_ops = {
 	.startup = msm_common_snd_startup,
 	.shutdown = msm_common_snd_shutdown,
 };
 
-#if 0
-static int msm_dmic_event(struct snd_soc_dapm_widget *w,
-			  struct snd_kcontrol *kcontrol, int event)
+static void sdx_mi2s_shutdown(struct snd_pcm_substream *substream)
 {
-	struct msm_asoc_mach_data *pdata = NULL;
-	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
-	int ret = 0;
-	u32 dmic_idx;
-	int *dmic_gpio_cnt;
-	struct device_node *dmic_gpio;
-	char  *wname;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	int ret;
+	struct snd_soc_card *card = rtd->card;
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 
-	wname = strpbrk(w->name, "012345");
-	if (!wname) {
-		dev_err(component->dev, "%s: widget not found\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = kstrtouint(wname, 10, &dmic_idx);
-	if (ret < 0) {
-		dev_err(component->dev, "%s: Invalid DMIC line on the codec\n",
-			__func__);
-		return -EINVAL;
-	}
-
-	pdata = snd_soc_card_get_drvdata(component->card);
-
-	switch (dmic_idx) {
-	case 0:
-	case 1:
-		dmic_gpio_cnt = &dmic_0_1_gpio_cnt;
-		dmic_gpio = pdata->dmic01_gpio_p;
-		break;
-	case 2:
-	case 3:
-		dmic_gpio_cnt = &dmic_2_3_gpio_cnt;
-		dmic_gpio = pdata->dmic23_gpio_p;
-		break;
-	case 4:
-	case 5:
-		dmic_gpio_cnt = &dmic_4_5_gpio_cnt;
-		dmic_gpio = pdata->dmic45_gpio_p;
-		break;
-	default:
-		dev_err(component->dev, "%s: Invalid DMIC Selection\n",
-			__func__);
-		return -EINVAL;
-	}
-
-	dev_dbg(component->dev, "%s: event %d DMIC%d dmic_gpio_cnt %d\n",
-			__func__, event, dmic_idx, *dmic_gpio_cnt);
-
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		(*dmic_gpio_cnt)++;
-		if (*dmic_gpio_cnt == 1) {
-			ret = msm_cdc_pinctrl_select_active_state(
-						dmic_gpio);
-			if (ret < 0) {
-				pr_err("%s: gpio set cannot be activated %sd",
-					__func__, "dmic_gpio");
-				return ret;
-			}
+	if (atomic_dec_return(&mi2s_ref_count) == 0) {
+		if (pdata->prim_mi2s_mode == 1) {
+			ret = msm_cdc_pinctrl_select_sleep_state
+						(pdata->prim_master_p);
+			if (ret)
+				pr_err("%s: failed to set pri gpios to sleep: %d\n",
+			       __func__, ret);
 		}
-
-		break;
-	case SND_SOC_DAPM_POST_PMD:
-		(*dmic_gpio_cnt)--;
-		if (*dmic_gpio_cnt == 0) {
-			ret = msm_cdc_pinctrl_select_sleep_state(
-					dmic_gpio);
-			if (ret < 0) {
-				pr_err("%s: gpio set cannot be de-activated %sd",
-					__func__, "dmic_gpio");
-				return ret;
-			}
-		}
-		break;
-	default:
-		pr_err("%s: invalid DAPM event %d\n", __func__, event);
-		return -EINVAL;
 	}
-	return 0;
 }
-#endif
+
+static int sdx_mi2s_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret = 0;
+
+	pdata->prim_mi2s_mode = sdx_mi2s_mode;
+	if (atomic_inc_return(&mi2s_ref_count) == 1) {
+		if (pdata->lpaif_pri_muxsel_virt_addr != NULL) {
+
+			ret =audio_prm_set_lpass_core_clk_req( NULL, 1, 1);
+			if (ret < 0) {
+				dev_err(card->dev,
+				"%s:set lpass core clk failed ret: %d\n",
+				__func__, ret);
+				ret = -EINVAL;
+				goto done;
+			}
+
+			iowrite32(I2S_SEL << I2S_PCM_SEL_OFFSET,
+				  pdata->lpaif_pri_muxsel_virt_addr);
+			if (pdata->lpass_mux_spkr_ctl_virt_addr != NULL) {
+				if (pdata->prim_mi2s_mode == 1)
+					iowrite32(PRI_TLMM_CLKS_EN_MASTER,
+					pdata->lpass_mux_spkr_ctl_virt_addr);
+				else
+					iowrite32(PRI_TLMM_CLKS_EN_SLAVE,
+					pdata->lpass_mux_spkr_ctl_virt_addr);
+			} else {
+				dev_err(card->dev, "%s: mux spkr ctl virt addr is NULL\n",
+					__func__);
+
+				ret = -EINVAL;
+				goto done;
+			}
+		} else {
+			dev_err(card->dev, "%s lpaif_pri_muxsel_virt_addr is NULL\n",
+				__func__);
+			ret = -EINVAL;
+			goto done;
+		}
+		/*
+		 * This sets the CONFIG PARAMETER WS_SRC.
+		 * 1 means internal clock master mode.
+		 * 0 means external clock slave mode.
+		 */
+		if (pdata->prim_mi2s_mode == 1) {
+			ret = msm_cdc_pinctrl_select_active_state
+					(pdata->prim_master_p);
+			if (ret < 0) {
+				pr_err("%s pinctrl set failed\n", __func__);
+				goto done;
+			}
+			ret = snd_soc_dai_set_fmt(codec_dai,
+						SND_SOC_DAIFMT_CBS_CFS |
+						SND_SOC_DAIFMT_I2S);
+			if (ret < 0) {
+				dev_err(card->dev,
+					"%s Set fmt for codec dai failed\n",
+					__func__);
+				//Disable mlck here
+			}
+		} else {
+			/*
+			 * Disable bit clk in slave mode for QC codec.
+			 * Enable only mclk.
+			 */
+		}
+		audio_prm_set_lpass_core_clk_req( NULL, 1, 0);
+	}
+
+done:
+	if (ret)
+		atomic_dec_return(&mi2s_ref_count);
+	return ret;
+}
+
+static struct snd_soc_ops sdx_mi2s_be_ops = {
+	.startup = sdx_mi2s_startup,
+	.shutdown = sdx_mi2s_shutdown,
+};
 
 static int sdx_mclk_event(struct snd_soc_dapm_widget *w,
 			  struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
 
-	pr_debug("%s event %d\n", __func__, event);
+	pr_info("%s event %d\n", __func__, event);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -451,19 +391,19 @@ static struct snd_soc_dai_link msm_rx_tx_cdc_dma_be_dai_links[] = {
 			SND_SOC_DPCM_TRIGGER_POST},
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.ops = &msm_common_be_ops,
+		.ops = &sdx_mi2s_be_ops,
 		SND_SOC_DAILINK_REG(tavil_i2s_rx1),
 		.init = &msm_aux_codec_init,
 	},
 	{
 		.name = LPASS_BE_PRI_MI2S_TX,
 		.stream_name = LPASS_BE_PRI_MI2S_TX,
-		.playback_only = 1,
+		.capture_only = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST},
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.ops = &msm_common_be_ops,
+		.ops = &sdx_mi2s_be_ops,
 		SND_SOC_DAILINK_REG(tavil_i2s_tx1),
 	},
 };
@@ -475,7 +415,7 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.playback_only = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST},
-		.ops = &msm_common_be_ops,
+		.ops = &sdx_mi2s_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(pri_tdm_rx_0),
@@ -486,7 +426,7 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.capture_only = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST},
-		.ops = &msm_common_be_ops,
+		.ops = &sdx_mi2s_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(pri_tdm_tx_0),
 	},
@@ -505,8 +445,8 @@ static int msm_populate_dai_link_component_of_node(
 	struct device *cdev = card->dev;
 	struct snd_soc_dai_link *dai_link = card->dai_link;
 	struct device_node *np = NULL;
-	int codecs_enabled = 0;
-	struct snd_soc_dai_link_component *codecs_comp = NULL;
+	//int codecs_enabled = 0;
+	//struct snd_soc_dai_link_component *codecs_comp = NULL;
 
 	if (!cdev) {
 		dev_err(cdev, "%s: Sound card device memory NULL\n", __func__);
@@ -541,53 +481,6 @@ static int msm_populate_dai_link_component_of_node(
 				}
 				dai_link[i].codecs[j].of_node = np;
 				dai_link[i].codecs[j].name = NULL;
-			}
-		}
-	}
-
-	/* In multi-codec scenario, check if codecs are enabled for this platform */
-	for (i = 0; i < card->num_links; i++) {
-		codecs_enabled = 0;
-		if (dai_link[i].num_codecs > 1) {
-			for (j = 0; j < dai_link[i].num_codecs; j++) {
-				if (!dai_link[i].codecs[j].of_node)
-					continue;
-
-				np = dai_link[i].codecs[j].of_node;
-                if (!of_device_is_available(np)) {
-                    dev_err(cdev, "%s: codec is disabled: %s\n",
-						__func__,
-						np->full_name);
-					dai_link[i].codecs[j].of_node = NULL;
-					continue;
-                }
-
-				codecs_enabled++;
-			}
-			if (codecs_enabled > 0 &&
-				    codecs_enabled < dai_link[i].num_codecs) {
-				codecs_comp = devm_kzalloc(cdev,
-				    sizeof(struct snd_soc_dai_link_component)
-				    * codecs_enabled, GFP_KERNEL);
-				if (!codecs_comp) {
-					dev_err(cdev, "%s: %s dailink codec component alloc failed\n",
-						__func__, dai_link[i].name);
-					ret = -ENOMEM;
-					goto err;
-				}
-				index = 0;
-				for (j = 0; j < dai_link[i].num_codecs; j++) {
-					if(dai_link[i].codecs[j].of_node) {
-						codecs_comp[index].of_node =
-						  dai_link[i].codecs[j].of_node;
-						codecs_comp[index].dai_name =
-						  dai_link[i].codecs[j].dai_name;
-						codecs_comp[index].name = NULL;
-						index++;
-					}
-				}
-				dai_link[i].codecs = codecs_comp;
-				dai_link[i].num_codecs = codecs_enabled;
 			}
 		}
 	}
@@ -748,14 +641,13 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 
 static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
-	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {0, 1, 2, 3};
-	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {0, 1, 2, 3};
+	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
+	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {103, 104, 105, 107};
 	u8 spkleft_port_types[WSA881X_MAX_SWR_PORTS] = {SPKR_L, SPKR_L_COMP,
 						SPKR_L_BOOST, SPKR_L_VI};
 	u8 spkright_port_types[WSA881X_MAX_SWR_PORTS] = {SPKR_R, SPKR_R_COMP,
 						SPKR_R_BOOST, SPKR_R_VI};
-	unsigned int ch_rate[WSA881X_MAX_SWR_PORTS] = {SWR_CLK_RATE_2P4MHZ, SWR_CLK_RATE_0P6MHZ,
-							SWR_CLK_RATE_0P3MHZ, SWR_CLK_RATE_1P2MHZ};
+	unsigned int ch_rate[WSA881X_MAX_SWR_PORTS] = {2400, 600, 300, 1200};
 	unsigned int ch_mask[WSA881X_MAX_SWR_PORTS] = {0x1, 0xF, 0x3, 0x3};
 	struct snd_soc_component *component = NULL;
 	struct snd_soc_dapm_context *dapm = NULL;
@@ -1052,9 +944,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = NULL;
 	struct msm_asoc_mach_data *pdata = NULL;
-	const char *mbhc_audio_jack_type = NULL;
 	int ret = 0;
-	struct clk *lpass_audio_hw_vote = NULL;
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "%s: No platform supplied from device tree\n", __func__);
@@ -1096,15 +986,15 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-    /* Get maximum WSA device count for this platform */
-    ret = of_property_read_u32(pdev->dev.of_node,
-            "qcom,wsa-max-devs", &pdata->wsa_max_devs);
-    if (ret) {
-        dev_info(&pdev->dev,
-                "%s: wsa-max-devs property missing in DT %s, ret = %d\n",
-                __func__, pdev->dev.of_node->full_name, ret);
-        pdata->wsa_max_devs = 0;
-    }
+	/* Get maximum WSA device count for this platform */
+	ret = of_property_read_u32(pdev->dev.of_node,
+		"qcom,wsa-max-devs", &pdata->wsa_max_devs);
+	if (ret) {
+		dev_info(&pdev->dev,
+			"%s: wsa-max-devs property missing in DT %s, ret = %d\n",
+			__func__, pdev->dev.of_node->full_name, ret);
+		pdata->wsa_max_devs = 0;
+	}
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
@@ -1135,53 +1025,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			pdev->dev.of_node->full_name);
 	}
 
-	ret = of_property_read_string(pdev->dev.of_node,
-		"qcom,mbhc-audio-jack-type", &mbhc_audio_jack_type);
-	if (ret) {
-		dev_dbg(&pdev->dev, "%s: Looking up %s property in node %s failed\n",
-			__func__, "qcom,mbhc-audio-jack-type",
-			pdev->dev.of_node->full_name);
-		dev_dbg(&pdev->dev, "Jack type properties set to default\n");
-	} else {
-		if (!strcmp(mbhc_audio_jack_type, "4-pole-jack")) {
-			wcd_mbhc_cfg.enable_anc_mic_detect = false;
-			dev_dbg(&pdev->dev, "This hardware has 4 pole jack");
-		} else if (!strcmp(mbhc_audio_jack_type, "5-pole-jack")) {
-			wcd_mbhc_cfg.enable_anc_mic_detect = true;
-			dev_dbg(&pdev->dev, "This hardware has 5 pole jack");
-		} else if (!strcmp(mbhc_audio_jack_type, "6-pole-jack")) {
-			wcd_mbhc_cfg.enable_anc_mic_detect = true;
-			dev_dbg(&pdev->dev, "This hardware has 6 pole jack");
-		} else {
-			wcd_mbhc_cfg.enable_anc_mic_detect = false;
-			dev_dbg(&pdev->dev, "Unknown value, set to default\n");
-		}
-	}
-	/*
-	 * Parse US-Euro gpio info from DT. Report no error if us-euro
-	 * entry is not found in DT file as some targets do not support
-	 * US-Euro detection
-	 */
-	pdata->us_euro_gpio_p = of_parse_phandle(pdev->dev.of_node,
-					"qcom,us-euro-gpios", 0);
-	if (!pdata->us_euro_gpio_p) {
-		dev_dbg(&pdev->dev, "property %s not detected in node %s",
-			"qcom,us-euro-gpios", pdev->dev.of_node->full_name);
-	} else {
-		dev_dbg(&pdev->dev, "%s detected\n",
-			"qcom,us-euro-gpios");
-		wcd_mbhc_cfg.swap_gnd_mic = msm_swap_gnd_mic;
-	}
-
-	if (wcd_mbhc_cfg.enable_usbc_analog)
-		wcd_mbhc_cfg.swap_gnd_mic = msm_usbc_swap_gnd_mic;
-
-	pdata->fsa_handle = of_parse_phandle(pdev->dev.of_node,
-					"fsa4480-i2c-handle", 0);
-	if (!pdata->fsa_handle)
-		dev_dbg(&pdev->dev, "property %s not detected in node %s\n",
-			"fsa4480-i2c-handle", pdev->dev.of_node->full_name);
-
 	pdata->dmic01_gpio_p = of_parse_phandle(pdev->dev.of_node,
 					      "qcom,cdc-dmic01-gpios",
 					       0);
@@ -1199,47 +1042,38 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		msm_cdc_pinctrl_set_wakeup_capable(pdata->dmic45_gpio_p, false);
 
 	msm_common_snd_init(pdev, card);
-#if 0
-	pdata->mi2s_gpio_p[PRIM_MI2S] = of_parse_phandle(pdev->dev.of_node,
-					"qcom,pri-mi2s-gpios", 0);
-	pdata->mi2s_gpio_p[SEC_MI2S] = of_parse_phandle(pdev->dev.of_node,
-					"qcom,sec-mi2s-gpios", 0);
-	pdata->mi2s_gpio_p[TERT_MI2S] = of_parse_phandle(pdev->dev.of_node,
-					"qcom,tert-mi2s-gpios", 0);
-	pdata->mi2s_gpio_p[QUAT_MI2S] = of_parse_phandle(pdev->dev.of_node,
-					"qcom,quat-mi2s-gpios", 0);
-	pdata->mi2s_gpio_p[QUIN_MI2S] = of_parse_phandle(pdev->dev.of_node,
-					"qcom,quin-mi2s-gpios", 0);
-	pdata->mi2s_gpio_p[SEN_MI2S] = of_parse_phandle(pdev->dev.of_node,
-					"qcom,sen-mi2s-gpios", 0);
-	for (index = PRIM_MI2S; index < MI2S_MAX; index++)
-		atomic_set(&(pdata->mi2s_gpio_ref_count[index]), 0);
-#endif
 
-	/* Register LPASS audio hw vote */
-	lpass_audio_hw_vote = devm_clk_get(&pdev->dev, "lpass_audio_hw_vote");
-	if (IS_ERR(lpass_audio_hw_vote)) {
-		ret = PTR_ERR(lpass_audio_hw_vote);
-		dev_dbg(&pdev->dev, "%s: clk get %s failed %d\n",
-			__func__, "lpass_audio_hw_vote", ret);
-		lpass_audio_hw_vote = NULL;
-		ret = 0;
+	pdata->prim_master_p = of_parse_phandle(pdev->dev.of_node,
+						"qcom,prim_mi2s_master",
+						0);
+
+	pdata->lpaif_pri_muxsel_virt_addr = ioremap(LPAIF_PRI_MODE_MUXSEL, 4);
+	if (pdata->lpaif_pri_muxsel_virt_addr == NULL) {
+		pr_err("%s Pri muxsel virt addr is null\n", __func__);
+
+		ret = -EINVAL;
+		goto err;
 	}
-	pdata->lpass_audio_hw_vote = lpass_audio_hw_vote;
-	pdata->core_audio_vote_count = 0;
+	pdata->lpass_mux_spkr_ctl_virt_addr =
+				ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL, 4);
+	if (pdata->lpass_mux_spkr_ctl_virt_addr == NULL) {
+		pr_err("%s lpass spkr ctl virt addr is null\n", __func__);
+
+		ret = -EINVAL;
+		goto err1;
+	}
+	atomic_set(&mi2s_ref_count, 0);
 
 	ret = msm_audio_ssr_register(&pdev->dev);
 	if (ret)
 		pr_err("%s: Registration with SND event FWK failed ret = %d\n",
 			__func__, ret);
 
-	is_initial_boot = true;
-
-	/* Add QoS request for audio tasks */
-	msm_audio_add_qos_request();
-
 	return 0;
+err1:
+	iounmap(pdata->lpass_mux_spkr_ctl_virt_addr);
 err:
+	iounmap(pdata->lpaif_pri_muxsel_virt_addr);
 	devm_kfree(&pdev->dev, pdata);
 	return ret;
 }
@@ -1259,7 +1093,6 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	msm_common_snd_deinit(common_pdata);
 	snd_event_master_deregister(&pdev->dev);
 	snd_soc_unregister_card(card);
-	msm_audio_remove_qos_request();
 
 	return 0;
 }
