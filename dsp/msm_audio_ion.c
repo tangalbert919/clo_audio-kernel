@@ -623,17 +623,26 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 	size_t pa_len = 0;
 	void *vaddr;
 	int ret = 0;
+#ifdef CONFIG_AUDIO_GPR_DOMAIN_MODEM
+	u32 source_vm_map[1] = {VMID_HLOS};
+	int dest_vm_map[4] = {VMID_MSS_MSA, VMID_LPASS, VMID_ADSP_HEAP, VMID_HLOS};
+	int dest_perms_map[4] = {PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE};
+	int source_vm_unmap[4] = {VMID_MSS_MSA, VMID_LPASS, VMID_ADSP_HEAP, VMID_HLOS};
+	int dest_vm_unmap[1] = {VMID_HLOS};
+	int dest_perms_unmap[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
+#else
 	int dest_perms_map[2] = {PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE};
 	int source_vm_map[1] = {VMID_HLOS};
 	int dest_vm_map[3] = {VMID_LPASS, VMID_ADSP_HEAP, VMID_HLOS};
 	int dest_perms_unmap[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 	int source_vm_unmap[3] = {VMID_LPASS, VMID_ADSP_HEAP, VMID_HLOS};
 	int dest_vm_unmap[1] = {VMID_HLOS};
+#endif
 	struct msm_audio_fd_data *msm_audio_fd_data = NULL;
 	struct msm_audio_ion_private *ion_data =
 			container_of(file->f_inode->i_cdev, struct msm_audio_ion_private, cdev);
 
-	pr_debug("%s ioctl num %u\n", __func__, ioctl_num);
+	pr_debug("%s ioctl num %u ioctl_param %d\n", __func__, ioctl_num, ioctl_param);
 	switch (ioctl_num) {
 	case IOCTL_MAP_PHYS_ADDR:
 		msm_audio_fd_data = kzalloc((sizeof(struct msm_audio_fd_data)),
@@ -669,14 +678,20 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 			pr_err("%s get phys addr failed %d\n", __func__, ret);
 			return ret;
 		}
+
+#ifdef CONFIG_AUDIO_GPR_DOMAIN_MODEM
+		ret = hyp_assign_phys((phys_addr_t) paddr,(u64) pa_len, source_vm_map, 1,
+		                      dest_vm_map, dest_perms_map, 4);
+#else
 		ret = hyp_assign_phys(paddr, pa_len, source_vm_map, 1,
 		                      dest_vm_map, dest_perms_map, 2);
+#endif
 		if (ret < 0) {
 			pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %d\n",
 					__func__, ret, paddr, pa_len);
 			return ret;
 		}
-		pr_err("%s: hyp_assign_phys success\n", __func__);
+		pr_debug("%s: hyp_assign_phys success\n", __func__);
 	    break;
 	case IOCTL_UNMAP_HYP_ASSIGN:
 	    ret = msm_audio_get_phy_addr((int)ioctl_param, &paddr, &pa_len);
@@ -684,14 +699,20 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 			pr_err("%s get phys addr failed %d\n", __func__, ret);
 			return ret;
 		}
+
+#ifdef CONFIG_AUDIO_GPR_DOMAIN_MODEM
+		ret = hyp_assign_phys((phys_addr_t)paddr,(u64) pa_len, source_vm_unmap, 4,
+		                      dest_vm_unmap, dest_perms_unmap, 1);
+#else
 		ret = hyp_assign_phys(paddr, pa_len, source_vm_unmap, 2,
 		                      dest_vm_unmap, dest_perms_unmap, 1);
+#endif
 		if (ret < 0) {
 			pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %d\n",
 					__func__, ret, paddr, pa_len);
 			return ret;
 		}
-		pr_err("%s: hyp_assign_phys success\n", __func__);
+		pr_debug("%s: hyp_assign_phys success\n", __func__);
 	    break;
 	default:
 		pr_err("%s Entered default. Invalid ioctl num %u",
