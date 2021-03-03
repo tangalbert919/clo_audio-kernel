@@ -801,9 +801,13 @@ static int lpi_pinctrl_probe(struct platform_device *pdev)
 			__func__, ret);
 		goto err_range;
 	}
-
+#ifdef CONFIG_AUDIO_GPR_DOMAIN_MODEM
+	ret = audio_notifier_register("lpi_tlmm", AUDIO_NOTIFIER_MODEM_DOMAIN,
+				      &service_nb);
+#else
 	ret = audio_notifier_register("lpi_tlmm", AUDIO_NOTIFIER_ADSP_DOMAIN,
 				      &service_nb);
+#endif
 	if (ret < 0) {
 		pr_err("%s: Audio notifier register failed ret = %d\n",
 			__func__, ret);
