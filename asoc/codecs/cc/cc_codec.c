@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -14,8 +14,14 @@
 #include <sound/tlv.h>
 #include <sound/pcm_params.h>
 #include "cc_defs.h"
+#include "cc_pktzr.h"
 
 #define CC_MAX_SYSFS_STRLEN 64
+#define CC_MAX_NUM_ELEM_IN_LIST 64
+#define CC_MAX_ELEM_LIST_SIZE (2 * CC_MAX_NUM_ELEM_IN_LIST)
+
+#define CC_CODEC_STR "cc_codec"
+
 enum {
 	CC_REG_REGION_INFO_ATTR,
 	CC_REG_MAX_ADDR_ATTR,
@@ -40,7 +46,7 @@ struct register_region {
 	struct attribute_group attr_grp;
 };
 
-struct cc_start_uc_header {
+struct cc_usecase_info {
 	uint32_t uc_id;
 	uint32_t sample_rate;
 	uint32_t bit_width;
@@ -48,10 +54,10 @@ struct cc_start_uc_header {
 } __packed;
 
 struct cc_interface {
-	struct cc_start_uc_header uc_header;
-	size_t payload_size;
+	struct cc_usecase_info uc_info;
 	size_t action_size;
 	void *payload;
+	size_t payload_size;
 	struct list_head path_list;
 	struct list_head action_value_list;
 };
@@ -62,8 +68,12 @@ struct cc_path_list {
 	uint32_t sink_id;
 };
 
+struct cc_iface_list {
+	struct list_head iface_list;
+	struct cc_interface *iface;
+};
+
 struct cc_action_value_list {
-	struct list_head list;
 	uint32_t action_id;
 	uint32_t action_type;
 	uint32_t num_params;
@@ -73,7 +83,9 @@ struct cc_action_value_list {
 		int32_t *int_array;
 		uint8_t *char_array;
 	} param;
-};
+	struct list_head list;
+	size_t size;
+} __packed;
 
 struct cc_action {
 	uint32_t action_type;
@@ -87,7 +99,7 @@ struct cc_action {
 	uint32_t def;
 	uint32_t param_min;
 	uint32_t param_max;
-	struct list_head *list;
+	struct list_head list;
 };
 
 struct cc_element {
@@ -96,12 +108,13 @@ struct cc_element {
 	char **texts;
 	char s_name[CC_MAX_STREAM_STRLEN];
 	struct soc_enum elem_enum;
-	struct soc_mixer_control mixer;
+	struct soc_mixer_control *mixer;
 	struct snd_soc_dapm_widget widget;
+	struct snd_soc_dapm_widget widget_ip_op;
 	struct cc_id_name_map *elem_id;
 	uint32_t num_src;
 	struct cc_id_name_map *src_id;
-	struct list_head *list;
+	struct list_head list;
 };
 
 struct cc_codec_priv {
@@ -172,6 +185,194 @@ static int cc_parse_id_name(struct cc_codec_priv *cc_priv,
 
 	return 0;
 }
+
+static int cc_del_path_for_elem(struct cc_element *elem,
+					uint32_t src_id, uint32_t sink_id)
+{
+	struct list_head *node_ext = NULL, *next_ext = NULL;
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_path_list *path_list = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
+	int found = 0;
+
+	list_for_each_safe(node_ext, next_ext, &elem->list) {
+		elem_ifaces = list_entry(node_ext, struct cc_iface_list, iface_list);
+		list_for_each_safe(node, next, &elem_ifaces->iface->path_list) {
+			path_list = list_entry(node, struct cc_path_list, list);
+			if ((path_list->sink_id == sink_id) &&
+				(path_list->src_id == src_id)) {
+				found = 1;
+				break;
+			}
+		}
+
+		if (found) {
+			list_del(node);
+			kfree(path_list);
+			path_list = NULL;
+		}
+	}
+
+	return 0;
+}
+
+static int cc_add_path_for_elem(struct cc_element *elem,
+					uint32_t src_id, uint32_t sink_id)
+{
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_path_list *path_list = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
+
+	list_for_each_safe(node, next, &elem->list) {
+		elem_ifaces = list_entry(node,
+				struct cc_iface_list, iface_list);
+		path_list = kzalloc(sizeof(struct cc_path_list), GFP_KERNEL);
+		if (!path_list)
+			return -ENOMEM;
+		path_list->src_id = src_id;
+		path_list->sink_id = sink_id;
+		list_add_tail(&path_list->list, &elem_ifaces->iface->path_list);
+	}
+
+	return 0;
+}
+
+static void cc_modify_elem_mux_val(struct cc_element *elem, uint32_t src_id)
+{
+	struct list_head *node = NULL, *next = NULL;
+	struct list_head *node_ext = NULL, *next_ext = NULL;
+	struct cc_path_list *path_list = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
+
+	list_for_each_safe(node_ext, next_ext, &elem->list) {
+		elem_ifaces = list_entry(node_ext,
+					struct cc_iface_list, iface_list);
+		list_for_each_safe(node, next, &elem_ifaces->iface->path_list) {
+			path_list = list_entry(node, struct cc_path_list, list);
+			if (path_list->sink_id == elem->elem_id->id) {
+				path_list->src_id = src_id;
+				break;
+			}
+		}
+	}
+}
+
+static int cc_add_array_action_val(struct cc_action *act,
+	void *params, size_t size_params)
+{
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
+	struct cc_action_value_list *act_val = NULL;
+
+	if (!params || !size_params)
+		return -EINVAL;
+
+	list_for_each_safe(node, next, &act->list) {
+		act_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+
+		act_val = kzalloc(sizeof(struct cc_action_value_list),
+					GFP_KERNEL);
+		if (!act_val)
+			return -ENOMEM;
+
+		act_val->action_id = act->act_id->id;
+		act_val->action_type = act->action_type;
+		act_val->num_params = act->num_params;
+		act_val->param.char_array = kzalloc(size_params, GFP_KERNEL);
+		if (!act_val->param.char_array)
+			return -ENOMEM;
+
+		memcpy(act_val->param.char_array, params, size_params);
+
+		list_add_tail(&act_val->list,
+			&act_ifaces->iface->action_value_list);
+
+		act_val->size = (size_params +
+				sizeof(act_val->action_id));
+		act_ifaces->iface->action_size += act_val->size;
+	}
+
+	return 0;
+}
+
+static void cc_modify_array_action_val(struct cc_action *act,
+	void *params, size_t size_params)
+{
+	struct list_head *node_ext = NULL, *next_ext = NULL;
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
+	struct cc_action_value_list *act_val = NULL;
+
+	if (!params || !size_params)
+		return;
+
+	list_for_each_safe(node_ext, next_ext, &act->list) {
+		act_ifaces = list_entry(node_ext,
+					struct cc_iface_list, iface_list);
+		list_for_each_safe(node, next,
+			&act_ifaces->iface->action_value_list) {
+			act_val = list_entry(node,
+					struct cc_action_value_list, list);
+			if (act_val->action_id == act->act_id->id) {
+				memcpy(act_val->param.char_array, params,
+						size_params);
+				break;
+			}
+		}
+	}
+}
+
+static int cc_add_enum_action_val(struct cc_action *act, uint32_t val)
+{
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
+	struct cc_action_value_list *act_val = NULL;
+
+	list_for_each_safe(node, next, &act->list) {
+		act_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+
+		act_val = kzalloc(sizeof(struct cc_action_value_list),
+					GFP_KERNEL);
+		if (!act_val)
+			return -ENOMEM;
+
+		act_val->action_id = act->act_id->id;
+		act_val->action_type = act->action_type;
+		act_val->num_params = 1;
+		act_val->param.enumerated = val;
+		list_add_tail(&act_val->list,
+			&act_ifaces->iface->action_value_list);
+
+		act_val->size = (sizeof(uint32_t) +
+				sizeof(act_val->action_id));
+		act_ifaces->iface->action_size += act_val->size;
+	}
+
+	return 0;
+}
+
+static void cc_modify_enum_action_val(struct cc_action *act, uint32_t val)
+{
+	struct list_head *node_ext = NULL, *next_ext = NULL;
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
+	struct cc_action_value_list *act_val = NULL;
+
+	list_for_each_safe(node_ext, next_ext, &act->list) {
+		act_ifaces = list_entry(node_ext,
+					struct cc_iface_list, iface_list);
+		list_for_each_safe(node, next,
+			&act_ifaces->iface->action_value_list) {
+			act_val = list_entry(node,
+					struct cc_action_value_list, list);
+			if (act_val->action_id == act->act_id->id) {
+				act_val->param.enumerated = val;
+				break;
+			}
+		}
+	}
+}
+
 
 static int cc_find_region_id_from_attr(struct cc_codec_priv *cc_priv,
 					struct device_attribute *attr)
@@ -303,27 +504,20 @@ static ssize_t cc_reg_count_store(struct device *dev,
 	return count;
 }
 
-static int cc_send_packet(uint32_t opcode, void *req_payload, size_t req_size,
-	void **resp_payload, size_t *resp_size)
-{
-	/* TODO: integrate with ipc */
-	return 0;
-}
-
-static int cc_send_pkt_generic_resp(uint32_t opcode, void *payload, size_t size)
+static int cc_send_pkt_with_response(uint32_t opcode, void *payload, size_t size)
 {
 	int rc = 0;
 	struct cc_resp_generic *resp = NULL;
 	size_t resp_size = 0;
 
-	rc = cc_send_packet(opcode, payload, size, (void **)&resp, &resp_size);
+	rc = cc_pktzr_send_packet(opcode, payload, size, (void **)&resp, &resp_size);
 	if (rc)
 		return rc;
 
 	if (resp && resp_size && (resp->opcode == opcode)) {
 		if (resp->response == RESPONSE_SUCESS)
 			return 0;
-		rc = -(resp->response);
+		rc = resp->response;
 		pr_err("%s: opcode: %d resp: %d\n",
 			__func__, opcode, resp->response);
 	}
@@ -334,14 +528,12 @@ static int cc_send_pkt_generic_resp(uint32_t opcode, void *payload, size_t size)
 static ssize_t cc_reg_value_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	/* TODO: Create payload */
 	return CC_MAX_SYSFS_STRLEN;
 }
 
 static ssize_t cc_reg_value_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
-	/* TODO: Create payload */
 	return count;
 }
 
@@ -464,19 +656,28 @@ static int cc_elem_ctl_mux_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_dapm_widget *w = snd_soc_dapm_kcontrol_widget(kcontrol);
 	struct snd_soc_component *comp = snd_soc_dapm_to_component(w->dapm);
 	struct cc_codec_priv *cc_priv = dev_get_drvdata(comp->dev);
-	struct soc_enum *elem_enum = (struct soc_enum *)kcontrol->private_value;
-	struct cc_element *elem = &cc_priv->elems[elem_enum->shift_l];
-	struct cc_interface *iface = container_of(elem->list,
-					struct cc_interface, path_list);
+	struct cc_element *elem = &cc_priv->elems[w->shift];
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
 	uint32_t val = ucontrol->value.enumerated.item[0];
 	struct cc_path_list *path_list = NULL;
 	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
 	int found = 0;
+	int rc = 0;
 
 	if (val > elem->num_src)
 		return -EINVAL;
 
-	list_for_each_safe(node, next, elem->list) {
+	list_for_each_safe(node, next, &elem->list) {
+		elem_ifaces = list_entry(node,
+			struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!elem_ifaces)
+		return 0;
+
+	list_for_each_safe(node, next, &elem_ifaces->iface->path_list) {
 		path_list = list_entry(node,
 				struct cc_path_list, list);
 		if (path_list->sink_id == elem->elem_id->id) {
@@ -485,22 +686,21 @@ static int cc_elem_ctl_mux_put(struct snd_kcontrol *kcontrol,
 		}
 	}
 
-	if (!found) {
-		path_list = kzalloc(sizeof(struct cc_path_list),
-					GFP_KERNEL);
-		if (!path_list)
-			return -ENOMEM;
-
-		path_list->src_id = elem->src_id[val].id;
-		path_list->sink_id = elem->elem_id->id;
-		list_add_tail(&path_list->list, elem->list);
-
-		iface->payload += (sizeof(path_list->src_id) +
-					sizeof(path_list->sink_id));
+	if (found) {
+		if (val)
+			cc_modify_elem_mux_val(elem, elem->src_id[val - 1].id);
+		else
+			cc_del_path_for_elem(elem, path_list->src_id,
+						elem->elem_id->id);
+	} else {
+		if (val)
+			rc = cc_add_path_for_elem(elem,
+				elem->src_id[val - 1].id, elem->elem_id->id);
 	}
 
-	path_list->src_id = elem->src_id[val].id;
-	return 0;
+	snd_soc_dapm_mux_update_power(w->dapm, kcontrol, val, e, NULL);
+
+	return rc;
 }
 
 static int cc_elem_ctl_mux_get(struct snd_kcontrol *kcontrol,
@@ -509,16 +709,24 @@ static int cc_elem_ctl_mux_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_dapm_widget *w = snd_soc_dapm_kcontrol_widget(kcontrol);
 	struct snd_soc_component *comp = snd_soc_dapm_to_component(w->dapm);
 	struct cc_codec_priv *cc_priv = dev_get_drvdata(comp->dev);
-	struct soc_enum *elem_enum = (struct soc_enum *)kcontrol->private_value;
-	struct cc_element *elem = &cc_priv->elems[elem_enum->shift_l];
+	struct cc_element *elem = NULL;
 	struct cc_path_list *path_list = NULL;
 	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
 	int found = 0;
 	int i = 0;
 
-	elem = &cc_priv->elems[elem_enum->shift_l];
+	elem = &cc_priv->elems[w->shift];
 
-	list_for_each_safe(node, next, elem->list) {
+	list_for_each_safe(node, next, &elem->list) {
+		elem_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!elem_ifaces)
+		return 0;
+
+	list_for_each_safe(node, next, &elem_ifaces->iface->path_list) {
 		path_list = list_entry(node,
 				struct cc_path_list, list);
 		if (path_list->sink_id == elem->elem_id->id) {
@@ -540,7 +748,7 @@ static int cc_elem_ctl_mux_get(struct snd_kcontrol *kcontrol,
 	if (i == elem->num_src)
 		return -EINVAL;
 
-	ucontrol->value.enumerated.item[0] = i;
+	ucontrol->value.enumerated.item[0] = i + 1;
 
 	return 0;
 }
@@ -555,64 +763,63 @@ static int cc_elem_ctl_put(struct snd_kcontrol *kcontrol,
 	struct cc_path_list *path_list = NULL;
 	struct soc_multi_mixer_control *mixer =
 		(struct soc_multi_mixer_control *)kcontrol->private_value;
-	struct cc_element *elem = &cc_priv->elems[mixer->shift];
-	struct cc_interface *iface = container_of(elem->list,
-					struct cc_interface, path_list);
+	struct cc_element *elem = &cc_priv->elems[w->shift];
 	uint32_t sink_id = elem->elem_id->id;
 	uint32_t src_id = 0;
 	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
 	int found = 0;
 	uint32_t val = 0;
+	int rc = 0;
+
+	val = ucontrol->value.integer.value[0];
 
 	if (elem->elem_type == ELEM_TYPE_MIX) {
-		val = ucontrol->value.integer.value[0];
-		if (val)
-			src_id = elem->src_id[mixer->rshift].id;
-		else
-			src_id = 0;
-	} else if (elem->elem_type == ELEM_TYPE_SWITCH) {
-		src_id = val;
+		src_id = elem->src_id[mixer->shift].id;
+	} else if (elem->elem_type == ELEM_TYPE_SWITCH ||
+		elem->elem_type == ELEM_TYPE_INPUT ||
+		elem->elem_type == ELEM_TYPE_OUTPUT) {
+		src_id = 1;
 	} else {
 		dev_err(comp->dev, "%s: invalid element: %d\n",
 			__func__, elem->elem_id->id);
 		return -EINVAL;
 	}
 
-	list_for_each_safe(node, next, elem->list) {
+	list_for_each_safe(node, next, &elem->list) {
+		elem_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!elem_ifaces)
+		return 0;
+
+	if (!val)
+		snd_soc_dapm_mixer_update_power(w->dapm, kcontrol, val, NULL);
+
+	list_for_each_safe(node, next, &elem_ifaces->iface->path_list) {
 		path_list = list_entry(node,
 				struct cc_path_list, list);
-		if (path_list->sink_id == elem->elem_id->id) {
+		if (path_list->sink_id == elem->elem_id->id &&
+			path_list->src_id == src_id) {
 			found = 1;
 			break;
 		}
 	}
 
-	if (src_id && found)
+	if (val && found)
 		return 0;
 
-	if (src_id) {
-		path_list = kzalloc(sizeof(struct cc_path_list),
-					GFP_KERNEL);
-		if (!path_list)
-			return -ENOMEM;
-
-		path_list->src_id = src_id;
-		path_list->sink_id = sink_id;
-		list_add_tail(&path_list->list, elem->list);
-
-		iface->payload += (sizeof(path_list->src_id) +
-					sizeof(path_list->sink_id));
+	if (val) {
+		rc = cc_add_path_for_elem(elem, src_id, sink_id);
 	} else if (found) {
-		path_list = list_entry(node,
-				struct cc_path_list, list);
-		list_del(node);
-		kfree(path_list);
-		path_list = NULL;
-		iface->payload -= (sizeof(path_list->src_id) +
-					sizeof(path_list->sink_id));
+		rc = cc_del_path_for_elem(elem, src_id, sink_id);
 	}
 
-	return 0;
+	if (val && !rc)
+		snd_soc_dapm_mixer_update_power(w->dapm, kcontrol, val, NULL);
+
+	return rc;
 }
 
 static int cc_elem_ctl_get(struct snd_kcontrol *kcontrol,
@@ -623,72 +830,234 @@ static int cc_elem_ctl_get(struct snd_kcontrol *kcontrol,
 	struct cc_codec_priv *cc_priv = dev_get_drvdata(comp->dev);
 	struct soc_multi_mixer_control *mixer =
 		(struct soc_multi_mixer_control *)kcontrol->private_value;
-	struct cc_element *elem = &cc_priv->elems[mixer->shift];
+	struct cc_element *elem = &cc_priv->elems[w->shift];
 	struct cc_path_list *path_list = NULL;
 	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
 	int found = 0;
 
-	list_for_each_safe(node, next, elem->list) {
+	list_for_each_safe(node, next, &elem->list) {
+		elem_ifaces = list_entry(node,
+				struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!elem_ifaces)
+		return 0;
+
+	list_for_each_safe(node, next, &elem_ifaces->iface->path_list) {
 		path_list = list_entry(node,
 				struct cc_path_list, list);
-		if (elem->elem_id->id == path_list->sink_id) {
+		if ((elem->elem_type == ELEM_TYPE_MIX) &&
+		    (elem->elem_id->id == path_list->sink_id) &&
+		    (path_list->src_id == elem->src_id[mixer->shift].id)) {
+			found = 1;
+			break;
+		}
+
+		if ((elem->elem_type == ELEM_TYPE_SWITCH ||
+		     elem->elem_type == ELEM_TYPE_INPUT ||
+		     elem->elem_type == ELEM_TYPE_OUTPUT) &&
+		    (elem->elem_id->id == path_list->sink_id)) {
 			found = 1;
 			break;
 		}
 	}
 
-	if (elem->elem_type == ELEM_TYPE_MIX) {
-		if (found && (path_list->src_id ==
-				elem->src_id[mixer->rshift].id))
-			ucontrol->value.integer.value[0] = 1;
-		else
-			ucontrol->value.integer.value[0] = 0;
-	} else if (elem->elem_type == ELEM_TYPE_SWITCH) {
-		ucontrol->value.integer.value[0] = found;
-	} else {
-		dev_err(comp->dev, "%s: invalid element\n", __func__);
-		return -EINVAL;
-	}
+	ucontrol->value.integer.value[0] = found;
 
 	return 0;
 }
 
+static int cc_trigger_uc(struct cc_element *elem, int on)
+{
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_interface *iface = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
+	uint32_t buf[CC_MAX_ELEM_LIST_SIZE] = {0};
+	struct cc_uc_start_stop_t *uc = NULL;
+	struct cc_path_list *path_list = NULL;
+	struct cc_action_value_list *act_val = NULL;
+	int i = 0;
+	size_t size = 0;
+	int rc = 0;
+	uint32_t count = 0;
+	uint8_t *tmp = NULL;
+
+	list_for_each_safe(node, next, &elem->list) {
+		elem_ifaces = list_entry(node,
+			struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!elem_ifaces)
+		return -EINVAL;
+
+	iface = elem_ifaces->iface;
+
+	if (!on) {
+		if (iface->payload) {
+			rc = cc_send_pkt_with_response(
+				CC_CODEC_OPCODE_STOP_USECASE,
+				iface->payload, iface->payload_size);
+			kfree(iface->payload);
+			iface->payload = NULL;
+			iface->payload_size = 0;
+			return rc;
+		}
+
+		return -EINVAL;
+	}
+
+	count = 0;
+	list_for_each_safe(node, next, &iface->path_list) {
+		path_list = list_entry(node,
+				struct cc_path_list, list);
+		buf[i++] = path_list->src_id;
+		buf[i++] = path_list->sink_id;
+		count++;
+
+		if (count >= CC_MAX_NUM_ELEM_IN_LIST) {
+			pr_err("%s: too many connections for uc: %d\n",
+				__func__, iface->uc_info.uc_id);
+			return -EINVAL;
+		}
+	}
+
+	size = sizeof(struct cc_uc_start_stop_t) - sizeof(uc->payload) +
+		i * sizeof(uint32_t);
+
+	size += iface->action_size;
+	uc = (struct cc_uc_start_stop_t *)kzalloc(size, GFP_KERNEL);
+	if (!uc)
+		return -ENOMEM;
+
+	memcpy(uc, &iface->uc_info, sizeof(iface->uc_info));
+	uc->direction = iface->uc_info.uc_id;
+	uc->num_paths = count;
+	memcpy(uc->payload, buf, i * sizeof(uint32_t));
+	tmp = uc->payload + i * sizeof(uint32_t);
+
+
+	count = 0;
+	list_for_each_safe(node, next, &iface->action_value_list) {
+		act_val = list_entry(node, struct cc_action_value_list, list);
+		memcpy(tmp, &act_val->action_id, sizeof(act_val->action_id));
+		tmp += sizeof(act_val->action_id);
+		if (act_val->action_type == ACTION_TYPE_ENUM) {
+			memcpy(tmp, &act_val->param.enumerated,
+				sizeof(act_val->param.enumerated));
+			tmp += sizeof(act_val->param.enumerated);
+		} else {
+			memcpy(tmp, act_val->param.char_array,
+				act_val->size - sizeof(uint32_t));
+			tmp += (act_val->size - sizeof(uint32_t));
+		}
+		count++;
+	}
+	uc->num_action = count;
+
+	rc = cc_send_pkt_with_response(CC_CODEC_OPCODE_START_USECASE,
+		uc, size);
+
+	if (!rc) {
+		iface->payload = uc;
+		iface->payload_size = size;
+	}
+
+	return rc;
+}
+
+static int cc_widget_ev_func(struct snd_soc_dapm_widget *w,
+	struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_component *comp = snd_soc_dapm_to_component(w->dapm);
+	struct cc_codec_priv *cc_priv = dev_get_drvdata(comp->dev);
+	struct cc_element *elem = &cc_priv->elems[w->shift];
+
+	switch (event) {
+		case SND_SOC_DAPM_PRE_PMU:
+			break;
+		case SND_SOC_DAPM_POST_PMU:
+			if (w->id == snd_soc_dapm_aif_out ||
+				w->id == snd_soc_dapm_aif_in)
+				return cc_trigger_uc(elem, 1);
+			break;
+		case SND_SOC_DAPM_PRE_PMD:
+			if (w->id == snd_soc_dapm_aif_out ||
+				w->id == snd_soc_dapm_aif_in)
+				return cc_trigger_uc(elem, 0);
+			break;
+		case SND_SOC_DAPM_POST_PMD:
+			break;
+	}
+	return 0;
+}
+
 static void cc_widget_populate(struct cc_element *elem,
-	enum snd_soc_dapm_type id, uint32_t num_kcontrol)
+	enum snd_soc_dapm_type id, uint32_t num_kcontrol, int index)
 {
 	elem->widget.id = id;
 	elem->widget.name = elem->elem_id->name;
 	elem->widget.reg = SND_SOC_NOPM;
 	elem->widget.mask = 1;
-	elem->widget.shift = 0;
+	elem->widget.shift = index;
 	elem->widget.on_val = 1;
 	elem->widget.off_val = 0;
 	elem->widget.kcontrol_news = elem->kcontrol;
 	elem->widget.num_kcontrols = num_kcontrol;
+	elem->widget.event = cc_widget_ev_func;
+	elem->widget.event_flags = SND_SOC_DAPM_PRE_PMU |
+				SND_SOC_DAPM_POST_PMU |
+				SND_SOC_DAPM_PRE_PMD |
+				SND_SOC_DAPM_POST_PMD;
+}
+
+static void cc_widget_populate_ip_op(struct cc_element *elem,
+	enum snd_soc_dapm_type id, uint32_t num_kcontrol, int index)
+{
+	elem->widget_ip_op.id = id;
+	elem->widget_ip_op.name = elem->s_name;
+	elem->widget_ip_op.reg = SND_SOC_NOPM;
+	elem->widget_ip_op.mask = 1;
+	elem->widget_ip_op.shift = index;
+	elem->widget_ip_op.on_val = 1;
+	elem->widget_ip_op.off_val = 0;
+	elem->widget_ip_op.kcontrol_news = elem->kcontrol;
+	elem->widget_ip_op.num_kcontrols = num_kcontrol;
+	elem->widget_ip_op.event = cc_widget_ev_func;
+	elem->widget_ip_op.event_flags = SND_SOC_DAPM_PRE_PMU |
+				SND_SOC_DAPM_POST_PMU |
+				SND_SOC_DAPM_PRE_PMD |
+				SND_SOC_DAPM_POST_PMD;
 }
 
 static int cc_add_mux_element(struct cc_element *elem, int index)
 {
 	int i = 0;
+	uint32_t items = 0;
 
 	elem->kcontrol = kzalloc(sizeof(struct snd_kcontrol_new), GFP_KERNEL);
 	if (!elem->kcontrol)
 		return -ENOMEM;
 
-	elem->texts = kzalloc(elem->num_src * sizeof(char *), GFP_KERNEL);
+	items = elem->num_src + 1;
+	elem->texts = kzalloc(items * sizeof(char *), GFP_KERNEL);
 	if (!elem->texts)
 		return -ENOMEM;
 
-	for (i = 0; i < elem->num_src; i++)
-		elem->texts[i] = elem->src_id[i].name;
+	pr_debug("%s:adding element %s: %d\n",
+		__func__, elem->elem_id->name, elem->num_src);
+	elem->texts[0] = "ZERO";
+	for (i = 1; i < items; i++) {
+		pr_debug("adding: %s\n", elem->src_id[i - 1].name);
+		elem->texts[i] = elem->src_id[i - 1].name;
+	}
 
 	elem->elem_enum.reg = SND_SOC_NOPM;
-	elem->elem_enum.shift_l = index;
-	elem->elem_enum.shift_r = 0;
-	elem->elem_enum.items = elem->num_src;
+	elem->elem_enum.items = items;
 	elem->elem_enum.texts = (const char *const *)elem->texts;
-	elem->elem_enum.mask = elem->num_src ?
-			roundup_pow_of_two(elem->num_src) - 1 : 0;
+	elem->elem_enum.mask = items ? roundup_pow_of_two(items) - 1 : 0;
 
 	elem->kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	elem->kcontrol->name = elem->elem_id->name;
@@ -697,7 +1066,7 @@ static int cc_add_mux_element(struct cc_element *elem, int index)
 	elem->kcontrol->put = cc_elem_ctl_mux_put;
 	elem->kcontrol->private_value = (unsigned long)&elem->elem_enum;
 
-	cc_widget_populate(elem, snd_soc_dapm_mux, 1);
+	cc_widget_populate(elem, snd_soc_dapm_mux, 1, index);
 
 	return 0;
 }
@@ -708,30 +1077,35 @@ static int cc_add_mixer_element(struct cc_element *elem, int index)
 	uint32_t num_kcontrol = 0;
 
 	num_kcontrol = elem->num_src;
+	elem->mixer = kzalloc(num_kcontrol * sizeof(struct soc_mixer_control),
+					GFP_KERNEL);
+	if (!elem->mixer)
+		return -ENOMEM;
+
 	elem->kcontrol = kzalloc(num_kcontrol * sizeof(struct snd_kcontrol_new),
 					GFP_KERNEL);
 	if (!elem->kcontrol)
 		return -ENOMEM;
 
 	for (i = 0; i < num_kcontrol; i++) {
-		elem->mixer.reg = SND_SOC_NOPM;
-		elem->mixer.rreg = SND_SOC_NOPM;
-		elem->mixer.shift = index;
-		elem->mixer.rshift = i;
-		elem->mixer.max = 1;
-		elem->mixer.platform_max = 1;
-		elem->mixer.invert = 0;
-		elem->mixer.autodisable = 0;
+		elem->mixer[i].reg = SND_SOC_NOPM;
+		elem->mixer[i].rreg = SND_SOC_NOPM;
+		elem->mixer[i].shift = i;
+		elem->mixer[i].rshift = i;
+		elem->mixer[i].max = 1;
+		elem->mixer[i].platform_max = 1;
+		elem->mixer[i].invert = 0;
+		elem->mixer[i].autodisable = 0;
 
 		elem->kcontrol[i].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 		elem->kcontrol[i].name = elem->src_id[i].name;
 		elem->kcontrol[i].info = snd_soc_info_volsw;
 		elem->kcontrol[i].get = cc_elem_ctl_get;
 		elem->kcontrol[i].put = cc_elem_ctl_put;
-		elem->kcontrol[i].private_value = (unsigned long)&elem->mixer;
+		elem->kcontrol[i].private_value = (unsigned long)&elem->mixer[i];
 	}
 
-	cc_widget_populate(elem, snd_soc_dapm_mixer, num_kcontrol);
+	cc_widget_populate(elem, snd_soc_dapm_mixer, num_kcontrol, index);
 
 	return 0;
 }
@@ -741,47 +1115,67 @@ static int cc_add_switch_element(struct cc_element *elem, int index)
 	if (!elem)
 		return -EINVAL;
 
+	elem->mixer = kzalloc(sizeof(struct soc_mixer_control), GFP_KERNEL);
+	if (!elem->mixer)
+		return -ENOMEM;
+
 	elem->kcontrol = kzalloc(sizeof(struct snd_kcontrol_new), GFP_KERNEL);
 	if (!elem->kcontrol)
 		return -ENOMEM;
 
-	elem->mixer.reg = SND_SOC_NOPM;
-	elem->mixer.rreg = SND_SOC_NOPM;
-	elem->mixer.shift = index;
-	elem->mixer.rshift = 0;
-	elem->mixer.max = 1;
-	elem->mixer.platform_max = 1;
-	elem->mixer.invert = 0;
-	elem->mixer.autodisable = 0;
+	elem->mixer->reg = SND_SOC_NOPM;
+	elem->mixer->rreg = SND_SOC_NOPM;
+	elem->mixer->shift = 0;
+	elem->mixer->rshift = 0;
+	elem->mixer->max = 1;
+	elem->mixer->platform_max = 1;
+	elem->mixer->invert = 0;
+	elem->mixer->autodisable = 0;
 
 	elem->kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	elem->kcontrol->name = "Switch";
-	elem->kcontrol->info = snd_soc_info_enum_double;
+	elem->kcontrol->info = snd_soc_info_volsw;
 	elem->kcontrol->get = cc_elem_ctl_get;
 	elem->kcontrol->put = cc_elem_ctl_put;
-	elem->kcontrol->private_value = (unsigned long)&elem->mixer;
+	elem->kcontrol->private_value = (unsigned long)elem->mixer;
 
-	cc_widget_populate(elem, snd_soc_dapm_switch, 1);
+	cc_widget_populate(elem, snd_soc_dapm_switch, 1, index);
 
 	return 0;
 }
 
 static int cc_add_input_element(struct cc_element *elem, int index)
 {
+	int rc = 0;
+
 	if (!elem)
 		return -EINVAL;
 
-	cc_widget_populate(elem, snd_soc_dapm_input, 0);
+	strlcpy(elem->s_name, elem->elem_id->name, CC_MAX_STREAM_STRLEN);
+	strlcat(elem->elem_id->name, "_S", CC_MAX_STRLEN);
+	rc = cc_add_switch_element(elem, index);
+	if (rc)
+		return rc;
+
+	cc_widget_populate_ip_op(elem, snd_soc_dapm_input, 0, index);
 
 	return 0;
 }
 
 static int cc_add_output_element(struct cc_element *elem, int index)
 {
+	int rc = 0;
+
 	if (!elem)
 		return -EINVAL;
 
-	cc_widget_populate(elem, snd_soc_dapm_output, 0);
+	strlcpy(elem->s_name, elem->elem_id->name, CC_MAX_STREAM_STRLEN);
+	strlcat(elem->elem_id->name, "_S", CC_MAX_STRLEN);
+	rc = cc_add_switch_element(elem, index);
+	if (rc)
+		return rc;
+
+	cc_widget_populate_ip_op(elem, snd_soc_dapm_output, 0, index);
 
 	return 0;
 }
@@ -794,10 +1188,10 @@ static int cc_add_stream_element(struct cc_element *elem, int index)
 	strlcpy(elem->s_name, elem->elem_id->name,
 		CC_MAX_STREAM_STRLEN);
 	if (elem->elem_type == ELEM_TYPE_STREAM_IN) {
-		cc_widget_populate(elem, snd_soc_dapm_aif_out, 0);
+		cc_widget_populate(elem, snd_soc_dapm_aif_out, 0, index);
 		strlcat(elem->s_name, " Capture", sizeof(elem->s_name));
 	} else {
-		cc_widget_populate(elem, snd_soc_dapm_aif_in, 0);
+		cc_widget_populate(elem, snd_soc_dapm_aif_in, 0, index);
 		strlcat(elem->s_name, " Playback", sizeof(elem->s_name));
 	}
 
@@ -846,6 +1240,8 @@ static int cc_parse_element(struct cc_codec_priv *cc_priv,
 			return ret;
 		tmp += tmp_len;
 		*parsed_len += tmp_len;
+		pr_debug("parsing element: %s\n",
+			cc_priv->id_name[cc_priv->num_id - 1].name);
 
 		switch (elem_type) {
 		case ELEM_TYPE_MUX:
@@ -866,10 +1262,12 @@ static int cc_parse_element(struct cc_codec_priv *cc_priv,
 			break;
 		case ELEM_TYPE_INPUT:
 			num_src = 0;
+			cc_priv->num_routes++;
 			elem_func = cc_add_input_element;
 			break;
 		case ELEM_TYPE_OUTPUT:
 			num_src = 0;
+			cc_priv->num_routes++;
 			elem_func = cc_add_output_element;
 			break;
 		case ELEM_TYPE_STREAM_IN:
@@ -907,6 +1305,8 @@ static int cc_parse_element(struct cc_codec_priv *cc_priv,
 			pr_err("%s: could not add element: %d\n");
 			return ret;
 		}
+
+		INIT_LIST_HEAD(&elem->list);
 	}
 
 	return 0;
@@ -929,7 +1329,7 @@ static int cc_action_set(uint32_t id, void *ptr, size_t size)
 	set_param->action_id = id;
 	memcpy(set_param->payload, ptr, size);
 
-	rc = cc_send_pkt_generic_resp(CC_CODEC_OPCODE_SET_PARAM,
+	rc = cc_send_pkt_with_response(CC_CODEC_OPCODE_SET_PARAM,
 					set_param, param_sz);
 
 	kfree(set_param);
@@ -946,7 +1346,7 @@ static int cc_action_get(uint32_t id, void *ptr, size_t size)
 
 	memset(&get_param, 0, sizeof(get_param));
 	get_param.action_id = id;
-	rc = cc_send_packet(CC_CODEC_OPCODE_GET_PARAM,
+	rc = cc_pktzr_send_packet(CC_CODEC_OPCODE_GET_PARAM,
 		&get_param, sizeof(get_param), (void **)&resp, &resp_size);
 
 	if (rc || (resp_size != size))
@@ -967,6 +1367,7 @@ static int cc_action_ctl_enum_get(struct snd_kcontrol *kcontrol,
 	int found = 0;
 	struct list_head *node = NULL, *next = NULL;
 	struct cc_action_value_list *act_val = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
 	uint32_t value = 0;
 	int rc = 0;
 
@@ -977,7 +1378,15 @@ static int cc_action_ctl_enum_get(struct snd_kcontrol *kcontrol,
 		return rc;
 	}
 
-	list_for_each_safe(node, next, act->list) {
+	list_for_each_safe(node, next, &act->list) {
+		act_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!act_ifaces)
+		return 0;
+
+	list_for_each_safe(node, next, &act_ifaces->iface->action_value_list) {
 		act_val = list_entry(node,
 				struct cc_action_value_list, list);
 		if (act_val->action_id == act->act_id->id) {
@@ -1005,33 +1414,37 @@ static int cc_action_ctl_enum_put(struct snd_kcontrol *kcontrol,
 	int found = 0;
 	struct list_head *node = NULL, *next = NULL;
 	struct cc_interface *iface = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
 	uint32_t value = 0;
 
-	iface = container_of(act->list, struct cc_interface,
-				action_value_list);
+	list_for_each_safe(node, next, &act->list) {
+		act_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!act_ifaces)
+		return 0;
+
+	iface = act_ifaces->iface;
 
 	if (cc_act_is_volatile(act->action_type)) {
 		value = ucontrol->value.enumerated.item[0];
 		return cc_action_set(act->act_id->id, &value, sizeof(uint32_t));
 	}
 
-	list_for_each_safe(node, next, act->list) {
+	list_for_each_safe(node, next, &act_ifaces->iface->action_value_list) {
 		act_val = list_entry(node,
 				struct cc_action_value_list, list);
 		if (act_val->action_id == act->act_id->id) {
 			found = 1;
-			return 0;
+			break;
 		}
 	}
 
-	act_val = kzalloc(sizeof(struct cc_action_value_list), GFP_KERNEL);
-	act_val->action_id = act->act_id->id;
-	act_val->num_params = 1;
-	act_val->action_type = act->action_type;
-	act_val->param.enumerated = ucontrol->value.enumerated.item[0];
-	list_add_tail(&act_val->list, act->list);
-	iface->action_size += (sizeof(act_val->action_id) +
-				sizeof(act_val->param.enumerated));
+	if (!found)
+		cc_add_enum_action_val(act, ucontrol->value.enumerated.item[0]);
+	else
+		cc_modify_enum_action_val(act, ucontrol->value.enumerated.item[0]);
 
 	return 0;
 }
@@ -1047,9 +1460,18 @@ static int cc_action_ctl_array_get(struct snd_kcontrol *kcontrol,
 	struct cc_action_value_list *act_val = NULL;
 	int found = 0;
 	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
 	size_t size = 0;
 	void *ptr = NULL;
 	int i = 0;
+
+	list_for_each_safe(node, next, &act->list) {
+		act_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!act_ifaces)
+		return 0;
 
 	if (cc_act_is_volatile(act->action_type)) {
 		switch (act->action_type) {
@@ -1069,7 +1491,7 @@ static int cc_action_ctl_array_get(struct snd_kcontrol *kcontrol,
 		return cc_action_get(act->act_id->id, ptr, size);
 	}
 
-	list_for_each_safe(node, next, act->list) {
+	list_for_each_safe(node, next, &act_ifaces->iface->action_value_list) {
 		act_val = list_entry(node,
 				struct cc_action_value_list, list);
 		if (act_val->action_id == act->act_id->id) {
@@ -1115,12 +1537,19 @@ static int cc_action_ctl_array_put(struct snd_kcontrol *kcontrol,
 	int found = 0;
 	struct list_head *node = NULL, *next = NULL;
 	struct cc_interface *iface = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
 	size_t size = 0;
 	void *ptr = NULL;
-	int i = 0;
 
-	iface = container_of(act->list, struct cc_interface,
-				action_value_list);
+	list_for_each_safe(node, next, &act->list) {
+		act_ifaces = list_entry(node, struct cc_iface_list, iface_list);
+		break;
+	}
+
+	if (!act_ifaces)
+		return 0;
+
+	iface = act_ifaces->iface;
 
 	if (cc_act_is_volatile(act->action_type)) {
 		switch (act->action_type) {
@@ -1140,7 +1569,7 @@ static int cc_action_ctl_array_put(struct snd_kcontrol *kcontrol,
 		return cc_action_set(act->act_id->id, ptr, size);
 	}
 
-	list_for_each_safe(node, next, act->list) {
+	list_for_each_safe(node, next, &act_ifaces->iface->action_value_list) {
 		act_val = list_entry(node,
 				struct cc_action_value_list, list);
 		if (act_val->action_id == act->act_id->id) {
@@ -1149,54 +1578,29 @@ static int cc_action_ctl_array_put(struct snd_kcontrol *kcontrol,
 		}
 	}
 
-	if (!found) {
-		act_val = kzalloc(sizeof(struct cc_action_value_list),
-					GFP_KERNEL);
-		if (!act_val)
-			return -ENOMEM;
-
-		act_val->action_id = act->act_id->id;
-		act_val->action_type = act->action_type;
-		act_val->num_params = act->num_params;
-		switch (act->action_type) {
-		case ACTION_TYPE_CHAR_ARRAY:
-			size = act_val->num_params * sizeof(uint8_t);
-			act_val->param.char_array = kzalloc(size, GFP_KERNEL);
-			break;
-		case ACTION_TYPE_INT_ARRAY:
-			size = act_val->num_params * sizeof(int32_t);
-			act_val->param.int_array = kzalloc(size, GFP_KERNEL);
-			break;
-		case ACTION_TYPE_UINT_ARRAY:
-			size = act_val->num_params * sizeof(uint32_t);
-			act_val->param.uint_array = kzalloc(size, GFP_KERNEL);
-			break;
-		default:
-			return -EINVAL;
-			break;
-		}
-		iface->action_size += (size + sizeof(act_val->action_id));
+	switch (act->action_type) {
+	case ACTION_TYPE_CHAR_ARRAY:
+		size = act_val->num_params * sizeof(uint8_t);
+		ptr = &ucontrol->value.bytes.data[0];
+		break;
+	case ACTION_TYPE_INT_ARRAY:
+		size = act_val->num_params * sizeof(int32_t);
+		ptr = &ucontrol->value.integer.value[0];
+		break;
+	case ACTION_TYPE_UINT_ARRAY:
+		size = act_val->num_params * sizeof(uint32_t);
+		ptr = &ucontrol->value.integer.value[0];
+		break;
+	default:
+		return -EINVAL;
+		break;
 	}
 
-	for (i = 0; i < act->num_params; i++) {
-		switch (act->action_type) {
-		case ACTION_TYPE_CHAR_ARRAY:
-			act_val->param.char_array[i] =
-					ucontrol->value.bytes.data[i];
-			break;
-		case ACTION_TYPE_INT_ARRAY:
-			act_val->param.int_array[i] =
-				ucontrol->value.integer.value[i];
-			break;
-		case ACTION_TYPE_UINT_ARRAY:
-			act_val->param.uint_array[i] =
-				ucontrol->value.integer.value[i];
-			break;
-		default:
-			return -EINVAL;
-			break;
-		}
-	}
+
+	if (!found)
+		cc_add_array_action_val(act, ptr, size);
+	else
+		cc_modify_array_action_val(act, ptr, size);
 
 	return 0;
 }
@@ -1232,7 +1636,7 @@ static int cc_create_enum_action(struct cc_codec_priv *cc_priv,
 
 	action->action_enum.reg = SND_SOC_NOPM;
 	action->action_enum.shift_l = index;
-	action->action_enum.shift_r = 0;
+	action->action_enum.shift_r = index;
 	action->action_enum.items = action->num_params;
 	action->action_enum.texts = (const char *const *)action->texts;
 	action->action_enum.mask = action->num_params ?
@@ -1253,7 +1657,7 @@ static int cc_create_array_action(struct cc_codec_priv *cc_priv,
 {
 	action->mixer.reg = SND_SOC_NOPM;
 	action->mixer.shift = index;
-	action->mixer.rshift = 0;
+	action->mixer.rshift = index;
 	action->mixer.max = action->param_max;
 	action->mixer.count = action->num_params;
 	action->mixer.platform_max = action->param_max;
@@ -1348,6 +1752,8 @@ static int cc_parse_action(struct cc_codec_priv *cc_priv,
 			return -EINVAL;
 			break;
 		}
+
+		INIT_LIST_HEAD(&action->list);
 	}
 
 	return 0;
@@ -1413,7 +1819,7 @@ static int cc_find_action_from_id(struct cc_codec_priv *cc_priv,
 	}
 
 	if (i == cc_priv->num_action) {
-		pr_err("%s: invalid element id %d\n", __func__, id);
+		pr_err("%s: invalid action id %d\n", __func__, id);
 		return -EINVAL;
 	}
 
@@ -1427,10 +1833,13 @@ static int cc_parse_route(struct cc_codec_priv *cc_priv,
 {
 	int ret = 0;
 	uint8_t *tmp = payload;
+	struct cc_element *elem = NULL;
 	uint32_t route_type = 0;
 	uint32_t id = 0;
 	char *str = NULL;
 	int i = 0;
+	int j = 0;
+	uint32_t total_routes = 0;
 
 	if (!cc_priv || !payload || !parsed_len)
 		return -EINVAL;
@@ -1438,13 +1847,13 @@ static int cc_parse_route(struct cc_codec_priv *cc_priv,
 	if (num_route == 0 || num_route > CC_NUM_ROUTES_MAX)
 		return -EINVAL;
 
+	total_routes = num_route + cc_priv->num_routes;
 	cc_priv->audio_map = kzalloc(
-		num_route * sizeof(struct snd_soc_dapm_route), GFP_KERNEL);
+		total_routes * sizeof(struct snd_soc_dapm_route), GFP_KERNEL);
 	if (!cc_priv->audio_map)
 		return -ENOMEM;
 
 	*parsed_len = 0;
-	cc_priv->num_routes = num_route;
 
 	for (i = 0; i < num_route; i++) {
 		route_type = *(uint32_t *)tmp;
@@ -1455,10 +1864,14 @@ static int cc_parse_route(struct cc_codec_priv *cc_priv,
 		tmp += sizeof(uint32_t);
 		*parsed_len += sizeof(uint32_t);
 
-		ret = cc_find_name_from_id(cc_priv, id, &str);
+		ret = cc_find_elem_from_id(cc_priv, id, &elem);
 		if (ret)
 			return ret;
-		cc_priv->audio_map[i].sink = str;
+
+		if (elem->elem_type == ELEM_TYPE_OUTPUT)
+			route_type = ROUTE_TYPE_SWITCH;
+
+		cc_priv->audio_map[i].sink = elem->elem_id->name;
 
 		switch (route_type) {
 		case ROUTE_TYPE_CONTROL:
@@ -1490,45 +1903,34 @@ static int cc_parse_route(struct cc_codec_priv *cc_priv,
 		tmp += sizeof(uint32_t);
 		*parsed_len += sizeof(uint32_t);
 
-		ret = cc_find_name_from_id(cc_priv, id, &str);
+		ret = cc_find_elem_from_id(cc_priv, id, &elem);
 		if (ret)
 			return ret;
-		cc_priv->audio_map[i].source = str;
 
-		pr_info("++++ parsed routes: %s %s %s\n",
-			cc_priv->audio_map[i].sink,
-			cc_priv->audio_map[i].control ? cc_priv->audio_map[i].control : "NULL",
-			cc_priv->audio_map[i].source);
+		cc_priv->audio_map[i].source = elem->elem_id->name;
 	}
 
-	return 0;
-}
+	for (j = 0; j < cc_priv->num_elem; j++) {
+		elem = &cc_priv->elems[j];
+		if (elem->elem_type == ELEM_TYPE_OUTPUT) {
+			cc_priv->audio_map[i].sink = elem->s_name;
+			cc_priv->audio_map[i].control = NULL;
+			cc_priv->audio_map[i].source = elem->elem_id->name;
+			i++;
+		}
 
-static int cc_dai_startup(struct snd_pcm_substream *substream,
-				struct snd_soc_dai *dai)
-{
-	pr_info("++++ %s:%d\n", __func__, __LINE__);
-#if 0
-	struct cc_codec_priv cc_priv = (struct cc_codec_priv *)
-					dai_get_drvdata(dai->component->dev);
-	int id = dai->driver->id;
-	struct cc_interface *iface = cc_priv->iface[id];
-#endif
-	/* TODO: create payload */
-	return 0;
-}
+		if (elem->elem_type == ELEM_TYPE_INPUT) {
+			cc_priv->audio_map[i].sink = elem->elem_id->name;
+			cc_priv->audio_map[i].control = "Switch";
+			cc_priv->audio_map[i].source = elem->s_name;
+			i++;
+		}
 
-static void cc_dai_shutdown(struct snd_pcm_substream *substream,
-				struct snd_soc_dai *dai)
-{
-	pr_info("++++ %s:%d\n", __func__, __LINE__);
-#if 0
-	struct cc_codec_priv cc_priv = (struct cc_codec_priv *)
-					dai_get_drvdata(dai->component->dev);
-	int id = dai->driver->id;
-	struct cc_interface *iface = cc_priv->iface[id];
-#endif
-	/* TODO: create payload */
+	}
+
+	cc_priv->num_routes = total_routes;
+
+	return 0;
 }
 
 static int cc_dai_hw_params(struct snd_pcm_substream *substream,
@@ -1536,29 +1938,18 @@ static int cc_dai_hw_params(struct snd_pcm_substream *substream,
 {
 	struct cc_codec_priv *cc_priv = (struct cc_codec_priv *)
 					dev_get_drvdata(dai->component->dev);
-	int id = dai->driver->id;
+	int id = dai->driver->id - 1;
 	struct cc_interface *iface = &cc_priv->iface[id];
 
-	pr_info("++++ %s:%d\n", __func__, __LINE__);
-	iface->uc_header.sample_rate = params_rate(hw_params);
-	iface->uc_header.channels = params_channels(hw_params);
-	iface->uc_header.bit_width = params_width(hw_params);
+	iface->uc_info.sample_rate = params_rate(hw_params);
+	iface->uc_info.channels = params_channels(hw_params);
+	iface->uc_info.bit_width = params_width(hw_params);
 
-	return 0;
-}
-
-static int cc_dai_trigger(struct snd_pcm_substream *substream, int on,
-		struct snd_soc_dai *dai)
-{
-	pr_info("++++ %s:%d ON: %d\n", __func__, __LINE__, on);
 	return 0;
 }
 
 static struct snd_soc_dai_ops cc_dai_ops = {
 	.hw_params = cc_dai_hw_params,
-	.startup = cc_dai_startup,
-	.shutdown = cc_dai_shutdown,
-	.trigger = cc_dai_trigger,
 };
 
 static int cc_parse_interface(struct cc_codec_priv *cc_priv,
@@ -1575,6 +1966,7 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 	struct cc_element *elem = NULL;
 	struct cc_action *act = NULL;
 	struct snd_soc_pcm_stream *stream = NULL;
+	struct cc_iface_list *ifaces = NULL;
 
 	if (!cc_priv || !payload || !parsed_len)
 		return -EINVAL;
@@ -1596,10 +1988,12 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 	cc_priv->num_iface = num_intf;
 
 	for (i = 0; i < num_intf; i++) {
-		iface = cc_priv->iface;
+		iface = &cc_priv->iface[i];
 		id = *(uint32_t *)tmp;
 		tmp += sizeof(uint32_t);
 		*parsed_len += sizeof(uint32_t);
+
+		iface->uc_info.uc_id = i;
 
 		ret = cc_find_elem_from_id(cc_priv, id, &elem);
 		if (ret) {
@@ -1608,9 +2002,9 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 			return ret;
 		}
 
-		if (elem->elem_type == ELEM_TYPE_STREAM_IN) {
+		if (elem->elem_type == ELEM_TYPE_STREAM_OUT) {
 			stream = &cc_priv->dai[i].playback;
-		} else if (elem->elem_type == ELEM_TYPE_STREAM_OUT) {
+		} else if (elem->elem_type == ELEM_TYPE_STREAM_IN) {
 			stream = &cc_priv->dai[i].capture;
 		} else {
 			pr_err("%s: %d Element is not stream\n", __func__, id);
@@ -1633,7 +2027,6 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 		stream->rate_max = *(uint32_t *)tmp;
 		tmp += sizeof(uint32_t);
 		*parsed_len += sizeof(uint32_t);
-
 		stream->channels_min = *(uint32_t *)tmp;
 		tmp += sizeof(uint32_t);
 		*parsed_len += sizeof(uint32_t);
@@ -1657,15 +2050,6 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 		INIT_LIST_HEAD(&cc_priv->iface[i].path_list);
 		INIT_LIST_HEAD(&cc_priv->iface[i].action_value_list);
 
-		pr_info("++++ dai name: %s\n", cc_priv->dai[i].name);
-		pr_info("++++ dai id: %u\n", cc_priv->dai[i].id);
-		pr_info("++++ dai stream: %s\n", stream->stream_name);
-		pr_info("++++ dai format: %llx\n", stream->formats);
-		pr_info("++++ dai rates: %x\n", stream->rates);
-		pr_info("++++ dai rate_min: %u\n", stream->rate_min);
-		pr_info("++++ dai rate_max: %u\n", stream->rate_max);
-		pr_info("++++ dai ch_min: %u\n", stream->channels_min);
-		pr_info("++++ dai ch_max: %u\n", stream->channels_max);
 		for (j = 0; j < num_elements; j++) {
 			id = *(uint32_t *)tmp;
 			tmp += sizeof(uint32_t);
@@ -1673,12 +2057,18 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 
 			ret = cc_find_elem_from_id(cc_priv, id, &elem);
 			if (ret) {
-				pr_err("%s: iface:%d, invalid elem:%d\n",
+				pr_err("%s: iface:%d, invalid elem:0x%x\n",
 					__func__, i, id);
 				return ret;
 			}
 
-			elem->list = &cc_priv->iface[i].path_list;
+			ifaces = kzalloc(sizeof(struct cc_iface_list),
+							GFP_KERNEL);
+			if (!ifaces)
+				return -ENOMEM;
+			ifaces->iface = &cc_priv->iface[i];
+
+			list_add_tail(&ifaces->iface_list, &elem->list);
 		}
 
 		for (j = 0; j < num_actions; j++) {
@@ -1688,12 +2078,18 @@ static int cc_parse_interface(struct cc_codec_priv *cc_priv,
 
 			ret = cc_find_action_from_id(cc_priv, id, &act);
 			if (ret) {
-				pr_err("%s: iface:%d, invalid action:%d\n",
+				pr_err("%s: iface:%d, invalid action:0x%x\n",
 					__func__, i, id);
 				return ret;
 			}
 
-			act->list = &cc_priv->iface[i].action_value_list;
+			ifaces = kzalloc(sizeof(struct cc_iface_list),
+							GFP_KERNEL);
+			if (!ifaces)
+				return -ENOMEM;
+			ifaces->iface = &cc_priv->iface[i];
+
+			list_add_tail(&ifaces->iface_list, &act->list);
 		}
 	}
 
@@ -1714,7 +2110,7 @@ static int cc_parse_plat_info(struct cc_codec_priv *cc_priv,
 	}
 
 	pinfo = (struct cc_plat_info_t *)plat_info;
-	pr_info("++++ id:%d,dev:%d,elem:%d,act:%d, route:%d, iface: %d\n",
+	pr_debug("id:%d, dev:%d, elem:%d, act:%d, route:%d, iface: %d\n",
 		pinfo->num_id, pinfo->num_dev, pinfo->num_elem,
 		pinfo->num_action, pinfo->num_route, pinfo->num_intf);
 
@@ -1751,11 +2147,6 @@ static int cc_parse_plat_info(struct cc_codec_priv *cc_priv,
 		return ret;
 	tmp += tmp_len;
 
-	if (tmp != (plat_info + size)) {
-		pr_err("%s: Invalid platform information size\n", __func__);
-		return -EILSEQ;
-	}
-
 	return 0;
 }
 
@@ -1766,9 +2157,9 @@ static int cc_soc_codec_probe(struct snd_soc_component *component)
 	struct snd_soc_dapm_context *dapm =
 			snd_soc_component_get_dapm(component);
 	struct device *dev = component->dev;
+	struct cc_element *elem = NULL;
 	int i = 0;
 
-	pr_info("+++ %s:%d\n", __func__, __LINE__);
 	for (i = 0; i < cc_priv->num_elem; i++) {
 		ret = snd_soc_dapm_new_controls(dapm,
 				&cc_priv->elems[i].widget, 1);
@@ -1776,6 +2167,17 @@ static int cc_soc_codec_probe(struct snd_soc_component *component)
 			dev_err(dev, "%s: failed to add dapm control, ret:%d\n",
 				__func__, ret);
 			return ret;
+		}
+
+		if (cc_priv->elems[i].elem_type == ELEM_TYPE_INPUT ||
+			cc_priv->elems[i].elem_type == ELEM_TYPE_OUTPUT) {
+			ret = snd_soc_dapm_new_controls(dapm,
+				&cc_priv->elems[i].widget_ip_op, 1);
+			if (ret < 0) {
+				dev_err(dev, "%s: fail to add ip/op dapm: %d\n",
+					__func__, ret);
+				return ret;
+			}
 		}
 	}
 
@@ -1804,6 +2206,18 @@ static int cc_soc_codec_probe(struct snd_soc_component *component)
 		}
 	}
 
+	for (i = 0; i < cc_priv->num_elem; i++) {
+		elem = &cc_priv->elems[i];
+		if (elem->elem_type == ELEM_TYPE_INPUT ||
+		    elem->elem_type == ELEM_TYPE_OUTPUT ||
+		    elem->elem_type == ELEM_TYPE_STREAM_IN ||
+		    elem->elem_type == ELEM_TYPE_STREAM_OUT) {
+			snd_soc_dapm_ignore_suspend(dapm, elem->s_name);
+		}
+	}
+
+	snd_soc_dapm_sync(dapm);
+
 	return 0;
 }
 
@@ -1812,13 +2226,16 @@ static void cc_soc_codec_remove(struct snd_soc_component *component)
 	return;
 }
 
-static int cc_get_plat_info(uint8_t **ptr, uint32_t *size)
+static int cc_get_plat_info(uint8_t **ptr, size_t *size)
 {
+	int rc = 0;
 	if (!ptr || !size)
 		return -EINVAL;
 
-	/* TODO: integrate it with IPC */
-	return 0;
+	rc = cc_pktzr_send_packet(CC_CODEC_OPCODE_GET_PLAT_INFO, NULL, 0,
+		(void **)ptr, size);
+
+	return rc;
 }
 
 static void cc_cleanup_iface(struct cc_interface *iface)
@@ -1866,6 +2283,9 @@ static void cc_cleanup_iface(struct cc_interface *iface)
 
 static void cc_cleanup_action(struct cc_action *action)
 {
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *act_ifaces = NULL;
+
 	if (action->act_id)
 		action->act_id = NULL;
 
@@ -1879,20 +2299,42 @@ static void cc_cleanup_action(struct cc_action *action)
 		action->texts = NULL;
 	}
 
-	if (action->list)
-		action->list = NULL;
+	list_for_each_safe(node, next, &action->list) {
+		act_ifaces = list_entry(node,
+					struct cc_iface_list, iface_list);
+		list_del(node);
+		if (act_ifaces)
+			kfree(act_ifaces);
+	}
+
 }
 
 static void cc_cleanup_element(struct cc_element *element)
 {
+	struct list_head *node = NULL, *next = NULL;
+	struct cc_iface_list *elem_ifaces = NULL;
+
 	if (element->kcontrol) {
 		kfree(element->kcontrol);
 		element->kcontrol = NULL;
 	}
 
+	if (element->mixer) {
+		kfree(element->mixer);
+		element->mixer = NULL;
+	}
+
 	if (element->texts) {
 		kfree(element->texts);
 		element->texts = NULL;
+	}
+
+	list_for_each_safe(node, next, &element->list) {
+		elem_ifaces = list_entry(node,
+					struct cc_iface_list, iface_list);
+		list_del(node);
+		if (elem_ifaces)
+			kfree(elem_ifaces);
 	}
 
 	element->elem_id = NULL;
@@ -1948,7 +2390,7 @@ static void cc_cleanup(struct cc_codec_priv *cc_priv)
 static int cc_cdc_probe(struct platform_device *pdev)
 {
 	struct cc_codec_priv *cc_priv = NULL;
-	uint32_t plat_info_size = 0;
+	size_t plat_info_size = 0;
 	uint8_t *plat_info = NULL;
 	int ret = 0;
 
@@ -1958,6 +2400,13 @@ static int cc_cdc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dev_set_drvdata(&pdev->dev, cc_priv);
+
+	ret = cc_pktzr_init(&pdev->dev);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: packet init failed: %d\n",
+				__func__, ret);
+		return ret;
+	}
 
 	ret = cc_get_plat_info(&plat_info, &plat_info_size);
 	if (!plat_info || ret) {
@@ -1972,8 +2421,7 @@ static int cc_cdc_probe(struct platform_device *pdev)
 
 	cc_priv->cc_comp.probe = cc_soc_codec_probe;
 	cc_priv->cc_comp.remove = cc_soc_codec_remove;
-	/* TODO: read it from device tree */
-	cc_priv->cc_comp.name = "cc_codec";
+	cc_priv->cc_comp.name = CC_CODEC_STR;
 
 	ret = snd_soc_register_component(&pdev->dev, &cc_priv->cc_comp,
 				cc_priv->dai, cc_priv->num_iface);
