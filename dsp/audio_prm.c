@@ -446,8 +446,13 @@ static int __init audio_prm_module_init(void)
 		pr_err("%s: gpr driver register failed = %d\n", __func__, ret);
 		return ret;
 	}
+#ifdef CONFIG_AUDIO_GPR_DOMAIN_MODEM
+	ret = audio_notifier_register("audio_prm", AUDIO_NOTIFIER_MODEM_DOMAIN,
+					&service_nb);
+#else
 	ret = audio_notifier_register("audio_prm", AUDIO_NOTIFIER_ADSP_DOMAIN,
 					&service_nb);
+#endif
 	if (ret < 0) {
 		pr_err("%s: Audio notifier register failed ret = %d\n",
 			__func__, ret);
