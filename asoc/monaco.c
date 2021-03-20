@@ -23,12 +23,15 @@
 #include <sound/info.h>
 #include <soc/snd_event.h>
 #include <soc/swr-common.h>
+#include <soc/soundwire.h>
 #include "device_event.h"
 #include "asoc/msm-cdc-pinctrl.h"
 #include "asoc/wcd-mbhc-v2.h"
 #include "codecs/rouleur/rouleur-mbhc.h"
 #include "codecs/wsa881x-analog.h"
 #include "codecs/rouleur/rouleur.h"
+#include "codecs/besbev/besbev.h"
+#include "codecs/wsa883x/wsa883x.h"
 #include "codecs/bolero/bolero-cdc.h"
 #include <dt-bindings/sound/audio-codec-port-types.h>
 #include "monaco-port-config.h"
@@ -259,6 +262,11 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm;
 	struct snd_card *card;
 	struct snd_info_entry *entry;
+	u8 spkleft_ports[WSA883X_MAX_SWR_PORTS] = {0, 1};
+	u8 spkleft_port_types[WSA883X_MAX_SWR_PORTS] = {SPKR_L, SPKR_L_VI};
+	unsigned int ch_rate[WSA883X_MAX_SWR_PORTS] = {SWR_CLK_RATE_2P4MHZ,
+							SWR_CLK_RATE_1P2MHZ};
+	unsigned int ch_mask[WSA883X_MAX_SWR_PORTS] = {0x1, 0x3};
 	struct msm_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(rtd->card);
 
@@ -306,7 +314,11 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	bolero_info_create_codec_entry(pdata->codec_root, bolero_component);
 	bolero_register_wake_irq(bolero_component, false);
 
-	component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
+	component = snd_soc_rtdcom_lookup(rtd, BESBEV_DRV_NAME);
+	if (!component)
+		component = snd_soc_rtdcom_lookup(rtd, "wsa-codec.1");
+	if (!component)
+		component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
 	if (!component) {
 		pr_err("%s component is NULL\n", __func__);
 		return -EINVAL;
@@ -326,7 +338,19 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "AMIC4");
 	snd_soc_dapm_sync(dapm);
 
-	if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
+	if (!strncmp(component->driver->name, BESBEV_DRV_NAME,
+						strlen(BESBEV_DRV_NAME))) {
+		besbev_info_create_codec_entry(pdata->codec_root, component);
+		bolero_set_port_map(bolero_component,
+			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
+	} else if (!strncmp(component->driver->name, "wsa-codec.1",
+						strlen("wsa-codec.1"))) {
+		wsa883x_set_channel_map(component, &spkleft_ports[0],
+					WSA883X_MAX_SWR_PORTS, &ch_mask[0],
+					&ch_rate[0], &spkleft_port_types[0]);
+		wsa883x_codec_info_create_codec_entry(pdata->codec_root,
+							component);
+	} else if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
 						strlen(ROULEUR_DRV_NAME))) {
 		rouleur_info_create_codec_entry(pdata->codec_root, component);
 		bolero_set_port_map(bolero_component,
