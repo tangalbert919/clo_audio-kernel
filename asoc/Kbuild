@@ -171,7 +171,7 @@ endif
 
 # for MONACO sound card driver
 ifdef CONFIG_SND_SOC_MONACO
-	MACHINE_OBJS += bengal.o
+	MACHINE_OBJS += monaco.o
 endif
 
 # for sa8155 sound card driver
