@@ -774,6 +774,8 @@ static int audio_cma_hyp_unassign(struct device *dev)
 		return -EINVAL;
 	}
 
+	of_reserved_mem_device_release(dev);
+
 	pr_debug("%s: hyp_assign_phys addr = 0x%pK size = %d\n",__func__, rmem->base, rmem->size);
 	return hyp_assign_phys(rmem->base, rmem->size, source_vm_unmap, 4,
 				dest_vm_unmap, dest_perms_unmap,1);
