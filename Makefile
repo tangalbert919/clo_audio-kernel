@@ -31,7 +31,6 @@ export
 endif
 ifeq ($(CONFIG_ARCH_MONACO), y)
 include $(srctree)/techpack/audio/config/monacoauto.conf
-export
 endif
 endif
 
