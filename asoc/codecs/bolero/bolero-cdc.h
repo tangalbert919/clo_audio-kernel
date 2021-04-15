@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef BOLERO_CDC_H
@@ -13,6 +13,7 @@
 #define BOLERO_VERSION_1_2 0x0003
 #define BOLERO_VERSION_2_0 0x0004
 #define BOLERO_VERSION_2_1 0x0005
+#define BOLERO_VERSION_2_2 0x0006
 
 enum {
 	START_MACRO,
