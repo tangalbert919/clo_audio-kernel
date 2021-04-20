@@ -26,10 +26,10 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sm6150autoconf.h
 	endif
-	ifeq ($(CONFIG_ARCH_BENGAL), y)
-		include $(AUDIO_ROOT)/config/bengalauto.conf
+	ifeq ($(CONFIG_ARCH_MONACO), y)
+		include $(AUDIO_ROOT)/config/monacoauto.conf
 		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/bengalautoconf.h
+		INCS    +=  -include $(AUDIO_ROOT)/config/monacoautoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_LITO), y)
 		include $(AUDIO_ROOT)/config/litoauto.conf
