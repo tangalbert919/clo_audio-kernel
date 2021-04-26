@@ -29,8 +29,6 @@
 #include <linux/power_supply.h>
 #include "asoc/bolero-slave-internal.h"
 
-#define DRV_NAME "rouleur_codec"
-
 #define NUM_SWRS_DT_PARAMS 5
 
 #define ROULEUR_VERSION_1_0 1
@@ -2306,7 +2304,7 @@ static int rouleur_soc_codec_resume(struct snd_soc_component *component)
 }
 
 static const struct snd_soc_component_driver soc_codec_dev_rouleur = {
-	.name = DRV_NAME,
+	.name = ROULEUR_DRV_NAME,
 	.probe = rouleur_soc_codec_probe,
 	.remove = rouleur_soc_codec_remove,
 	.controls = rouleur_snd_controls,
