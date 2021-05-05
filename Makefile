@@ -26,7 +26,7 @@ ifeq ($(CONFIG_ARCH_HOLI), y)
 include $(srctree)/techpack/audio/config/holiauto.conf
 endif
 ifeq ($(CONFIG_ARCH_SA8155), y)
-include $(srctree)/techpack/audio/config/sa8155auto.conf
+include $(srctree)/techpack/audio-ar/config/sa8155auto.conf
 export
 endif
 endif
@@ -85,7 +85,7 @@ LINUXINCLUDE    += \
 endif
 ifeq ($(CONFIG_ARCH_SA8155), y)
 LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/sa8155autoconf.h
+                -include $(srctree)/techpack/audio-ar/config/sa8155autoconf.h
 endif
 
 obj-y += soc/
