@@ -156,21 +156,58 @@ static int besbev_init_reg(struct snd_soc_component *component,
 				bool speaker_present)
 {
 	if (speaker_present == true) {
+		snd_soc_component_update_bits(component, BESBEV_VAGC_TIME,
+						0x0C, 0x0C);
+		snd_soc_component_update_bits(component, BESBEV_VAGC_TIME,
+						0x03, 0x03);
+		snd_soc_component_update_bits(component,
+						BESBEV_VAGC_ATTN_LVL_1_2,
+						0x77, 0x11);
+		snd_soc_component_update_bits(component,
+						BESBEV_VAGC_ATTN_LVL_3,
+						0x07, 0x02);
 		/* Enable BCL, Enable "VBAT_AGC_EN"*/
 		snd_soc_component_update_bits(component, BESBEV_VAGC_CTL,
 						0x71, 0x41);
-		snd_soc_component_update_bits(component, BESBEV_VAGC_TIME,
+
+		snd_soc_component_update_bits(component, BESBEV_TAGC_CTL,
+						0x0E, 0x0A);
+		snd_soc_component_update_bits(component, BESBEV_TAGC_TIME,
+						0x30, 0x30);
+		snd_soc_component_update_bits(component, BESBEV_TAGC_E2E_GAIN,
+						0x1F, 0x04);
+		snd_soc_component_update_bits(component, BESBEV_TAGC_CTL,
+						0x01, 0x01);
+		snd_soc_component_update_bits(component, BESBEV_TEMP_CONFIG0,
+						0x07, 0x02);
+		snd_soc_component_update_bits(component, BESBEV_TEMP_CONFIG1,
+						0x07, 0x02);
+
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_4,
+						0x70, 0x00);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_5,
+						0x0C, 0x00);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_5,
+						0x70, 0x00);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ISENSE2,
 						0x0F, 0x0A);
-		snd_soc_component_update_bits(component,
-						BESBEV_VAGC_ATTN_LVL_1_2,
-						0x77, 0x21);
-		snd_soc_component_update_bits(component,
-						BESBEV_VAGC_ATTN_LVL_3,
-						0x07, 0x03);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_6,
+						0x02, 0x02);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_2,
+						0x40, 0x00);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_7,
+						0x04, 0x04);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_7,
+						0x02, 0x02);
+
+		snd_soc_component_update_bits(component, BESBEV_DRE_CTL_1,
+						0x01, 0x01);
 	}
 	/* Disable mic bias pull down */
 	snd_soc_component_update_bits(component, BESBEV_ANA_MICBIAS_MICB_1_2_EN,
 					0x01, 0x00);
+	snd_soc_component_update_bits(component, BESBEV_CKWD_CKWD_CTL_1,
+					0x1F, 0x1B);
 	return 0;
 }
 
@@ -366,11 +403,11 @@ int besbev_global_mbias_enable(struct snd_soc_component *component)
 
 	mutex_lock(&besbev->main_bias_lock);
 	if (besbev->mbias_cnt == 0) {
+		usleep_range(6000, 6100);
 		snd_soc_component_update_bits(component,
 				BESBEV_ANA_MBIAS_TSADC_EN, 0x20, 0x20);
 		snd_soc_component_update_bits(component,
 				BESBEV_ANA_MBIAS_TSADC_EN, 0x10, 0x10);
-		usleep_range(1000, 1100);
 	}
 	besbev->mbias_cnt++;
 	mutex_unlock(&besbev->main_bias_lock);
@@ -408,9 +445,7 @@ static int besbev_rx_clk_enable(struct snd_soc_component *component)
 	if (besbev->rx_clk_cnt == 0) {
 		snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_RX_CLK_CTL, 0x03, 0x03);
-		usleep_range(5000, 5100);
 		besbev_global_mbias_enable(component);
-		usleep_range(500, 510);
 	}
 	besbev->rx_clk_cnt++;
 	mutex_unlock(&besbev->rx_clk_lock);
@@ -499,8 +534,12 @@ static int besbev_codec_enable_adc(struct snd_soc_dapm_widget *w,
 		besbev_global_mbias_enable(component);
 		if (w->shift) {
 			snd_soc_component_update_bits(component,
+				BESBEV_ANA_TX_MISC_CTL, 0x02, 0x02);
+			snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_CDC_TX_MODE, 0x30, 0x30);
 		} else {
+			snd_soc_component_update_bits(component,
+				BESBEV_ANA_TX_MISC_CTL, 0x04, 0x04);
 			snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_CDC_TX_MODE, 0x03, 0x03);
 		}
@@ -514,8 +553,12 @@ static int besbev_codec_enable_adc(struct snd_soc_dapm_widget *w,
 						false);
 		if (w->shift) {
 			snd_soc_component_update_bits(component,
+				BESBEV_ANA_TX_MISC_CTL, 0x02, 0x00);
+			snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_CDC_TX_MODE, 0x30, 0x00);
 		} else {
+			snd_soc_component_update_bits(component,
+				BESBEV_ANA_TX_MISC_CTL, 0x04, 0x00);
 			snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_CDC_TX_MODE, 0x03, 0x00);
 		}
@@ -614,10 +657,8 @@ int besbev_micbias_control(struct snd_soc_component *component,
 		besbev->micb_ref[micb_index]++;
 		if (besbev->micb_ref[micb_index] == 1) {
 			besbev_global_mbias_enable(component);
-			usleep_range(50, 50);
 			snd_soc_component_update_bits(component,
 					micb_reg, enable_mask, enable_mask);
-			usleep_range(200, 200);
 		}
 		break;
 	case MICB_DISABLE:
@@ -765,7 +806,6 @@ static int besbev_rx_event_notify(struct notifier_block *block,
 	}
 	return 0;
 }
-
 
 static int __besbev_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 					  int event)
@@ -1264,16 +1304,14 @@ static int besbev_spkr_event(struct snd_soc_dapm_widget *w,
 		swr_slvdev_datapath_control(besbev->swr_slave,
 					    besbev->swr_slave->dev_num,
 					    true);
-		/* Added delay as per HW sequence */
-		usleep_range(250, 300);
 		besbev_rx_clk_enable(component);
 		/* Set Gain from SWR */
 		if (besbev->comp_support)
 			snd_soc_component_update_bits(component,
 						BESBEV_DRE_CTL_1,
 						0x01, 0x00);
-		/* Added delay as per HW sequence */
-		usleep_range(250, 300);
+		snd_soc_component_update_bits(component, BESBEV_PDM_WD_CTL,
+						0x01, 0x01);
 		wcd_enable_irq(&besbev->irq_info, BESBEV_IRQ_INT_UVLO);
 		/* Force remove group */
 		swr_remove_from_group(besbev->swr_slave,
