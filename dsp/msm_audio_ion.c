@@ -713,72 +713,59 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 	return ret;
 }
 
-static int audio_cma_hyp_assign(struct device *dev)
+static int __audio_mem_hyp_assign(struct device *dev, int *source_vms,
+				       int source_nelems, int *dest_vms,
+				       int *dest_perms, int dest_nelems)
 {
-	int ret = 0;
 	struct device_node *mem_node;
 	struct reserved_mem *rmem;
+
+	mem_node = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (!mem_node) {
+		pr_err("%s: Could not parse memory region\n", __func__);
+		return -EINVAL;
+	}
+
+	rmem = of_reserved_mem_lookup(mem_node);
+	of_node_put(mem_node);
+	if (!rmem) {
+		pr_err("%s: Failed to get rmem\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_debug("%s: hyp_assign_phys addr = 0x%pK size = %pa\n", __func__,
+		 rmem->base, rmem->size);
+	return hyp_assign_phys(rmem->base, rmem->size, source_vms,
+			       source_nelems, dest_vms, dest_perms,
+			       dest_nelems);
+}
+
+
+static int audio_mem_hyp_assign(struct device *dev)
+{
 	int source_vm_map[1] = {VMID_HLOS};
 	int dest_vm_map[4] = {VMID_MSS_MSA, VMID_LPASS, VMID_ADSP_HEAP, VMID_HLOS};
 	int dest_perms_map[4] = {
 		[0 ... 3] = PERM_READ | PERM_WRITE,
 	};
 
-	pr_debug("%s: enter\n", __func__);
-
-	mem_node = of_parse_phandle(dev->of_node, "memory-region", 0);
-	if (!mem_node) {
-		pr_err("%s: Could not parse memory region\n", __func__);
-		return -EINVAL;
-	}
-
-	rmem = of_reserved_mem_lookup(mem_node);
-	if (!rmem) {
-		pr_err("%s: Failed to get rmem \n", __func__);
-		return -EINVAL;
-	}
-
-	ret = of_reserved_mem_device_init_by_idx(dev, dev->of_node, 0);
-	of_node_put(mem_node);
-	if (ret) {
-		pr_err("Failed to initialize reserved mem, ret %d\n", ret);
-		return -EINVAL;
-	}
-
-	pr_debug("%s: hyp_assign_phys addr = 0x%pK size = %d\n",__func__, rmem->base, rmem->size);
-	return hyp_assign_phys(rmem->base, rmem->size, source_vm_map, 1,
-				dest_vm_map, dest_perms_map,
-				ARRAY_SIZE(dest_vm_map));
+	return __audio_mem_hyp_assign(dev, source_vm_map,
+					   ARRAY_SIZE(source_vm_map),
+					   dest_vm_map, dest_perms_map,
+					   ARRAY_SIZE(dest_vm_map));
 }
 
-static int audio_cma_hyp_unassign(struct device *dev)
+static int audio_mem_hyp_unassign(struct device *dev)
 {
-	struct device_node *mem_node;
-	struct reserved_mem *rmem;
 	int source_vm_unmap[4] = {VMID_MSS_MSA, VMID_LPASS, VMID_ADSP_HEAP, VMID_HLOS};
 	int dest_vm_unmap[1] = {VMID_HLOS};
 	int dest_perms_unmap[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 
-	pr_debug("%s: enter\n", __func__);
 
-	mem_node = of_parse_phandle(dev->of_node, "memory-region", 0);
-	if (!mem_node) {
-		pr_err("%s: Could not parse memory region\n", __func__);
-		return -EINVAL;
-	}
-
-	rmem = of_reserved_mem_lookup(mem_node);
-	of_node_put(mem_node);
-	if (!rmem) {
-		pr_err("%s: Failed to get rmem \n", __func__);
-		return -EINVAL;
-	}
-
-	of_reserved_mem_device_release(dev);
-
-	pr_debug("%s: hyp_assign_phys addr = 0x%pK size = %d\n",__func__, rmem->base, rmem->size);
-	return hyp_assign_phys(rmem->base, rmem->size, source_vm_unmap, 4,
-				dest_vm_unmap, dest_perms_unmap,1);
+	return __audio_mem_hyp_assign(dev, source_vm_unmap,
+					   ARRAY_SIZE(source_vm_unmap),
+					   dest_vm_unmap, dest_perms_unmap,
+					   ARRAY_SIZE(dest_vm_unmap));
 }
 
 static const struct of_device_id msm_audio_ion_dt_match[] = {
@@ -897,7 +884,7 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 
 		if (scm_mp_enabled) {
 			dev_dbg(dev, "%s: Calling CMA HYP Assign\n", __func__);
-			rc = audio_cma_hyp_assign(dev);
+			rc = audio_mem_hyp_assign(dev);
 			if (rc) {
 				dev_err(dev, "%s: CMA HYP ASSIGN Failed\n", __func__);
 			}
@@ -988,7 +975,7 @@ static int msm_audio_ion_remove(struct platform_device *pdev)
 
 		if (scm_mp_enabled) {
 			dev_dbg(dev, "%s: Calling CMA HYP UnAssign\n", __func__);
-			rc = audio_cma_hyp_unassign(dev);
+			rc = audio_mem_hyp_unassign(dev);
 			if (rc) {
 				dev_err(dev, "%s: CMA HYP ASSIGN Failed\n", __func__);
 			}
