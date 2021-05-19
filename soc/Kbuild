@@ -48,7 +48,6 @@ ifeq ($(KERNEL_BUILD), 0)
 	endif
 	ifeq ($(CONFIG_ARCH_MONACO), y)
 		include $(AUDIO_ROOT)/config/monacoauto.conf
-		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/monacoautoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SM6150), y)

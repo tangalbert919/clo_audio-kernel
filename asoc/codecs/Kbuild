@@ -64,7 +64,6 @@ ifeq ($(KERNEL_BUILD), 0)
 	endif
 	ifeq ($(CONFIG_ARCH_MONACO), y)
 		include $(AUDIO_ROOT)/config/monacoauto.conf
-		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/monacoautoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDMSHRIKE), y)
@@ -258,6 +257,7 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= bolero/
 	obj-y	+= wsa883x/
 	obj-y	+= rouleur/
+	obj-y	+= besbev/
 endif
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o

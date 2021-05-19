@@ -23,20 +23,21 @@
 #include <sound/info.h>
 #include <soc/snd_event.h>
 #include <soc/swr-common.h>
+#include <soc/soundwire.h>
 #include "device_event.h"
 #include "asoc/msm-cdc-pinctrl.h"
 #include "asoc/wcd-mbhc-v2.h"
-#include "codecs/wcd937x/wcd937x-mbhc.h"
 #include "codecs/rouleur/rouleur-mbhc.h"
 #include "codecs/wsa881x-analog.h"
-#include "codecs/wcd937x/wcd937x.h"
 #include "codecs/rouleur/rouleur.h"
+#include "codecs/besbev/besbev.h"
+#include "codecs/wsa883x/wsa883x.h"
 #include "codecs/bolero/bolero-cdc.h"
 #include <dt-bindings/sound/audio-codec-port-types.h>
-#include "bengal-port-config.h"
+#include "monaco-port-config.h"
 #include "msm-audio-defs.h"
 #include "msm_common.h"
-#include "msm_bengal_dailink.h"
+#include "msm_monaco_dailink.h"
 
 #define DRV_NAME "bengal-asoc-snd"
 #define __CHIPSET__ "BENGAL "
@@ -78,11 +79,10 @@ struct aux_codec_dev_info {
 
 static bool is_initial_boot;
 static bool codec_reg_done;
-static struct snd_soc_card snd_soc_card_bengal_msm;
+static struct snd_soc_card snd_soc_card_monaco_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
 
-static void *def_wcd_mbhc_cal(void);
 static void *def_rouleur_mbhc_cal(void);
 
 /*
@@ -262,6 +262,11 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm;
 	struct snd_card *card;
 	struct snd_info_entry *entry;
+	u8 spkleft_ports[WSA883X_MAX_SWR_PORTS] = {0, 1};
+	u8 spkleft_port_types[WSA883X_MAX_SWR_PORTS] = {SPKR_L, SPKR_L_VI};
+	unsigned int ch_rate[WSA883X_MAX_SWR_PORTS] = {SWR_CLK_RATE_2P4MHZ,
+							SWR_CLK_RATE_1P2MHZ};
+	unsigned int ch_mask[WSA883X_MAX_SWR_PORTS] = {0x1, 0x3};
 	struct msm_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(rtd->card);
 
@@ -309,10 +314,11 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	bolero_info_create_codec_entry(pdata->codec_root, bolero_component);
 	bolero_register_wake_irq(bolero_component, false);
 
-	component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
+	component = snd_soc_rtdcom_lookup(rtd, BESBEV_DRV_NAME);
 	if (!component)
-		component = snd_soc_rtdcom_lookup(rtd, WCD937X_DRV_NAME);
-
+		component = snd_soc_rtdcom_lookup(rtd, "wsa-codec.1");
+	if (!component)
+		component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
 	if (!component) {
 		pr_err("%s component is NULL\n", __func__);
 		return -EINVAL;
@@ -332,16 +338,23 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "AMIC4");
 	snd_soc_dapm_sync(dapm);
 
-	if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
+	if (!strncmp(component->driver->name, BESBEV_DRV_NAME,
+						strlen(BESBEV_DRV_NAME))) {
+		besbev_info_create_codec_entry(pdata->codec_root, component);
+		bolero_set_port_map(bolero_component,
+			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
+	} else if (!strncmp(component->driver->name, "wsa-codec.1",
+						strlen("wsa-codec.1"))) {
+		wsa883x_set_channel_map(component, &spkleft_ports[0],
+					WSA883X_MAX_SWR_PORTS, &ch_mask[0],
+					&ch_rate[0], &spkleft_port_types[0]);
+		wsa883x_codec_info_create_codec_entry(pdata->codec_root,
+							component);
+	} else if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
 						strlen(ROULEUR_DRV_NAME))) {
 		rouleur_info_create_codec_entry(pdata->codec_root, component);
 		bolero_set_port_map(bolero_component,
 			ARRAY_SIZE(sm_port_map), sm_port_map);
-	} else if (!strncmp(component->driver->name, WCD937X_DRV_NAME,
-						strlen(WCD937X_DRV_NAME))) {
-		wcd937x_info_create_codec_entry(pdata->codec_root, component);
-		bolero_set_port_map(bolero_component,
-			ARRAY_SIZE(sm_port_map_wcd937x), sm_port_map_wcd937x);
 	} else {
 		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map),
 						sm_port_map);
@@ -351,35 +364,6 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 err:
 	return ret;
-}
-
-static void *def_wcd_mbhc_cal(void)
-{
-	void *wcd_mbhc_cal;
-	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_high;
-
-	wcd_mbhc_cal = kzalloc(WCD_MBHC_CAL_SIZE(WCD_MBHC_DEF_BUTTONS,
-				WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
-	if (!wcd_mbhc_cal)
-		return NULL;
-
-	WCD_MBHC_CAL_PLUG_TYPE_PTR(wcd_mbhc_cal)->v_hs_max = WCD_MBHC_HS_V_MAX;
-	WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal)->num_btn = WCD_MBHC_DEF_BUTTONS;
-	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal);
-	btn_high = ((void *)&btn_cfg->_v_btn_low) +
-		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
-
-	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
-	btn_high[3] = 500;
-	btn_high[4] = 500;
-	btn_high[5] = 500;
-	btn_high[6] = 500;
-	btn_high[7] = 500;
-
-	return wcd_mbhc_cal;
 }
 
 static void *def_rouleur_mbhc_cal(void)
@@ -528,7 +512,7 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 	},
 };
 
-static struct snd_soc_dai_link msm_bengal_dai_links[
+static struct snd_soc_dai_link msm_monaco_dai_links[
 			ARRAY_SIZE(msm_common_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
@@ -674,7 +658,7 @@ static struct snd_soc_dai_link msm_stub_be_dai_links[] = {
 static struct snd_soc_dai_link msm_stub_dai_links[
 			 ARRAY_SIZE(msm_stub_be_dai_links)];
 
-static const struct of_device_id bengal_asoc_machine_of_match[]  = {
+static const struct of_device_id monaco_asoc_machine_of_match[]  = {
 	{ .compatible = "qcom,bengal-asoc-snd",
 	  .data = "codec"},
 	{ .compatible = "qcom,bengal-asoc-snd-stub",
@@ -682,7 +666,7 @@ static const struct of_device_id bengal_asoc_machine_of_match[]  = {
 	{},
 };
 
-static int msm_snd_card_bengal_late_probe(struct snd_soc_card *card)
+static int msm_snd_card_monaco_late_probe(struct snd_soc_card *card)
 {
 	struct snd_soc_component *component = NULL;
 	const char *be_dl_name = LPASS_BE_RX_CDC_DMA_RX_0;
@@ -699,8 +683,6 @@ static int msm_snd_card_bengal_late_probe(struct snd_soc_card *card)
 	}
 
 	component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
-	if (!component)
-		component = snd_soc_rtdcom_lookup(rtd, WCD937X_DRV_NAME);
 	if (!component) {
 		pr_err("%s component is NULL\n", __func__);
 		return -EINVAL;
@@ -713,15 +695,7 @@ static int msm_snd_card_bengal_late_probe(struct snd_soc_card *card)
 			return -ENOMEM;
 		wcd_mbhc_cfg.calibration = mbhc_calibration;
 		ret = rouleur_mbhc_hs_detect(component, &wcd_mbhc_cfg);
-	} else if (!strncmp(component->driver->name, WCD937X_DRV_NAME,
-						strlen(WCD937X_DRV_NAME))) {
-		mbhc_calibration = def_wcd_mbhc_cal();
-		if (!mbhc_calibration)
-			return -ENOMEM;
-		wcd_mbhc_cfg.calibration = mbhc_calibration;
-		ret = wcd937x_mbhc_hs_detect(component, &wcd_mbhc_cfg);
-	}
-	else
+	} else
 		return 0;
 	if (ret) {
 		dev_err(component->dev, "%s: mbhc hs detect failed, err:%d\n",
@@ -742,7 +716,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	int total_links = 0;
 	const struct of_device_id *match;
 
-	match = of_match_node(bengal_asoc_machine_of_match, dev->of_node);
+	match = of_match_node(monaco_asoc_machine_of_match, dev->of_node);
 	if (!match) {
 		dev_err(dev, "%s: No DT match found for sound card\n",
 			__func__);
@@ -750,14 +724,14 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	}
 
 	if (!strcmp(match->data, "codec")) {
-		card = &snd_soc_card_bengal_msm;
+		card = &snd_soc_card_monaco_msm;
 
-		memcpy(msm_bengal_dai_links + total_links,
+		memcpy(msm_monaco_dai_links + total_links,
 		       msm_common_dai_links,
 		       sizeof(msm_common_dai_links));
 		total_links += ARRAY_SIZE(msm_common_dai_links);
 
-		dailink = msm_bengal_dai_links;
+		dailink = msm_monaco_dai_links;
 	} else if (!strcmp(match->data, "stub_codec")) {
 		card = &snd_soc_card_stub_msm;
 
@@ -772,13 +746,13 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	if (card) {
 		card->dai_link = dailink;
 		card->num_links = total_links;
-		card->late_probe = msm_snd_card_bengal_late_probe;
+		card->late_probe = msm_snd_card_monaco_late_probe;
 	}
 
 	return card;
 }
 
-static int bengal_ssr_enable(struct device *dev, void *data)
+static int monaco_ssr_enable(struct device *dev, void *data)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
@@ -804,7 +778,7 @@ err:
 	return ret;
 }
 
-static void bengal_ssr_disable(struct device *dev, void *data)
+static void monaco_ssr_disable(struct device *dev, void *data)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
@@ -825,9 +799,9 @@ static void bengal_ssr_disable(struct device *dev, void *data)
 	}
 }
 
-static const struct snd_event_ops bengal_ssr_ops = {
-	.enable = bengal_ssr_enable,
-	.disable = bengal_ssr_disable,
+static const struct snd_event_ops monaco_ssr_ops = {
+	.enable = monaco_ssr_enable,
+	.disable = monaco_ssr_disable,
 };
 
 static int msm_audio_ssr_compare(struct device *dev, void *data)
@@ -855,7 +829,7 @@ static int msm_audio_ssr_register(struct device *dev)
 					msm_audio_ssr_compare, node);
 	}
 
-	ret = snd_event_master_register(dev, &bengal_ssr_ops,
+	ret = snd_event_master_register(dev, &monaco_ssr_ops,
 					ssr_clients, NULL);
 	if (!ret)
 		snd_event_notify(dev, SND_EVENT_UP);
@@ -1050,12 +1024,12 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver bengal_asoc_machine_driver = {
+static struct platform_driver monaco_asoc_machine_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = bengal_asoc_machine_of_match,
+		.of_match_table = monaco_asoc_machine_of_match,
 		.suppress_bind_attrs = true,
 	},
 	.probe = msm_asoc_machine_probe,
@@ -1065,17 +1039,17 @@ static struct platform_driver bengal_asoc_machine_driver = {
 static int __init msm_asoc_machine_init(void)
 {
 	snd_card_sysfs_init();
-	return platform_driver_register(&bengal_asoc_machine_driver);
+	return platform_driver_register(&monaco_asoc_machine_driver);
 }
 module_init(msm_asoc_machine_init);
 
 static void __exit msm_asoc_machine_exit(void)
 {
-	platform_driver_unregister(&bengal_asoc_machine_driver);
+	platform_driver_unregister(&monaco_asoc_machine_driver);
 }
 module_exit(msm_asoc_machine_exit);
 
 MODULE_DESCRIPTION("ALSA SoC msm");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" DRV_NAME);
-MODULE_DEVICE_TABLE(of, bengal_asoc_machine_of_match);
+MODULE_DEVICE_TABLE(of, monaco_asoc_machine_of_match);
