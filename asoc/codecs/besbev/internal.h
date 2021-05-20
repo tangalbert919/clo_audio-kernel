@@ -156,6 +156,7 @@ struct besbev_pdata {
 	int num_supplies;
 	int reset_reg;
 	int foundry_id_reg;
+	bool speaker_present;
 };
 
 struct wcd_ctrl_platform_data {
