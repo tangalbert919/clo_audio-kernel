@@ -56,8 +56,10 @@ static struct port_params rx_frame_params_besbev[SWR_MSTR_PORT_LEN] = {
 	{3,  0,  0,  0xFF, 0xFF, 1,    0xFF, 0xFF, 1},
 	{31, 0,  0,  3,    6,    7,    0,    0xFF, 0},
 	{31, 1,  0,  0xFF, 0xFF, 4,    1,    0xFF, 0},
-	{7,  1,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0},
+	{7,  1,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0}, /* AUX OUT */
 	{0,  0,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0,    0},
+	{0,  0,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0,    0},
+	{15, 0,  0,  3,    15,   1,    1,    0xFF, 0}, /* AMIC PCM IN */
 };
 
 static struct swr_mstr_port_map sm_port_map[] = {
@@ -75,7 +77,6 @@ static struct swr_mstr_port_map sm_port_map_rouleur[] = {
 static struct swr_mstr_port_map sm_port_map_besbev[] = {
 	{VA_MACRO, SWR_UC0, tx_frame_params_besbev},
 	{RX_MACRO, SWR_UC0, rx_frame_params_besbev},
-	{RX_MACRO, SWR_UC1, rx_frame_params_dsd},
 };
 
 #endif /* _MONACO_PORT_CONFIG */
