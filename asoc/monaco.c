@@ -345,7 +345,7 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		bolero_set_port_map(bolero_component,
 			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
 
-		if (pdata->visense_enable)
+		if (!pdata->visense_enable)
 			besbev_disable_visense(component);
 	} else if (!strncmp(component->driver->name, "wsa-codec.1",
 						strlen("wsa-codec.1"))) {
@@ -998,7 +998,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	ret = of_property_read_u32(pdev->dev.of_node, "qcom,visense-enable", &val);
 	if (ret)
-		pdata->visense_enable = 0;
+		pdata->visense_enable = 1;
 	else
 		pdata->visense_enable = val;
 
