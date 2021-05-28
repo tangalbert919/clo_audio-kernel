@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -171,15 +171,14 @@ static unsigned int cc_ipc_fpoll(struct file *file, poll_table *wait)
 
 static int cc_ipc_send_pkt(struct cc_ipc_priv *ipriv, void *pkt, uint32_t pkt_size)
 {
-	unsigned long flags;
 	int ret;
 
 	dev_dbg(ipriv->dev, "%s: ch %s, size %d\n",
 		__func__, ipriv->ch_name, pkt_size);
 
-	spin_lock_irqsave(&ipriv->slock_client, flags);
+	mutex_lock(&g_ipriv_lock);
 	ret = rpmsg_send(ipriv->ch, pkt, pkt_size);
-	spin_unlock_irqrestore(&ipriv->slock_client, flags);
+	mutex_unlock(&g_ipriv_lock);
 	if (ret < 0)
 		dev_err_ratelimited(ipriv->dev, "%s: failed, ch %s, ret %d\n",
 				__func__, ipriv->ch_name, ret);
