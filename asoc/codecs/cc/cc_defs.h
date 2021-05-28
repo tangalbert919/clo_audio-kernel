@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __CC_RTOS_H__
@@ -12,7 +12,7 @@
 #define CC_MAX_REG_REGION 16
 
 /* Maximum allowed string length including terminating NULL character */
-#define CC_MAX_STRLEN 20
+#define CC_MAX_STRLEN 32
 
 /* Maximum allowed stream name length including terminall NULL character */
 #define CC_MAX_STREAM_STRLEN 28
@@ -81,6 +81,7 @@ struct cc_uc_start_stop_t {
 	uint32_t version;
 	uint32_t sample_rate;
 	uint32_t bit_width;
+	uint32_t channels;
 	uint32_t direction;
 	uint32_t stream;
 	uint32_t num_paths;
@@ -101,8 +102,7 @@ struct cc_read_write_reg_req {
 	uint8_t payload[0];
 } __packed;
 
-#define RESPONSE_SUCESS 1
-#define RESPONSE_FAILURE 0
+#define RESPONSE_SUCESS 0
 
 struct cc_resp_generic {
 	uint32_t opcode;
