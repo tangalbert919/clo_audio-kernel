@@ -43,6 +43,8 @@
 #define CODEC_EXT_CLK_RATE          9600000
 #define ADSP_STATE_READY_TIMEOUT_MS 3000
 #define DEV_NAME_STR_LEN            32
+#define WCN_CDC_SLIM_RX_CH_MAX 2
+#define WCN_CDC_SLIM_TX_CH_MAX 3
 
 struct msm_asoc_mach_data {
 	struct snd_info_entry *codec_root;
@@ -335,6 +337,22 @@ err:
 	return ret;
 }
 
+static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
+{
+	unsigned int rx_ch[WCN_CDC_SLIM_RX_CH_MAX] = {157, 158};
+	unsigned int tx_ch[WCN_CDC_SLIM_TX_CH_MAX]  = {159, 160};
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	int ret = 0;
+
+	ret = snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
+					   tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
+	if (ret)
+		return ret;
+
+	msm_common_dai_link_init(rtd);
+	return ret;
+}
+
 static struct snd_soc_ops msm_common_be_ops = {
 	.startup = msm_common_snd_startup,
 	.shutdown = msm_common_snd_shutdown,
@@ -453,8 +471,35 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_7_RX,
+		.stream_name = LPASS_BE_SLIMBUS_7_RX,
+		.playback_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.init = &msm_wcn_init,
+		.ops = &msm_common_be_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(slimbus_7_rx),
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_7_TX,
+		.stream_name = LPASS_BE_SLIMBUS_7_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(slimbus_7_tx),
+	},
+};
+
 static struct snd_soc_dai_link msm_monaco_dai_links[
-			ARRAY_SIZE(msm_common_dai_links)];
+			ARRAY_SIZE(msm_common_dai_links) +
+			ARRAY_SIZE(msm_wcn_be_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -629,6 +674,8 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	struct snd_soc_dai_link *dailink = NULL;
 	int total_links = 0;
 	const struct of_device_id *match;
+	int rc = 0;
+	u32 val = 0;
 
 	match = of_match_node(monaco_asoc_machine_of_match, dev->of_node);
 	if (!match) {
@@ -645,6 +692,16 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       sizeof(msm_common_dai_links));
 		total_links += ARRAY_SIZE(msm_common_dai_links);
 
+		rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm", &val);
+
+		if (!rc && val) {
+			dev_info(dev, "%s(): WCN BT support present\n",
+				__func__);
+			memcpy(msm_monaco_dai_links + total_links,
+			       msm_wcn_be_dai_links,
+			       sizeof(msm_wcn_be_dai_links));
+			total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
+		}
 		dailink = msm_monaco_dai_links;
 	} else if (!strcmp(match->data, "stub_codec")) {
 		card = &snd_soc_card_stub_msm;
