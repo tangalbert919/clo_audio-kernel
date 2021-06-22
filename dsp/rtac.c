@@ -9,6 +9,40 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the
+ *        names of its contributors may be used to endorse or promote
+ *        products derived from this software without specific prior
+ *        written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <linux/fs.h>
@@ -2005,7 +2039,7 @@ int __init rtac_init(void)
 	mutex_init(&rtac_adm_mutex);
 	mutex_init(&rtac_adm_apr_mutex);
 
-	rtac_adm_buffer = kzalloc(
+	rtac_adm_buffer = kvzalloc(
 		rtac_cal[ADM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_adm_buffer == NULL)
 		goto nomem;
@@ -2018,10 +2052,10 @@ int __init rtac_init(void)
 	}
 	mutex_init(&rtac_asm_apr_mutex);
 
-	rtac_asm_buffer = kzalloc(
+	rtac_asm_buffer = kvzalloc(
 		rtac_cal[ASM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_asm_buffer == NULL) {
-		kzfree(rtac_adm_buffer);
+		kvfree(rtac_adm_buffer);
 		goto nomem;
 	}
 
@@ -2031,11 +2065,11 @@ int __init rtac_init(void)
 	init_waitqueue_head(&rtac_afe_apr_data.cmd_wait);
 	mutex_init(&rtac_afe_apr_mutex);
 
-	rtac_afe_buffer = kzalloc(
+	rtac_afe_buffer = kvzalloc(
 		rtac_cal[AFE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_afe_buffer == NULL) {
-		kzfree(rtac_adm_buffer);
-		kzfree(rtac_asm_buffer);
+		kvfree(rtac_adm_buffer);
+		kvfree(rtac_asm_buffer);
 		goto nomem;
 	}
 
@@ -2049,20 +2083,20 @@ int __init rtac_init(void)
 	mutex_init(&rtac_voice_mutex);
 	mutex_init(&rtac_voice_apr_mutex);
 
-	rtac_voice_buffer = kzalloc(
+	rtac_voice_buffer = kvzalloc(
 		rtac_cal[VOICE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_voice_buffer == NULL) {
-		kzfree(rtac_adm_buffer);
-		kzfree(rtac_asm_buffer);
-		kzfree(rtac_afe_buffer);
+		kvfree(rtac_adm_buffer);
+		kvfree(rtac_asm_buffer);
+		kvfree(rtac_afe_buffer);
 		goto nomem;
 	}
 
 	if (misc_register(&rtac_misc) != 0) {
-		kzfree(rtac_adm_buffer);
-		kzfree(rtac_asm_buffer);
-		kzfree(rtac_afe_buffer);
-		kzfree(rtac_voice_buffer);
+		kvfree(rtac_adm_buffer);
+		kvfree(rtac_asm_buffer);
+		kvfree(rtac_afe_buffer);
+		kvfree(rtac_voice_buffer);
 		goto nomem;
 	}
 
@@ -2074,10 +2108,10 @@ nomem:
 void rtac_exit(void)
 {
 	misc_deregister(&rtac_misc);
-	kzfree(rtac_adm_buffer);
-	kzfree(rtac_asm_buffer);
-	kzfree(rtac_afe_buffer);
-	kzfree(rtac_voice_buffer);
+	kvfree(rtac_adm_buffer);
+	kvfree(rtac_asm_buffer);
+	kvfree(rtac_afe_buffer);
+	kvfree(rtac_voice_buffer);
 }
 
 MODULE_DESCRIPTION("SoC QDSP6v2 Real-Time Audio Calibration driver");
