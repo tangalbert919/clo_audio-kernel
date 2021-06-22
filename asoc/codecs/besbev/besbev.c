@@ -67,11 +67,6 @@ enum {
 };
 
 enum {
-	ALLOW_VPOS_DISABLE,
-	WCD_SUPPLIES_LPM_MODE,
-};
-
-enum {
 	MIC_BIAS_1 = 1,
 	MIC_BIAS_2
 };
@@ -92,8 +87,9 @@ static int besbev_get_temperature(struct snd_soc_component *component,
 				   int *temp);
 enum {
 	SPKR_STATUS = 0,
-	BESBEV_SUPPLIES_LPM_MODE,
 	SPKR_ADIE_LB,
+	WCD_SUPPLIES_LPM_MODE,
+	BESBEV_SPKR_BOOST_ENABLE,
 };
 
 enum {
@@ -146,7 +142,7 @@ static int besbev_handle_post_irq(void *data)
 	regmap_read(besbev->regmap, BESBEV_INTR_STATUS0, &sts1);
 	regmap_read(besbev->regmap, BESBEV_INTR_STATUS1, &sts2);
 
-	besbev->swr_slave->slave_irq_pending =
+	besbev->swr_dev->slave_irq_pending =
 			((sts1 || sts2) ? true : false);
 
 	return IRQ_HANDLED;
@@ -434,42 +430,6 @@ int besbev_global_mbias_disable(struct snd_soc_component *component)
 	}
 	mutex_unlock(&besbev->main_bias_lock);
 
-	return 0;
-}
-
-static int besbev_rx_clk_enable(struct snd_soc_component *component)
-{
-	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
-
-	mutex_lock(&besbev->rx_clk_lock);
-	if (besbev->rx_clk_cnt == 0) {
-		snd_soc_component_update_bits(component,
-				BESBEV_DIG_SWR_RX_CLK_CTL, 0x03, 0x03);
-		besbev_global_mbias_enable(component);
-	}
-	besbev->rx_clk_cnt++;
-	mutex_unlock(&besbev->rx_clk_lock);
-
-	return 0;
-}
-
-static int besbev_rx_clk_disable(struct snd_soc_component *component)
-{
-	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
-
-	mutex_lock(&besbev->rx_clk_lock);
-	if (besbev->rx_clk_cnt == 0) {
-		dev_dbg(besbev->dev, "%s:clk already disabled\n", __func__);
-		mutex_unlock(&besbev->rx_clk_lock);
-		return 0;
-	}
-	besbev->rx_clk_cnt--;
-	if (besbev->rx_clk_cnt == 0) {
-		snd_soc_component_update_bits(component,
-				BESBEV_DIG_SWR_RX_CLK_CTL, 0x03, 0x00);
-		besbev_global_mbias_disable(component);
-	}
-	mutex_unlock(&besbev->rx_clk_lock);
 	return 0;
 }
 
@@ -892,63 +852,6 @@ static int besbev_codec_enable_micbias_pullup(struct snd_soc_dapm_widget *w,
 	return __besbev_codec_enable_micbias_pullup(w, event);
 }
 
-static int besbev_codec_enable_pa_vpos(struct snd_soc_dapm_widget *w,
-					 struct snd_kcontrol *kcontrol,
-					 int event)
-{
-	struct snd_soc_component *component =
-			snd_soc_dapm_to_component(w->dapm);
-	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
-	struct besbev_pdata *pdata = NULL;
-	int ret = 0;
-
-	pdata = dev_get_platdata(besbev->dev);
-
-	if (!pdata) {
-		dev_err(component->dev, "%s: pdata is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	dev_dbg(component->dev, "%s: wname: %s event: %d\n", __func__,
-		w->name, event);
-
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		if (test_bit(ALLOW_VPOS_DISABLE, &besbev->status_mask)) {
-			dev_dbg(component->dev,
-				"%s: vpos already in enabled state\n",
-				__func__);
-			clear_bit(ALLOW_VPOS_DISABLE, &besbev->status_mask);
-			return 0;
-		}
-		ret = msm_cdc_enable_ondemand_supply(besbev->dev,
-						besbev->supplies,
-						pdata->regulator,
-						pdata->num_supplies,
-						"cdc-pa-vpos");
-		if (ret == -EINVAL) {
-			dev_err(component->dev, "%s: pa vpos is not enabled\n",
-				__func__);
-			return ret;
-		}
-		clear_bit(ALLOW_VPOS_DISABLE, &besbev->status_mask);
-		/*
-		 * 200us sleep is required after LDO15 is enabled as per
-		 * HW requirement
-		 */
-		usleep_range(200, 250);
-
-		break;
-	case SND_SOC_DAPM_POST_PMD:
-		set_bit(ALLOW_VPOS_DISABLE, &besbev->status_mask);
-		ret = swr_slvdev_datapath_control(besbev->swr_dev,
-				besbev->swr_dev->dev_num,
-				false);
-		break;
-	}
-	return 0;
-}
-
 static const char * const besbev_dev_mode_text[] = {
 	"speaker", "receiver", "ultrasound"
 };
@@ -1225,7 +1128,7 @@ static int besbev_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		besbev_set_port_params(component, SWR_DAC_PORT,
+		besbev_set_port_params(component, SPKR_L,
 				&port_id[num_port], &num_ch[num_port],
 				&ch_mask[num_port], &ch_rate[num_port],
 				&port_type[num_port], CODEC_RX);
@@ -1245,7 +1148,7 @@ static int besbev_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 					&port_type[num_port], CODEC_RX);
 			++num_port;
 		}
-		swr_connect_port(besbev->swr_slave, &port_id[0], num_port,
+		swr_connect_port(besbev->swr_dev, &port_id[0], num_port,
 				&ch_mask[0], &ch_rate[0], &num_ch[0],
 					&port_type[0]);
 		break;
@@ -1253,7 +1156,7 @@ static int besbev_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 		set_bit(SPKR_STATUS, &besbev->status_mask);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
-		besbev_set_port_params(component, SWR_DAC_PORT,
+		besbev_set_port_params(component, SPKR_L,
 				&port_id[num_port], &num_ch[num_port],
 				&ch_mask[num_port], &ch_rate[num_port],
 				&port_type[num_port], CODEC_RX);
@@ -1273,16 +1176,17 @@ static int besbev_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 					&port_type[num_port], CODEC_RX);
 			++num_port;
 		}
-		swr_disconnect_port(besbev->swr_slave, &port_id[0], num_port,
+		swr_disconnect_port(besbev->swr_dev, &port_id[0], num_port,
 				&ch_mask[0], &port_type[0]);
+		besbev_global_mbias_disable(component);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		if (swr_set_device_group(besbev->swr_slave, SWR_GROUP_NONE))
+		if (swr_set_device_group(besbev->swr_dev, SWR_GROUP_NONE))
 			dev_err(component->dev,
 				"%s: set num ch failed\n", __func__);
 
-		swr_slvdev_datapath_control(besbev->swr_slave,
-					    besbev->swr_slave->dev_num,
+		swr_slvdev_datapath_control(besbev->swr_dev,
+					    besbev->swr_dev->dev_num,
 					    false);
 		break;
 	default:
@@ -1297,14 +1201,35 @@ static int besbev_spkr_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_component *component =
 			snd_soc_dapm_to_component(w->dapm);
 	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
+	struct besbev_pdata *pdata = NULL;
+	int ret = 0;
+
+	pdata = dev_get_platdata(besbev->dev);
 
 	dev_dbg(component->dev, "%s: %s %d\n", __func__, w->name, event);
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-		swr_slvdev_datapath_control(besbev->swr_slave,
-					    besbev->swr_slave->dev_num,
+		if (test_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask)) {
+			dev_dbg(component->dev,
+				"%s: vdd spkr is already in enabled state\n",
+				__func__);
+		} else {
+			ret = msm_cdc_enable_ondemand_supply(besbev->dev,
+						besbev->supplies,
+						pdata->regulator,
+						pdata->num_supplies,
+						"cdc-vdd-spkr");
+			if (ret == -EINVAL) {
+				dev_err(component->dev, "%s: vdd spkr is not enabled\n",
+					__func__);
+				return ret;
+			}
+			set_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask);
+		}
+		swr_slvdev_datapath_control(besbev->swr_dev,
+					    besbev->swr_dev->dev_num,
 					    true);
-		besbev_rx_clk_enable(component);
+		besbev_global_mbias_enable(component);
 		/* Set Gain from SWR */
 		if (besbev->comp_support)
 			snd_soc_component_update_bits(component,
@@ -1314,24 +1239,29 @@ static int besbev_spkr_event(struct snd_soc_dapm_widget *w,
 						0x01, 0x01);
 		wcd_enable_irq(&besbev->irq_info, BESBEV_IRQ_INT_UVLO);
 		/* Force remove group */
-		swr_remove_from_group(besbev->swr_slave,
-				      besbev->swr_slave->dev_num);
+		swr_remove_from_group(besbev->swr_dev,
+				      besbev->swr_dev->dev_num);
 		/* VBat adc filter control */
 		snd_soc_component_update_bits(component,
 					BESBEV_VBAT_ADC_FLT_CTL, 0x0E, 0x06);
 		snd_soc_component_update_bits(component,
 					BESBEV_VBAT_ADC_FLT_CTL, 0x01, 0x01);
 
-		if (test_bit(SPKR_ADIE_LB, &besbev->status_mask)) {
-			snd_soc_component_update_bits(component,
-					BESBEV_PA_FSM_CTL, 0x01, 0x01);
-		}
+		snd_soc_component_update_bits(component,
+				BESBEV_PA_FSM_CTL, 0x01, 0x01);
+		if (besbev->update_wcd_event)
+			besbev->update_wcd_event(besbev->handle,
+						SLV_BOLERO_EVT_RX_MUTE,
+						(WCD_RX3 << 0x10));
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
+		if (besbev->update_wcd_event)
+			besbev->update_wcd_event(besbev->handle,
+						SLV_BOLERO_EVT_RX_MUTE,
+						(WCD_RX3 << 0x10 | 0x1));
 		if (!test_bit(SPKR_ADIE_LB, &besbev->status_mask))
 			wcd_disable_irq(&besbev->irq_info,
 					BESBEV_IRQ_INT_PDM_WD);
-		besbev_rx_clk_disable(component);
 		snd_soc_component_update_bits(component,
 					BESBEV_VBAT_ADC_FLT_CTL, 0x01, 0x00);
 		snd_soc_component_update_bits(component,
@@ -1383,10 +1313,6 @@ static const struct snd_soc_dapm_widget besbev_dapm_widgets_tx[] = {
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_SUPPLY("PA_VPOS", SND_SOC_NOPM, 0, 0,
-			     besbev_codec_enable_pa_vpos,
-			     SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-
 	/*output widgets tx*/
 
 	SND_SOC_DAPM_OUTPUT("ADC1_OUTPUT"),
@@ -1437,10 +1363,6 @@ static const struct snd_soc_dapm_widget besbev_dapm_widgets_rx[] = {
 				besbev_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-
-	SND_SOC_DAPM_SUPPLY("PA_VPOS", SND_SOC_NOPM, 0, 0,
-			     besbev_codec_enable_pa_vpos,
-			     SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	/*rx widgets*/
 	SND_SOC_DAPM_INPUT("SPKR_IN"),
@@ -1786,8 +1708,8 @@ static void besbev_get_foundry_id(struct besbev_priv *besbev)
 	ret = pmw5100_spmi_read(besbev->spmi_dev, besbev->foundry_id_reg,
 				&besbev->foundry_id);
 	if (ret == 0)
-		pr_debug("%s: besbev foundry id = %x\n", besbev->foundry_id,
-			 __func__);
+		pr_debug("%s: besbev foundry id = %x\n", __func__,
+			besbev->foundry_id);
 	else
 		pr_debug("%s: besbev error spmi read ret = %d\n",
 			 __func__, ret);
@@ -1917,7 +1839,7 @@ static int besbev_soc_codec_probe(struct snd_soc_component *component)
 	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
 	struct snd_soc_dapm_context *dapm =
 			snd_soc_component_get_dapm(component);
-	int ret = -EINVAL;
+	int ret = -EINVAL, version = 0;
 
 	dev_info(component->dev, "%s()\n", __func__);
 	besbev = snd_soc_component_get_drvdata(component);
@@ -1957,7 +1879,9 @@ static int besbev_soc_codec_probe(struct snd_soc_component *component)
 	/* Get besbev foundry id */
 	besbev_get_foundry_id(besbev);
 
-	besbev->version = BESBEV_VERSION_1_0;
+	version = (snd_soc_component_read32(component, BESBEV_DIG_SWR_CHIP_ID0)
+					    & 0xFF);
+	besbev->version = version;
 
 	if (besbev->speaker_present == true) {
 		snd_soc_dapm_ignore_suspend(dapm, "BESBEV_AIF Playback");
@@ -2063,8 +1987,8 @@ static struct snd_soc_component_driver soc_codec_dev_besbev = {
 static int besbev_suspend(struct device *dev)
 {
 	struct besbev_priv *besbev = NULL;
-	int ret = 0;
 	struct besbev_pdata *pdata = NULL;
+	int ret = -EINVAL;
 
 	if (!dev)
 		return -ENODEV;
@@ -2080,18 +2004,17 @@ static int besbev_suspend(struct device *dev)
 		return -EINVAL;
 	}
 
-	if (test_bit(ALLOW_VPOS_DISABLE, &besbev->status_mask)) {
+	if (test_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask)) {
 		ret = msm_cdc_disable_ondemand_supply(besbev->dev,
 						besbev->supplies,
 						pdata->regulator,
 						pdata->num_supplies,
-						"cdc-pa-vpos");
+						"cdc-vdd-spkr");
 		if (ret == -EINVAL) {
-			dev_err(dev, "%s: pa vpos is not disabled\n",
+			dev_err(dev, "%s: vdd spkr is not enabled\n",
 				__func__);
-			return 0;
 		}
-		clear_bit(ALLOW_VPOS_DISABLE, &besbev->status_mask);
+		clear_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask);
 	}
 	if (besbev->dapm_bias_off) {
 		 msm_cdc_set_supplies_lpm_mode(besbev->dev,
@@ -2247,6 +2170,14 @@ struct besbev_pdata *besbev_populate_dt_data(struct device *dev)
 
 	pdata->besbev_slave = of_parse_phandle(dev->of_node,
 						"qcom,besbev-slave", 0);
+
+	/*
+	 * speaker_present is a flag to differentiate weather
+	 * besbev is connected to bolero RX SWR or TX SWR.
+	 */
+	pdata->speaker_present = of_property_read_bool(dev->of_node,
+					"qcom,speaker-present");
+
 	besbev_dt_parse_micbias_info(dev, &pdata->micbias);
 
 	return pdata;
@@ -2331,6 +2262,7 @@ static int besbev_bind(struct device *dev)
 	besbev->spmi_dev = &pdev->dev;
 	besbev->reset_reg = pdata->reset_reg;
 	besbev->foundry_id_reg = pdata->foundry_id_reg;
+	besbev->speaker_present = pdata->speaker_present;
 	ret = msm_cdc_init_supplies(dev, &besbev->supplies,
 				    pdata->regulator, pdata->num_supplies);
 	if (!besbev->supplies) {
@@ -2648,7 +2580,6 @@ static int besbev_add_slave_components(struct device *dev,
 				struct component_match **matchptr)
 {
 	struct device_node *np, *besbev_node;
-	struct besbev_priv *besbev = dev_get_drvdata(dev);
 
 	np = dev->of_node;
 
@@ -2658,12 +2589,6 @@ static int besbev_add_slave_components(struct device *dev,
 		return -ENODEV;
 	}
 
-	/*
-	 * speaker_present is a flag to differentiate weather
-	 * besbev is connected to bolero RX SWR or TX SWR.
-	 */
-	besbev->speaker_present = of_property_read_bool(dev->of_node,
-					"qcom,speaker-present");
 	if (besbev_node) {
 		of_node_get(besbev_node);
 		component_match_add_release(dev, matchptr,
