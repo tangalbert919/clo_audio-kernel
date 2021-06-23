@@ -39,8 +39,8 @@
 #include "msm_common.h"
 #include "msm_monaco_dailink.h"
 
-#define DRV_NAME "bengal-asoc-snd"
-#define __CHIPSET__ "BENGAL "
+#define DRV_NAME "monaco-asoc-snd"
+#define __CHIPSET__ "MONACO "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
 
 #define WCD9XXX_MBHC_DEF_RLOADS     5
@@ -65,6 +65,7 @@ struct msm_asoc_mach_data {
 	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
 	struct device_node *fsa_handle;
+	bool visense_enable;
 };
 
 struct msm_wsa881x_dev_info {
@@ -343,6 +344,9 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		besbev_info_create_codec_entry(pdata->codec_root, component);
 		bolero_set_port_map(bolero_component,
 			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
+
+		if (!pdata->visense_enable)
+			besbev_disable_visense(component);
 	} else if (!strncmp(component->driver->name, "wsa-codec.1",
 						strlen("wsa-codec.1"))) {
 		wsa883x_set_channel_map(component, &spkleft_ports[0],
@@ -628,7 +632,7 @@ static struct snd_soc_ops msm_stub_be_ops = {
 };
 
 struct snd_soc_card snd_soc_card_stub_msm = {
-	.name		= "bengal-stub-snd-card",
+	.name		= "monaco-stub-snd-card",
 };
 
 static struct snd_soc_dai_link msm_stub_be_dai_links[] = {
@@ -659,9 +663,9 @@ static struct snd_soc_dai_link msm_stub_dai_links[
 			 ARRAY_SIZE(msm_stub_be_dai_links)];
 
 static const struct of_device_id monaco_asoc_machine_of_match[]  = {
-	{ .compatible = "qcom,bengal-asoc-snd",
+	{ .compatible = "qcom,monaco-asoc-snd",
 	  .data = "codec"},
-	{ .compatible = "qcom,bengal-asoc-snd-stub",
+	{ .compatible = "qcom,monaco-asoc-snd-stub",
 	  .data = "stub_codec"},
 	{},
 };
@@ -764,7 +768,7 @@ static int monaco_ssr_enable(struct device *dev, void *data)
 		goto err;
 	}
 
-	if (!strcmp(card->name, "bengal-stub-snd-card")) {
+	if (!strcmp(card->name, "monaco-stub-snd-card")) {
 		/* TODO */
 		dev_dbg(dev, "%s: TODO\n", __func__);
 	}
@@ -793,7 +797,7 @@ static void monaco_ssr_disable(struct device *dev, void *data)
 	snd_card_notify_user(0);
 #endif /* CONFIG_AUDIO_QGKI */
 
-	if (!strcmp(card->name, "bengal-stub-snd-card")) {
+	if (!strcmp(card->name, "monaco-stub-snd-card")) {
 		/* TODO */
 		dev_dbg(dev, "%s: TODO\n", __func__);
 	}
@@ -863,7 +867,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	struct snd_soc_card *card = NULL;
 	struct msm_asoc_mach_data *pdata = NULL;
 	const char *mbhc_audio_jack_type = NULL;
-	int ret = 0;
+	int ret = 0, val = 0;
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "%s: No platform supplied from device tree\n",
@@ -991,6 +995,12 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	pdata->dmic23_gpio_p = of_parse_phandle(pdev->dev.of_node,
 					      "qcom,cdc-dmic23-gpios",
 					       0);
+
+	ret = of_property_read_u32(pdev->dev.of_node, "qcom,visense-enable", &val);
+	if (ret)
+		pdata->visense_enable = 1;
+	else
+		pdata->visense_enable = val;
 
 	ret = msm_audio_ssr_register(&pdev->dev);
 	if (ret)

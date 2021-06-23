@@ -235,8 +235,9 @@ static int bolero_cdc_update_wcd_event(void *handle, u16 event, u32 data)
 				BOLERO_MACRO_EVT_BCS_CLK_OFF, data);
 		break;
 	case SLV_BOLERO_EVT_RX_PA_GAIN_UPDATE:
-		/* Update PA Gain only for bolero version 2.1 */
-		if (priv->version == BOLERO_VERSION_2_1)
+		/* Update PA Gain for bolero version 2.1 and 2.2*/
+		if ((priv->version == BOLERO_VERSION_2_1) ||
+		    (priv->version == BOLERO_VERSION_2_2))
 			if (priv->macro_params[RX_MACRO].event_handler)
 				priv->macro_params[RX_MACRO].event_handler(
 					priv->component,
@@ -697,7 +698,8 @@ int bolero_register_macro(struct device *dev, u16 macro_id,
 	if (macro_id == TX_MACRO || macro_id == VA_MACRO)
 		priv->macro_params[macro_id].clk_div_get = ops->clk_div_get;
 
-	if (priv->version == BOLERO_VERSION_2_1) {
+	if ((priv->version == BOLERO_VERSION_2_1) ||
+	    (priv->version == BOLERO_VERSION_2_2)) {
 		if (macro_id == VA_MACRO)
 			priv->macro_params[macro_id].reg_wake_irq =
 						ops->reg_wake_irq;
@@ -860,6 +862,9 @@ static ssize_t bolero_version_read(struct snd_info_entry *entry,
 		break;
 	case BOLERO_VERSION_2_1:
 		len = snprintf(buffer, sizeof(buffer), "BOLERO_2_1\n");
+		break;
+	case BOLERO_VERSION_2_2:
+		len = snprintf(buffer, sizeof(buffer), "BOLERO_2_2\n");
 		break;
 	default:
 		len = snprintf(buffer, sizeof(buffer), "VER_UNDEFINED\n");
@@ -1054,7 +1059,8 @@ int bolero_register_wake_irq(struct snd_soc_component *component,
 		return -EINVAL;
 	}
 
-	if (priv->version == BOLERO_VERSION_2_1) {
+	if ((priv->version == BOLERO_VERSION_2_1) ||
+	    (priv->version == BOLERO_VERSION_2_2)) {
 		if (priv->macro_params[VA_MACRO].reg_wake_irq)
 			priv->macro_params[VA_MACRO].reg_wake_irq(
 					component, ipc_wakeup);
@@ -1175,7 +1181,7 @@ static int bolero_soc_codec_probe(struct snd_soc_component *component)
 {
 	struct bolero_priv *priv = dev_get_drvdata(component->dev);
 	int macro_idx, ret = 0;
-	u8 core_id_0 = 0, core_id_1 = 0;
+	u8 core_id_0 = 0, core_id_1 = 0, core_id_2 = 0;
 
 	snd_soc_component_init_regmap(component, priv->regmap);
 
@@ -1200,10 +1206,16 @@ static int bolero_soc_codec_probe(struct snd_soc_component *component)
 					BOLERO_CDC_VA_TOP_CSR_CORE_ID_0);
 	core_id_1 = snd_soc_component_read32(component,
 					BOLERO_CDC_VA_TOP_CSR_CORE_ID_1);
+	core_id_2 = snd_soc_component_read32(component,
+					BOLERO_CDC_VA_TOP_CSR_CORE_ID_2);
 	if ((core_id_0 == 0x01) && (core_id_1 == 0x0F))
 		priv->version = BOLERO_VERSION_2_0;
-	if ((core_id_0 == 0x02) && (core_id_1 == 0x0E))
-		priv->version = BOLERO_VERSION_2_1;
+	if ((core_id_0 == 0x02) && (core_id_1 == 0x0E)) {
+		if (core_id_2 == 0x20)
+			priv->version = BOLERO_VERSION_2_2;
+		else
+			priv->version = BOLERO_VERSION_2_1;
+	}
 
 	/* call init for supported macros */
 	for (macro_idx = START_MACRO; macro_idx < MAX_MACRO; macro_idx++) {
@@ -1367,7 +1379,8 @@ static int bolero_probe(struct platform_device *pdev)
 			__func__);
 		ret = 0;
 	}
-	if (priv->version == BOLERO_VERSION_2_1) {
+	if ((priv->version == BOLERO_VERSION_2_1) ||
+	    (priv->version == BOLERO_VERSION_2_2)) {
 		bolero_reg_access[TX_MACRO] = bolero_tx_reg_access_v2;
 		bolero_reg_access[VA_MACRO] = bolero_va_reg_access_v2;
 	} else if (priv->version == BOLERO_VERSION_2_0) {
