@@ -1272,6 +1272,20 @@ static int besbev_spkr_event(struct snd_soc_dapm_widget *w,
 		snd_soc_component_update_bits(component, BESBEV_PDM_WD_CTL,
 						0x01, 0x00);
 		wcd_disable_irq(&besbev->irq_info, BESBEV_IRQ_INT_UVLO);
+
+		if (test_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask)) {
+			ret = msm_cdc_disable_ondemand_supply(besbev->dev,
+						besbev->supplies,
+						pdata->regulator,
+						pdata->num_supplies,
+						"cdc-vdd-spkr");
+			if (ret == -EINVAL) {
+				dev_err(component->dev, "%s: vdd spkr is not enabled\n",
+					__func__);
+			}
+			clear_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask);
+		}
+
 		clear_bit(SPKR_STATUS, &besbev->status_mask);
 		clear_bit(SPKR_ADIE_LB, &besbev->status_mask);
 		break;
@@ -1988,7 +2002,6 @@ static int besbev_suspend(struct device *dev)
 {
 	struct besbev_priv *besbev = NULL;
 	struct besbev_pdata *pdata = NULL;
-	int ret = -EINVAL;
 
 	if (!dev)
 		return -ENODEV;
@@ -2004,18 +2017,6 @@ static int besbev_suspend(struct device *dev)
 		return -EINVAL;
 	}
 
-	if (test_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask)) {
-		ret = msm_cdc_disable_ondemand_supply(besbev->dev,
-						besbev->supplies,
-						pdata->regulator,
-						pdata->num_supplies,
-						"cdc-vdd-spkr");
-		if (ret == -EINVAL) {
-			dev_err(dev, "%s: vdd spkr is not enabled\n",
-				__func__);
-		}
-		clear_bit(BESBEV_SPKR_BOOST_ENABLE, &besbev->status_mask);
-	}
 	if (besbev->dapm_bias_off) {
 		 msm_cdc_set_supplies_lpm_mode(besbev->dev,
 					      besbev->supplies,
