@@ -27,9 +27,6 @@
 #include "device_event.h"
 #include "asoc/msm-cdc-pinctrl.h"
 #include "asoc/wcd-mbhc-v2.h"
-#include "codecs/rouleur/rouleur-mbhc.h"
-#include "codecs/wsa881x-analog.h"
-#include "codecs/rouleur/rouleur.h"
 #include "codecs/besbev/besbev.h"
 #include "codecs/wsa883x/wsa883x.h"
 #include "codecs/bolero/bolero-cdc.h"
@@ -43,15 +40,9 @@
 #define __CHIPSET__ "MONACO "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
 
-#define WCD9XXX_MBHC_DEF_RLOADS     5
-#define WCD9XXX_MBHC_DEF_BUTTONS    8
-#define ROULEUR_MBHC_DEF_BUTTONS    5
 #define CODEC_EXT_CLK_RATE          9600000
 #define ADSP_STATE_READY_TIMEOUT_MS 3000
 #define DEV_NAME_STR_LEN            32
-#define WCD_MBHC_HS_V_MAX           1600
-#define ROULEUR_MBHC_HS_V_MAX       1700
-
 #define WCN_CDC_SLIM_RX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX 3
 
@@ -68,23 +59,11 @@ struct msm_asoc_mach_data {
 	bool visense_enable;
 };
 
-struct msm_wsa881x_dev_info {
-	struct device_node *of_node;
-	u32 index;
-};
-
-struct aux_codec_dev_info {
-	struct device_node *of_node;
-	u32 index;
-};
-
 static bool is_initial_boot;
 static bool codec_reg_done;
 static struct snd_soc_card snd_soc_card_monaco_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
-
-static void *def_rouleur_mbhc_cal(void);
 
 /*
  * Need to report LINEIN
@@ -318,8 +297,6 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	component = snd_soc_rtdcom_lookup(rtd, BESBEV_DRV_NAME);
 	if (!component)
 		component = snd_soc_rtdcom_lookup(rtd, "wsa-codec.1");
-	if (!component)
-		component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
 	if (!component) {
 		pr_err("%s component is NULL\n", __func__);
 		return -EINVAL;
@@ -328,15 +305,10 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	dapm = snd_soc_component_get_dapm(component);
 	card = component->card->snd_card;
 
-	snd_soc_dapm_ignore_suspend(dapm, "EAR");
 	snd_soc_dapm_ignore_suspend(dapm, "AUX");
 	snd_soc_dapm_ignore_suspend(dapm, "LO");
-	snd_soc_dapm_ignore_suspend(dapm, "HPHL");
-	snd_soc_dapm_ignore_suspend(dapm, "HPHR");
 	snd_soc_dapm_ignore_suspend(dapm, "AMIC1");
 	snd_soc_dapm_ignore_suspend(dapm, "AMIC2");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC3");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC4");
 	snd_soc_dapm_sync(dapm);
 
 	if (!strncmp(component->driver->name, BESBEV_DRV_NAME,
@@ -354,11 +326,6 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 					&ch_rate[0], &spkleft_port_types[0]);
 		wsa883x_codec_info_create_codec_entry(pdata->codec_root,
 							component);
-	} else if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
-						strlen(ROULEUR_DRV_NAME))) {
-		rouleur_info_create_codec_entry(pdata->codec_root, component);
-		bolero_set_port_map(bolero_component,
-			ARRAY_SIZE(sm_port_map), sm_port_map);
 	} else {
 		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map),
 						sm_port_map);
@@ -370,32 +337,20 @@ err:
 	return ret;
 }
 
-static void *def_rouleur_mbhc_cal(void)
+static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 {
-	void *wcd_mbhc_cal;
-	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_high;
+	unsigned int rx_ch[WCN_CDC_SLIM_RX_CH_MAX] = {157, 158};
+	unsigned int tx_ch[WCN_CDC_SLIM_TX_CH_MAX]  = {159, 160};
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	int ret = 0;
 
-	wcd_mbhc_cal = kzalloc(WCD_MBHC_CAL_SIZE(ROULEUR_MBHC_DEF_BUTTONS,
-				WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
-	if (!wcd_mbhc_cal)
-		return NULL;
+	ret = snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
+					   tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
+	if (ret)
+		return ret;
 
-	WCD_MBHC_CAL_PLUG_TYPE_PTR(wcd_mbhc_cal)->v_hs_max =
-						ROULEUR_MBHC_HS_V_MAX;
-	WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal)->num_btn =
-						ROULEUR_MBHC_DEF_BUTTONS;
-	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal);
-	btn_high = ((void *)&btn_cfg->_v_btn_low) +
-		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
-
-	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
-	btn_high[3] = 500;
-	btn_high[4] = 500;
-
-	return wcd_mbhc_cal;
+	msm_common_dai_link_init(rtd);
+	return ret;
 }
 
 static struct snd_soc_ops msm_common_be_ops = {
@@ -516,8 +471,35 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_7_RX,
+		.stream_name = LPASS_BE_SLIMBUS_7_RX,
+		.playback_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.init = &msm_wcn_init,
+		.ops = &msm_common_be_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(slimbus_7_rx),
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_7_TX,
+		.stream_name = LPASS_BE_SLIMBUS_7_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(slimbus_7_tx),
+	},
+};
+
 static struct snd_soc_dai_link msm_monaco_dai_links[
-			ARRAY_SIZE(msm_common_dai_links)];
+			ARRAY_SIZE(msm_common_dai_links) +
+			ARRAY_SIZE(msm_wcn_be_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -672,11 +654,8 @@ static const struct of_device_id monaco_asoc_machine_of_match[]  = {
 
 static int msm_snd_card_monaco_late_probe(struct snd_soc_card *card)
 {
-	struct snd_soc_component *component = NULL;
 	const char *be_dl_name = LPASS_BE_RX_CDC_DMA_RX_0;
 	struct snd_soc_pcm_runtime *rtd;
-	int ret = 0;
-	void *mbhc_calibration;
 
 	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
 	if (!rtd) {
@@ -686,31 +665,7 @@ static int msm_snd_card_monaco_late_probe(struct snd_soc_card *card)
 		return -EINVAL;
 	}
 
-	component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
-	if (!component) {
-		pr_err("%s component is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
-						strlen(ROULEUR_DRV_NAME))) {
-		mbhc_calibration = def_rouleur_mbhc_cal();
-		if (!mbhc_calibration)
-			return -ENOMEM;
-		wcd_mbhc_cfg.calibration = mbhc_calibration;
-		ret = rouleur_mbhc_hs_detect(component, &wcd_mbhc_cfg);
-	} else
-		return 0;
-	if (ret) {
-		dev_err(component->dev, "%s: mbhc hs detect failed, err:%d\n",
-			__func__, ret);
-		goto err_hs_detect;
-	}
 	return 0;
-
-err_hs_detect:
-	kfree(mbhc_calibration);
-	return ret;
 }
 
 static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
@@ -719,6 +674,8 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	struct snd_soc_dai_link *dailink = NULL;
 	int total_links = 0;
 	const struct of_device_id *match;
+	int rc = 0;
+	u32 val = 0;
 
 	match = of_match_node(monaco_asoc_machine_of_match, dev->of_node);
 	if (!match) {
@@ -735,6 +692,16 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       sizeof(msm_common_dai_links));
 		total_links += ARRAY_SIZE(msm_common_dai_links);
 
+		rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm", &val);
+
+		if (!rc && val) {
+			dev_info(dev, "%s(): WCN BT support present\n",
+				__func__);
+			memcpy(msm_monaco_dai_links + total_links,
+			       msm_wcn_be_dai_links,
+			       sizeof(msm_wcn_be_dai_links));
+			total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
+		}
 		dailink = msm_monaco_dai_links;
 	} else if (!strcmp(match->data, "stub_codec")) {
 		card = &snd_soc_card_stub_msm;

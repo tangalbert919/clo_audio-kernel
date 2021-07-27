@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -20,7 +20,7 @@ struct pmw5100_spmi {
 };
 
 static const struct of_device_id pmw5100_id_table[] = {
-	{ .compatible = "qcom,pmw5100-spmi" },
+	{ .compatible = "qcom,pm5100-spmi" },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, pmw5100_id_table);
@@ -36,7 +36,7 @@ int pmw5100_spmi_write(struct device *dev, int reg, int value)
 	int rc;
 	struct pmw5100_spmi *spmi_dd;
 
-	if (!of_device_is_compatible(dev->of_node, "qcom,pmw5100-spmi")) {
+	if (!of_device_is_compatible(dev->of_node, "qcom,pm5100-spmi")) {
 		pr_err("%s: Device node is invalid\n", __func__);
 		return -EINVAL;
 	}
@@ -64,7 +64,7 @@ int pmw5100_spmi_read(struct device *dev, int reg, int *value)
 	int rc;
 	struct pmw5100_spmi *spmi_dd;
 
-	if (!of_device_is_compatible(dev->of_node, "qcom,pmw5100-spmi")) {
+	if (!of_device_is_compatible(dev->of_node, "qcom,pm5100-spmi")) {
 		pr_err("%s: Device node is invalid\n", __func__);
 		return -EINVAL;
 	}
@@ -117,7 +117,7 @@ static struct platform_driver pmw5100_spmi_driver = {
 	.probe		= pmw5100_spmi_probe,
 	.remove		= pmw5100_spmi_remove,
 	.driver	= {
-		.name		= "pmw5100-spmi",
+		.name		= "pm5100-spmi",
 		.of_match_table	= pmw5100_id_table,
 	},
 };
