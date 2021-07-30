@@ -148,6 +148,34 @@ static int besbev_handle_post_irq(void *data)
 	return IRQ_HANDLED;
 }
 
+static int besbev_swr_ctrl(struct snd_soc_dapm_widget *w,
+					struct snd_kcontrol *kcontrol,
+					int event)
+{
+	int ret = 0;
+	struct snd_soc_component *component =
+			snd_soc_dapm_to_component(w->dapm);
+	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
+
+	if (!besbev) {
+		dev_err(component->dev, "%s: besbev is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		ret = swr_slvdev_datapath_control(besbev->swr_dev,
+					besbev->swr_dev->dev_num, true);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		ret = swr_slvdev_datapath_control(besbev->swr_dev,
+					besbev->swr_dev->dev_num, false);
+		break;
+	};
+
+	return ret;
+}
+
 static int besbev_init_reg(struct snd_soc_component *component,
 				bool speaker_present)
 {
@@ -185,6 +213,8 @@ static int besbev_init_reg(struct snd_soc_component *component,
 						0x0C, 0x00);
 		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_5,
 						0x70, 0x00);
+		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_5,
+						0xF, 0x5);
 		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ISENSE2,
 						0x0F, 0x0A);
 		snd_soc_component_update_bits(component, BESBEV_IVSENSE_ADC_6,
@@ -443,33 +473,10 @@ int besbev_disable_visense(struct snd_soc_component *component)
 {
 	/* Disable VISense for AMIC variant */
 	snd_soc_component_update_bits(component,
-                                BESBEV_DIG_SWR_CDC_RX_MODE, 0x4, 0x4);
+				BESBEV_DIG_SWR_CDC_RX_MODE, 0x4, 0x4);
 	return 0;
 }
 EXPORT_SYMBOL(besbev_disable_visense);
-
-static int besbev_swr_ctrl(struct snd_soc_dapm_widget *w,
-				    struct snd_kcontrol *kcontrol,
-				    int event)
-{
-	struct snd_soc_component *component =
-			snd_soc_dapm_to_component(w->dapm);
-	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
-	int ret = 0;
-
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		ret = swr_slvdev_datapath_control(besbev->swr_dev,
-					besbev->swr_dev->dev_num, true);
-		break;
-	case SND_SOC_DAPM_POST_PMD:
-		ret = swr_slvdev_datapath_control(besbev->swr_dev,
-					besbev->swr_dev->dev_num, false);
-		break;
-	};
-
-	return ret;
-}
 
 static int besbev_codec_enable_adc(struct snd_soc_dapm_widget *w,
 				    struct snd_kcontrol *kcontrol,
@@ -494,12 +501,12 @@ static int besbev_codec_enable_adc(struct snd_soc_dapm_widget *w,
 		besbev_global_mbias_enable(component);
 		if (w->shift) {
 			snd_soc_component_update_bits(component,
-				BESBEV_ANA_TX_MISC_CTL, 0x02, 0x02);
+				BESBEV_ANA_TX_MISC_CTL, 0x12, 0x12);
 			snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_CDC_TX_MODE, 0x30, 0x30);
 		} else {
 			snd_soc_component_update_bits(component,
-				BESBEV_ANA_TX_MISC_CTL, 0x04, 0x04);
+				BESBEV_ANA_TX_MISC_CTL, 0x44, 0x44);
 			snd_soc_component_update_bits(component,
 				BESBEV_DIG_SWR_CDC_TX_MODE, 0x03, 0x03);
 		}
@@ -1301,20 +1308,20 @@ static const struct snd_soc_dapm_widget besbev_dapm_widgets_tx[] = {
 
 	/*tx widgets*/
 	SND_SOC_DAPM_ADC_E("ADC1", NULL, SND_SOC_NOPM, 0, 0,
-				besbev_codec_enable_adc,
+				besbev_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 1, 0,
-				besbev_codec_enable_adc,
+	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 0, 0,
+				besbev_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	/*tx mixers*/
 	SND_SOC_DAPM_MIXER_E("ADC1_MIXER", SND_SOC_NOPM, 0, 0,
 				adc1_switch, ARRAY_SIZE(adc1_switch),
-				besbev_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				besbev_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 1, 0,
 				adc2_switch, ARRAY_SIZE(adc2_switch),
-				besbev_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				besbev_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
 
 	/* micbias widgets*/
@@ -1352,20 +1359,20 @@ static const struct snd_soc_dapm_widget besbev_dapm_widgets_rx[] = {
 
 	/*tx widgets*/
 	SND_SOC_DAPM_ADC_E("ADC1", NULL, SND_SOC_NOPM, 0, 0,
-				besbev_codec_enable_adc,
+				besbev_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 1, 0,
-				besbev_codec_enable_adc,
+	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 0, 0,
+				besbev_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	/*tx mixers*/
 	SND_SOC_DAPM_MIXER_E("ADC1_MIXER", SND_SOC_NOPM, 0, 0,
 				adc1_switch, ARRAY_SIZE(adc1_switch),
-				besbev_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				besbev_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 1, 0,
 				adc2_switch, ARRAY_SIZE(adc2_switch),
-				besbev_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				besbev_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
 
 	/* micbias widgets*/
@@ -1609,6 +1616,48 @@ static int besbev_set_micbias_data(struct besbev_priv *besbev,
 done:
 	return rc;
 }
+
+/*
+ * besbev_amic_init - amic init for amic variant
+ * @component: component instance
+ *
+ * Return: 0 on success or negative error code on failure.
+ */
+int besbev_amic_init(struct snd_soc_component *component)
+{
+	int ret = 0;
+	struct besbev_priv *besbev = snd_soc_component_get_drvdata(component);
+	struct besbev_pdata *pdata = NULL;
+
+	if (!besbev) {
+		dev_err(component->dev, "%s: besbev is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	pdata = dev_get_platdata(besbev->dev);
+
+	/* Disable VISense for AMIC variant */
+	snd_soc_component_update_bits(component,
+				BESBEV_DIG_SWR_CDC_RX_MODE, 0x4, 0x4);
+
+	mutex_init(&besbev->micb_lock);
+	mutex_init(&besbev->main_bias_lock);
+
+	ret = besbev_set_micbias_data(besbev, pdata);
+	if (ret < 0) {
+		dev_err(besbev->dev, "%s: bad micbias pdata\n", __func__);
+		goto err_irq;
+	}
+
+	return 0;
+
+err_irq:
+	mutex_destroy(&besbev->micb_lock);
+	mutex_destroy(&besbev->main_bias_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(besbev_amic_init);
 
 static int besbev_battery_supply_cb(struct notifier_block *nb,
 			unsigned long event, void *data)
