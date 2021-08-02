@@ -97,3 +97,18 @@ SND_SOC_DAILINK_DEFS(slimbus_7_tx,
 	DAILINK_COMP_ARRAY(COMP_CODEC("btfmslim_slave",
 			"btfm_bt_sco_slim_tx")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+
+SND_SOC_DAILINK_DEFS(va_cap0,
+	DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("cc_codec", "VA_CAP")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+
+SND_SOC_DAILINK_DEFS(pri_mi2s_tx,
+	DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("cc_codec", "TX0_CAP")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+
+SND_SOC_DAILINK_DEFS(quat_mi2s_rx,
+        DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+        DAILINK_COMP_ARRAY(COMP_CODEC("cc_codec", "RX0_PB")),
+        DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));

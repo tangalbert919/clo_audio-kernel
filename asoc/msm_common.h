@@ -15,6 +15,9 @@
 #include <sound/soc.h>
 #include <sound/pcm.h>
 
+#define DEVICE_ENABLE 1
+#define DEVICE_DISABLE 0
+
 enum {
 	MI2S = 0,
 	TDM,
