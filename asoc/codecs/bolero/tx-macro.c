@@ -2690,6 +2690,7 @@ static int tx_macro_tx_va_mclk_enable(struct tx_macro_priv *tx_priv,
 			}
 			bolero_clk_rsc_fs_gen_request(tx_priv->dev,
 						  true);
+			mutex_lock(&tx_priv->mclk_lock);
 			if (tx_priv->tx_mclk_users == 0) {
 				regmap_update_bits(regmap,
 					BOLERO_CDC_TX_TOP_CSR_FREQ_MCLK,
@@ -2702,6 +2703,7 @@ static int tx_macro_tx_va_mclk_enable(struct tx_macro_priv *tx_priv,
 					0x01, 0x01);
 			}
 			tx_priv->tx_mclk_users++;
+			mutex_unlock(&tx_priv->mclk_lock);
 		}
 		if (tx_priv->swr_clk_users == 0) {
 			dev_dbg(tx_priv->dev, "%s: reset_swr: %d\n",
@@ -2746,10 +2748,12 @@ static int tx_macro_tx_va_mclk_enable(struct tx_macro_priv *tx_priv,
 		if (clk_type == TX_MCLK)
 			tx_macro_mclk_enable(tx_priv, 0);
 		if (clk_type == VA_MCLK) {
+			mutex_lock(&tx_priv->mclk_lock);
 			if (tx_priv->tx_mclk_users <= 0) {
 				dev_err(tx_priv->dev, "%s: clock already disabled\n",
 						__func__);
 				tx_priv->tx_mclk_users = 0;
+				mutex_unlock(&tx_priv->mclk_lock);
 				goto tx_clk;
 			}
 			tx_priv->tx_mclk_users--;
@@ -2761,7 +2765,7 @@ static int tx_macro_tx_va_mclk_enable(struct tx_macro_priv *tx_priv,
 					BOLERO_CDC_TX_CLK_RST_CTRL_MCLK_CONTROL,
 					0x01, 0x00);
 			}
-
+			mutex_unlock(&tx_priv->mclk_lock);
 			bolero_clk_rsc_fs_gen_request(tx_priv->dev,
 						false);
 			ret = bolero_clk_rsc_request_clock(tx_priv->dev,
@@ -3290,17 +3294,7 @@ static void tx_macro_add_child_devices(struct work_struct *work)
 					__func__, ctrl_num);
 				goto fail_pdev_add;
 			}
-		}
 
-		ret = platform_device_add(pdev);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"%s: Cannot add platform device\n",
-				__func__);
-			goto fail_pdev_add;
-		}
-
-		if (tx_swr_master_node) {
 			temp = krealloc(swr_ctrl_data,
 					(ctrl_num + 1) * sizeof(
 					struct tx_macro_swr_ctrl_data),
@@ -3313,10 +3307,19 @@ static void tx_macro_add_child_devices(struct work_struct *work)
 			swr_ctrl_data[ctrl_num].tx_swr_pdev = pdev;
 			ctrl_num++;
 			dev_dbg(&pdev->dev,
-				"%s: Added soundwire ctrl device(s)\n",
+				"%s: Adding soundwire ctrl device(s)\n",
 				__func__);
 			tx_priv->swr_ctrl_data = swr_ctrl_data;
 		}
+
+		ret = platform_device_add(pdev);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"%s: Cannot add platform device\n",
+				__func__);
+			goto fail_pdev_add;
+		}
+
 		if (tx_priv->child_count < TX_MACRO_CHILD_DEVICES_MAX)
 			tx_priv->pdev_child_devices[
 					tx_priv->child_count++] = pdev;
