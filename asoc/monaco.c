@@ -24,6 +24,8 @@
 #include <soc/snd_event.h>
 #include <soc/swr-common.h>
 #include <soc/soundwire.h>
+#include <dsp/spf-core.h>
+#include <dsp/msm_audio_ion.h>
 #include "device_event.h"
 #include "asoc/msm-cdc-pinctrl.h"
 #include "asoc/wcd-mbhc-v2.h"
@@ -46,6 +48,15 @@
 #define WCN_CDC_SLIM_RX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX 3
 
+#ifdef LPASS_BE_PRI_MI2S_TX
+#undef LPASS_BE_PRI_MI2S_TX
+#define LPASS_BE_PRI_MI2S_TX "MI2S-LPAIF_VA-TX-PRIMARY"
+#endif
+#ifdef LPASS_BE_QUAT_MI2S_RX
+#undef LPASS_BE_QUAT_MI2S_RX
+#define LPASS_BE_QUAT_MI2S_RX "MI2S-LPAIF_RXTX-RX-PRIMARY"
+#endif
+
 struct msm_asoc_mach_data {
 	struct snd_info_entry *codec_root;
 	struct msm_common_pdata *common_pdata;
@@ -64,6 +75,113 @@ static bool codec_reg_done;
 static struct snd_soc_card snd_soc_card_monaco_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
+
+static void check_userspace_service_state(struct snd_soc_pcm_runtime *rtd,
+						struct msm_common_pdata *pdata)
+{
+	dev_info(rtd->card->dev,"%s: pcm_id %d state %d\n", __func__,
+				rtd->num, pdata->aud_dev_state[rtd->num]);
+
+	if (pdata->aud_dev_state[rtd->num] == DEVICE_ENABLE) {
+		dev_info(rtd->card->dev, "%s userspace service crashed\n",
+					__func__);
+		if (pdata->dsp_sessions_closed == 0) {
+			/*Issue close all graph cmd to DSP*/
+			spf_core_apm_close_all();
+			/*unmap all dma mapped buffers*/
+			msm_audio_ion_crash_handler();
+			pdata->dsp_sessions_closed = 1;
+		}
+		/*Reset the state as sysfs node wont be triggred*/
+		pdata->aud_dev_state[rtd->num] = 0;
+	}
+}
+
+static int get_intf_index(const char *stream_name)
+{
+	if (strnstr(stream_name, "LPAIF_VA", strlen(stream_name)))
+		return PRI_MI2S_TDM_AUXPCM;
+	else if (strnstr(stream_name, "LPAIF_RXTX", strlen(stream_name)))
+		return QUAT_MI2S_TDM_AUXPCM;
+	else {
+		pr_debug("%s: stream name %s does not match\n", __func__, stream_name);
+		return -EINVAL;
+	}
+}
+
+static int msm_monaco_snd_startup(struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct msm_common_pdata *pdata = msm_common_get_pdata(card);
+	const char *stream_name = rtd->dai_link->stream_name;
+	int index = get_intf_index(stream_name);
+
+	dev_dbg(rtd->card->dev,
+		"%s: substream = %s  stream = %d\n",
+		__func__, substream->name, substream->stream);
+
+	if (!pdata) {
+		dev_err(rtd->card->dev, "%s: pdata is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	if (index >= 0) {
+		mutex_lock(&pdata->lock[index]);
+		if (pdata->mi2s_gpio_p[index]) {
+			if (atomic_read(&(pdata->mi2s_gpio_ref_cnt[index])) == 0) {
+				ret = msm_cdc_pinctrl_select_active_state(
+						pdata->mi2s_gpio_p[index]);
+				if (ret) {
+				  pr_err("%s:pinctrl set actve fail with %d\n",
+							__func__, ret);
+					goto done;
+				}
+			}
+			atomic_inc(&(pdata->mi2s_gpio_ref_cnt[index]));
+		}
+done:
+		mutex_unlock(&pdata->lock[index]);
+	}
+	return ret;
+}
+
+static void msm_monaco_snd_shutdown(struct snd_pcm_substream *substream)
+{
+	int ret;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct msm_common_pdata *pdata = msm_common_get_pdata(card);
+	const char *stream_name = rtd->dai_link->stream_name;
+	int index = get_intf_index(stream_name);
+
+	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
+			substream->name, substream->stream);
+
+	if (!pdata) {
+		dev_err(card->dev, "%s: pdata is NULL\n", __func__);
+		return;
+	}
+
+	check_userspace_service_state(rtd, pdata);
+
+	if (index >= 0) {
+		mutex_lock(&pdata->lock[index]);
+		if (pdata->mi2s_gpio_p[index]) {
+			atomic_dec(&pdata->mi2s_gpio_ref_cnt[index]);
+			if (atomic_read(&pdata->mi2s_gpio_ref_cnt[index]) == 0) {
+				ret = msm_cdc_pinctrl_select_sleep_state(
+						pdata->mi2s_gpio_p[index]);
+				if (ret)
+					dev_err(card->dev,
+					"%s: pinctrl set actv fail %d\n",
+					__func__, ret);
+			}
+		}
+		mutex_unlock(&pdata->lock[index]);
+	}
+}
 
 /*
  * Need to report LINEIN
@@ -354,8 +472,8 @@ static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 }
 
 static struct snd_soc_ops msm_common_be_ops = {
-	.startup = msm_common_snd_startup,
-	.shutdown = msm_common_snd_shutdown,
+	.startup = msm_monaco_snd_startup,
+	.shutdown = msm_monaco_snd_shutdown,
 };
 
 static struct snd_soc_dai_link msm_common_dai_links[] = {
@@ -497,9 +615,18 @@ static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
 	},
 };
 
-static struct snd_soc_dai_link msm_monaco_dai_links[
-			ARRAY_SIZE(msm_common_dai_links) +
-			ARRAY_SIZE(msm_wcn_be_dai_links)];
+static struct snd_soc_dai_link msm_va_dai_links[] = {
+	{
+		.name = LPASS_BE_VA_CDC_CC,
+		.stream_name = LPASS_BE_VA_CDC_CC,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(va_cap0),
+	}
+};
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -644,6 +771,38 @@ static struct snd_soc_dai_link msm_stub_be_dai_links[] = {
 static struct snd_soc_dai_link msm_stub_dai_links[
 			 ARRAY_SIZE(msm_stub_be_dai_links)];
 
+static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
+	{
+		.name = LPASS_BE_PRI_MI2S_TX,
+		.stream_name = LPASS_BE_PRI_MI2S_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(pri_mi2s_tx),
+	},
+	{
+		.name = LPASS_BE_QUAT_MI2S_RX,
+		.stream_name = LPASS_BE_QUAT_MI2S_RX,
+		.playback_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(quat_mi2s_rx),
+	},
+};
+
+static struct snd_soc_dai_link msm_monaco_dai_links[
+	ARRAY_SIZE(msm_common_dai_links) +
+	ARRAY_SIZE(msm_va_dai_links) +
+	ARRAY_SIZE(msm_mi2s_be_dai_links) +
+	ARRAY_SIZE(msm_wcn_be_dai_links)
+];
+
 static const struct of_device_id monaco_asoc_machine_of_match[]  = {
 	{ .compatible = "qcom,monaco-asoc-snd",
 	  .data = "codec"},
@@ -654,7 +813,7 @@ static const struct of_device_id monaco_asoc_machine_of_match[]  = {
 
 static int msm_snd_card_monaco_late_probe(struct snd_soc_card *card)
 {
-	const char *be_dl_name = LPASS_BE_RX_CDC_DMA_RX_0;
+	const char *be_dl_name = card->dai_link[0].name;
 	struct snd_soc_pcm_runtime *rtd;
 
 	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
@@ -673,9 +832,10 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	struct snd_soc_card *card = NULL;
 	struct snd_soc_dai_link *dailink = NULL;
 	int total_links = 0;
-	const struct of_device_id *match;
 	int rc = 0;
 	u32 val = 0;
+	const struct of_device_id *match;
+	const char *codec_name = NULL;
 
 	match = of_match_node(monaco_asoc_machine_of_match, dev->of_node);
 	if (!match) {
@@ -687,23 +847,58 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	if (!strcmp(match->data, "codec")) {
 		card = &snd_soc_card_monaco_msm;
 
-		memcpy(msm_monaco_dai_links + total_links,
-		       msm_common_dai_links,
-		       sizeof(msm_common_dai_links));
-		total_links += ARRAY_SIZE(msm_common_dai_links);
+		rc = of_property_read_string(dev->of_node,
+                        "asoc-codec-names", &codec_name);
 
+		if (!rc && !strcmp(codec_name, "cc_codec")) {
+
+			rc = of_property_read_u32(dev->of_node,
+				"qcom,cc-va-intf-enable", &val);
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): CC-VA support present\n",
+					__func__);
+				memcpy(msm_monaco_dai_links + total_links,
+					msm_va_dai_links,
+					sizeof(msm_va_dai_links));
+				total_links += ARRAY_SIZE(msm_va_dai_links);
+			}
+
+			rc = of_property_read_u32(dev->of_node,
+				"qcom,mi2s-audio-intf", &val);
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): CC-MI2S support present\n",
+					__func__);
+				memcpy(msm_monaco_dai_links + total_links,
+					msm_mi2s_be_dai_links,
+					sizeof(msm_mi2s_be_dai_links));
+				total_links += ARRAY_SIZE(msm_mi2s_be_dai_links);
+			}
+
+
+		} else {
+			dev_dbg(dev, "%s(): Bolero support present\n",
+				__func__);
+			memcpy(msm_monaco_dai_links + total_links,
+				msm_common_dai_links,
+				sizeof(msm_common_dai_links));
+			total_links += ARRAY_SIZE(msm_common_dai_links);
+		}
+
+		// WCN BT is common for both ATH & ATH+SL variants
 		rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm", &val);
-
 		if (!rc && val) {
 			dev_info(dev, "%s(): WCN BT support present\n",
 				__func__);
 			memcpy(msm_monaco_dai_links + total_links,
-			       msm_wcn_be_dai_links,
-			       sizeof(msm_wcn_be_dai_links));
+				msm_wcn_be_dai_links,
+				sizeof(msm_wcn_be_dai_links));
 			total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
 		}
+
 		dailink = msm_monaco_dai_links;
 	} else if (!strcmp(match->data, "stub_codec")) {
+		dev_dbg(dev, "%s(): STUB support present\n",
+			__func__);
 		card = &snd_soc_card_stub_msm;
 
 		memcpy(msm_stub_dai_links,
@@ -713,7 +908,6 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		dailink = msm_stub_dai_links;
 		total_links = ARRAY_SIZE(msm_stub_be_dai_links);;
 	}
-
 	if (card) {
 		card->dai_link = dailink;
 		card->num_links = total_links;
@@ -833,6 +1027,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = NULL;
 	struct msm_asoc_mach_data *pdata = NULL;
+	const char *codec_name = NULL;
 	const char *mbhc_audio_jack_type = NULL;
 	int ret = 0, val = 0;
 
@@ -865,11 +1060,16 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = snd_soc_of_parse_audio_routing(card, "qcom,audio-routing");
-	if (ret) {
-		dev_err(&pdev->dev, "%s: parse audio routing failed, err:%d\n",
-			__func__, ret);
-		goto err;
+	ret = of_property_read_string(pdev->dev.of_node, "asoc-codec-names", &codec_name);
+	if (!ret && !strcmp(codec_name, "cc_codec")) {
+		dev_info(&pdev->dev, "%s: Routing comes from companion chip\n", __func__);
+	} else {
+		ret = snd_soc_of_parse_audio_routing(card, "qcom,audio-routing");
+		if (ret) {
+			dev_err(&pdev->dev, "%s: parse audio routing failed, err:%d\n",
+				__func__, ret);
+			goto err;
+		}
 	}
 
 	ret = msm_populate_dai_link_component_of_node(card);
