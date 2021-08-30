@@ -10,7 +10,7 @@
 
 /*
  * Add port configuration in the format
- *{ si, off1, off2, hstart, hstop, wd_len, bp_mode, bgp_ctrl, lane_ctrl}
+ *{ si, off1, off2, hstart, hstop, wd_len, bp_mode, bgp_ctrl, lane_ctrl, dir, stream_type}
  */
 
 static struct port_params rx_frame_params_default[SWR_MSTR_PORT_LEN] = {
@@ -43,13 +43,13 @@ static struct port_params tx_frame_params_besbev[SWR_MSTR_PORT_LEN] = {
 };
 
 static struct port_params rx_frame_params_besbev[SWR_MSTR_PORT_LEN] = {
-	{3,  0,  0,  0xFF, 0xFF, 1,    0xFF, 0xFF, 1},
-	{31, 0,  0,  3,    6,    7,    0,    0xFF, 0},
-	{31, 1,  0,  0xFF, 0xFF, 4,    1,    0xFF, 0},
-	{7,  1,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0}, /* AUX OUT */
-	{0,  0,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0,    0},
-	{0,  0,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0,    0},
-	{15, 0,  0,  3,    15,   1,    1,    0xFF, 0}, /* AMIC PCM IN */
+	{3,  0,  0,  0xFF, 0xFF, 1,    0xFF, 0xFF, 1, 0, 0},
+	{31, 0,  0,  3,    6,    7,    0,    0xFF, 0, 0, 0},
+	{31, 1,  0,  0xFF, 0xFF, 4,    1,    0xFF, 0, 0, 0},
+	{7,  1,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0}, /* AUX OUT */
+	{0,  0,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0,    0, 0, 0},
+	{0,  0,  0,  0xFF, 0xFF, 0xFF, 0xFF, 0,    0, 0, 0},
+	{3,  3,  0,  0xFF, 0xFF, 0xFF, 0x1, 0xFF,  0, 1, 1}, /* AMIC PCM IN */
 };
 
 static struct swr_mstr_port_map sm_port_map[] = {
