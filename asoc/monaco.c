@@ -436,7 +436,7 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
 
 		if (!pdata->visense_enable)
-			besbev_disable_visense(component);
+			besbev_amic_init(component);
 	} else if (!strncmp(component->driver->name, "wsa-codec.1",
 						strlen("wsa-codec.1"))) {
 		wsa883x_set_channel_map(component, &spkleft_ports[0],
