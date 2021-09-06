@@ -24,6 +24,8 @@ extern int besbev_info_create_codec_entry(struct snd_info_entry *codec_root,
 				    struct snd_soc_component *component);
 
 extern int besbev_disable_visense(struct snd_soc_component *component);
+
+extern int besbev_amic_init(struct snd_soc_component *component);
 #else
 extern int besbev_info_create_codec_entry(struct snd_info_entry *codec_root,
 				    struct snd_soc_component *component)
@@ -32,6 +34,11 @@ extern int besbev_info_create_codec_entry(struct snd_info_entry *codec_root,
 }
 
 extern int besbev_disable_visense(struct snd_soc_component *component)
+{
+	return 0;
+}
+
+extern int besbev_amic_init(struct snd_soc_component *component)
 {
 	return 0;
 }
