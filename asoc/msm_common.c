@@ -169,6 +169,9 @@ int snd_card_sysfs_init(void)
 	char dir[DIR_SZ] = "snd_card";
 
 	snd_card_pdata = kcalloc(1, sizeof(struct snd_card_pdata), GFP_KERNEL);
+	if (!snd_card_pdata)
+		return -ENOMEM;
+
 	ret = kobject_init_and_add(&snd_card_pdata->snd_card_kobj, &snd_card_ktype,
 		kernel_kobj, dir);
 	if (ret < 0) {
@@ -370,7 +373,7 @@ int msm_channel_map_get(struct snd_kcontrol *kcontrol,
 {
 	struct chmap_pdata *kctl_pdata =
 			(struct chmap_pdata *)kcontrol->private_data;
-	struct snd_soc_dai *codec_dai = kctl_pdata->dai;
+	struct snd_soc_dai *codec_dai;
 	int backend_id = kctl_pdata->id;
 	uint32_t rx_ch[MAX_PORT], tx_ch[MAX_PORT];
 	uint32_t rx_ch_cnt = 0, tx_ch_cnt = 0;
@@ -382,6 +385,7 @@ int msm_channel_map_get(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
+	codec_dai = kctl_pdata->dai;
 	ret = snd_soc_dai_get_channel_map(codec_dai,
 			&tx_ch_cnt, tx_ch, &rx_ch_cnt, rx_ch);
 	if (ret || (tx_ch_cnt == 0 && rx_ch_cnt == 0)) {
