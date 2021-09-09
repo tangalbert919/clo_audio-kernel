@@ -10541,6 +10541,94 @@ fail_cmd:
 EXPORT_SYMBOL(q6asm_send_mtmx_strtr_ttp_offset);
 
 /**
+ * q6asm_send_mtmx_strtr_external_sink_latency -
+ *       command to send matrix for external sink latency
+ *
+ * @ac: Audio client handle
+ * @external_sink_latency: external sink latency params
+ * @param_id: param id for external sink latency
+ * @dir: RX or TX direction
+ *
+ * Returns 0 on success or error on failure
+ */
+int q6asm_send_mtmx_strtr_external_sink_latency(struct audio_client *ac,
+		struct asm_session_mtmx_strtr_param_external_sink_latency_t *external_sink_latency,
+		uint32_t param_id, int dir)
+{
+	struct asm_mtmx_strtr_params matrix;
+	int sz = 0;
+	int rc  = 0;
+
+	pr_debug("%s: external sink latency lsw is %d, external sink latency msw is %d\n", __func__,
+		  external_sink_latency->external_sink_latency_lsw, external_sink_latency->external_sink_latency_msw);
+
+	if (!ac) {
+		pr_err("%s: audio client handle is NULL\n", __func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	if (ac->apr == NULL) {
+		pr_err("%s: ac->apr is NULL", __func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	memset(&matrix, 0, sizeof(struct asm_mtmx_strtr_params));
+	sz = sizeof(struct asm_mtmx_strtr_params);
+	q6asm_add_hdr(ac, &matrix.hdr, sz, TRUE);
+	atomic_set(&ac->cmd_state, -1);
+	matrix.hdr.opcode = ASM_SESSION_CMD_SET_MTMX_STRTR_PARAMS_V2;
+
+	matrix.param.data_payload_addr_lsw = 0;
+	matrix.param.data_payload_addr_msw = 0;
+	matrix.param.mem_map_handle = 0;
+	matrix.param.data_payload_size =
+		sizeof(struct param_hdr_v1) +
+		sizeof(struct asm_session_mtmx_strtr_param_external_sink_latency_t);
+	matrix.param.direction = dir;
+	matrix.data.module_id = ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC;
+	matrix.data.param_id = param_id;
+	matrix.data.param_size =
+		sizeof(struct asm_session_mtmx_strtr_param_external_sink_latency_t);
+	matrix.data.reserved = 0;
+	memcpy(&(matrix.config.external_sink_latency),
+	       external_sink_latency,
+	       sizeof(struct asm_session_mtmx_strtr_param_external_sink_latency_t));
+
+	rc = apr_send_pkt(ac->apr, (uint32_t *) &matrix);
+	if (rc < 0) {
+		pr_err("%s: bt path delay send failed paramid [0x%x]\n",
+			__func__, matrix.data.param_id);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	rc = wait_event_timeout(ac->cmd_wait,
+			(atomic_read(&ac->cmd_state) >= 0),
+			msecs_to_jiffies(TIMEOUT_MS));
+	if (!rc) {
+		pr_err("%s: timeout, external sink latency paramid[0x%x]\n",
+			__func__, matrix.data.param_id);
+		rc = -ETIMEDOUT;
+		goto fail_cmd;
+	}
+
+	if (atomic_read(&ac->cmd_state) > 0) {
+		pr_err("%s: DSP returned error[%s]\n",
+				__func__, adsp_err_get_err_str(
+				atomic_read(&ac->cmd_state)));
+		rc = adsp_err_get_lnx_err_code(
+				atomic_read(&ac->cmd_state));
+		goto fail_cmd;
+	}
+	rc = 0;
+fail_cmd:
+	return rc;
+}
+EXPORT_SYMBOL(q6asm_send_mtmx_strtr_external_sink_latency);
+
+/**
  * q6asm_send_mtmx_strtr_render_mode -
  *       command to send matrix for render mode
  *
