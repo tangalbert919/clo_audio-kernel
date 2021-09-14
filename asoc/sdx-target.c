@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -235,6 +235,7 @@ static int sdx_spk_control = 1;
 static int sdx_hifi_control;
 static atomic_t mi2s_ref_count;
 static atomic_t sec_mi2s_ref_count;
+static atomic_t sec_tdm_ref_count;
 
 static struct dev_config proxy_cfg = {
 	.sample_rate = SAMPLE_RATE_48KHZ,
@@ -974,6 +975,45 @@ static int sdx_sec_auxpcm_mode_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: sdx_sec_auxpcm_mode = %d ucontrol->value = %d\n",
 		 __func__, sdx_sec_auxpcm_mode,
 		 (int)ucontrol->value.integer.value[0]);
+	return 0;
+}
+
+static int sdx_sec_tdm_mode_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s sdx_sec_tdm_mode %d\n", __func__, sdx_sec_tdm_mode);
+
+	switch (sdx_sec_tdm_mode) {
+        case I2S_PCM_SLAVE_MODE:
+		ucontrol->value.integer.value[0] = 1;
+		break;
+	case I2S_PCM_MASTER_MODE:
+	default:
+		ucontrol->value.integer.value[0] = 0;
+		break;
+	}
+
+	return 0;
+}
+
+static int sdx_sec_tdm_mode_put(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		sdx_sec_tdm_mode = I2S_PCM_MASTER_MODE;
+		break;
+	case 1:
+		sdx_sec_tdm_mode = I2S_PCM_SLAVE_MODE;
+		break;
+	default:
+		sdx_sec_tdm_mode = I2S_PCM_MASTER_MODE;
+		break;
+	}
+	pr_debug("%s: sdx_sec_tdm_mode = %d ucontrol->value = %d\n",
+		 __func__, sdx_sec_tdm_mode,
+		 (int)ucontrol->value.integer.value[0]);
+
 	return 0;
 }
 
@@ -1735,9 +1775,12 @@ static int sdX_tdm_snd_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_card *card = rtd->card;
+	struct sdx_machine_data *pdata = snd_soc_card_get_drvdata(card);
 	int ret = 0;
 	int slot_width = 16;
 	int channels, slots;
+	int mode = I2S_PCM_MASTER_MODE;
 	unsigned int slot_mask, rate, clk_freq;
 	unsigned int slot_offset[8] = {0, 4, 8, 12, 16, 20, 24, 28};
 
@@ -1748,18 +1791,22 @@ static int sdX_tdm_snd_hw_params(struct snd_pcm_substream *substream,
 	case AFE_PORT_ID_PRIMARY_TDM_RX:
 	case AFE_PORT_ID_PRIMARY_TDM_RX_1:
 		slots = tdm_rx_cfg[TDM_PRI][TDM_0].channels;
+		mode = pdata->prim_tdm_mode;
 		break;
 	case AFE_PORT_ID_SECONDARY_TDM_RX:
 	case AFE_PORT_ID_SECONDARY_TDM_RX_1:
 		slots = tdm_rx_cfg[TDM_SEC][TDM_0].channels;
+		mode = pdata->sec_tdm_mode;
 		break;
 	case AFE_PORT_ID_PRIMARY_TDM_TX:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_1:
 		slots = tdm_tx_cfg[TDM_PRI][TDM_0].channels;
+		mode = pdata->prim_tdm_mode;
 		break;
 	case AFE_PORT_ID_SECONDARY_TDM_TX:
 	case AFE_PORT_ID_SECONDARY_TDM_TX_1:
 		slots = tdm_tx_cfg[TDM_SEC][TDM_0].channels;
+		mode = pdata->sec_tdm_mode;
 		break;
 	default:
 		pr_err("%s: dai id 0x%x not supported\n",
@@ -1820,12 +1867,14 @@ static int sdX_tdm_snd_hw_params(struct snd_pcm_substream *substream,
 		goto end;
 	}
 
-	rate = params_rate(params);
-	clk_freq = rate * slot_width * slots;
-	ret = snd_soc_dai_set_sysclk(cpu_dai, 0, clk_freq, SND_SOC_CLOCK_OUT);
-	if (ret < 0)
+	if (mode == I2S_PCM_MASTER_MODE) {
+		rate = params_rate(params);
+		clk_freq = rate * slot_width * slots;
+		ret = snd_soc_dai_set_sysclk(cpu_dai, 0, clk_freq, SND_SOC_CLOCK_OUT);
+		if (ret < 0)
 		pr_err("%s: failed to set tdm clk, err:%d\n",
 			__func__, ret);
+	}
 
 end:
 	return ret;
@@ -1914,13 +1963,15 @@ static void sdx_sec_tdm_shutdown(struct snd_pcm_substream *substream)
 	struct snd_soc_card *card = rtd->card;
 	struct sdx_machine_data *pdata = snd_soc_card_get_drvdata(card);
 
-	if (pdata->sec_tdm_mode == 1)
-		ret = msm_cdc_pinctrl_select_sleep_state(pdata->sec_master_p);
-	else
-		ret = msm_cdc_pinctrl_select_sleep_state(pdata->sec_slave_p);
-	if (ret)
-		pr_err("%s: failed to set sec gpios to sleep: %d\n",
-		       __func__, ret);
+	if (atomic_dec_return(&sec_tdm_ref_count) == 0) {
+		if (pdata->sec_tdm_mode == 1)
+			ret = msm_cdc_pinctrl_select_sleep_state(pdata->sec_master_p);
+		else
+			ret = msm_cdc_pinctrl_select_sleep_state(pdata->sec_slave_p);
+		if (ret)
+			pr_err("%s: failed to set sec gpios to sleep: %d\n",
+				   __func__, ret);
+	}
 }
 
 static int sdx_sec_tdm_startup(struct snd_pcm_substream *substream)
@@ -1931,50 +1982,54 @@ static int sdx_sec_tdm_startup(struct snd_pcm_substream *substream)
 	struct sdx_machine_data *pdata = snd_soc_card_get_drvdata(card);
 
 	pdata->sec_tdm_mode = sdx_sec_tdm_mode;
-	if (pdata->lpaif_sec_muxsel_virt_addr != NULL) {
-		ret = afe_enable_lpass_core_shared_clock(
-					SECONDARY_I2S_RX, CLOCK_ON);
-		if (ret < 0) {
+	if (atomic_inc_return(&sec_tdm_ref_count) == 1) {
+		if (pdata->lpaif_sec_muxsel_virt_addr != NULL) {
+			ret = afe_enable_lpass_core_shared_clock(SECONDARY_I2S_RX, CLOCK_ON);
+			if (ret < 0) {
+				ret = -EINVAL;
+				goto done;
+			}
+			iowrite32(PCM_SEL << I2S_PCM_SEL_OFFSET,
+				  pdata->lpaif_sec_muxsel_virt_addr);
+			if (pdata->lpass_mux_mic_ctl_virt_addr != NULL) {
+				if (pdata->sec_tdm_mode == 1)
+					iowrite32(SEC_TLMM_CLKS_EN_MASTER,
+						  pdata->lpass_mux_mic_ctl_virt_addr);
+				else
+					iowrite32(SEC_TLMM_CLKS_EN_SLAVE,
+						  pdata->lpass_mux_mic_ctl_virt_addr);
+			} else {
+				dev_err(card->dev, "%s lpass_mux_mic_ctl_virt_addr is NULL\n",
+					__func__);
+				ret = -EINVAL;
+				goto err;
+			}
+		} else {
+			dev_err(card->dev, "%s lpaif_pri_muxsel_virt_addr is NULL\n",
+				__func__);
 			ret = -EINVAL;
 			goto done;
 		}
-		iowrite32(PCM_SEL << I2S_PCM_SEL_OFFSET,
-			  pdata->lpaif_sec_muxsel_virt_addr);
-		if (pdata->lpass_mux_mic_ctl_virt_addr != NULL) {
-			if (pdata->sec_tdm_mode == 1)
-				iowrite32(SEC_TLMM_CLKS_EN_MASTER,
-					  pdata->lpass_mux_mic_ctl_virt_addr);
-			else
-				iowrite32(SEC_TLMM_CLKS_EN_SLAVE,
-					  pdata->lpass_mux_mic_ctl_virt_addr);
-		} else {
-			dev_err(card->dev, "%s lpass_mux_mic_ctl_virt_addr is NULL\n",
-				__func__);
-			ret = -EINVAL;
-			goto err;
-		}
-	} else {
-		dev_err(card->dev, "%s lpaif_sec_muxsel_virt_addr is NULL\n",
-			__func__);
-		ret = -EINVAL;
-		goto done;
-	}
 
-	if (pdata->sec_tdm_mode == 1) {
-		ret = msm_cdc_pinctrl_select_active_state
-						(pdata->sec_master_p);
-		if (ret < 0)
-			pr_err("%s pinctrl set failed\n", __func__);
-			goto err;
-	} else {
-		ret = msm_cdc_pinctrl_select_active_state(pdata->sec_master_p);
-		if (ret < 0)
-			pr_err("%s pinctrl set failed\n", __func__);
-			goto err;
-	}
+		if (pdata->sec_tdm_mode == 1) {
+			ret = msm_cdc_pinctrl_select_active_state(pdata->sec_master_p);
+			if (ret < 0)
+				pr_err("%s pinctrl set failed\n", __func__);
+				goto err;
+		} else {
+			ret = msm_cdc_pinctrl_select_active_state(pdata->sec_slave_p);
+			if (ret < 0)
+				pr_err("%s pinctrl set failed\n", __func__);
+				goto err;
+		}
 err:
-	afe_enable_lpass_core_shared_clock(SECONDARY_I2S_RX, CLOCK_OFF);
+		afe_enable_lpass_core_shared_clock(SECONDARY_I2S_RX, CLOCK_OFF);
+	}
 done:
+
+	if (ret)
+		atomic_dec_return(&sec_tdm_ref_count);
+
 	return ret;
 }
 
@@ -2091,6 +2146,8 @@ static const struct snd_kcontrol_new sdx_snd_controls[] = {
 	SOC_ENUM_EXT("SEC_AUXPCM Mode", sdx_enum[6],
 				 sdx_sec_auxpcm_mode_get,
 				 sdx_sec_auxpcm_mode_put),
+	SOC_ENUM_EXT("SEC_TDM Mode", sdx_enum[6],
+				 sdx_sec_tdm_mode_get, sdx_sec_tdm_mode_put),
 	SOC_ENUM_EXT("PRI_TDM_RX_0 SampleRate", tdm_rx_sample_rate,
 			sdx_tdm_rx_sample_rate_get,
 			sdx_tdm_rx_sample_rate_put),
@@ -3738,6 +3795,7 @@ static int sdx_asoc_machine_probe(struct platform_device *pdev)
 	mutex_init(&cdc_mclk_mutex);
 	atomic_set(&mi2s_ref_count, 0);
 	atomic_set(&sec_mi2s_ref_count, 0);
+	atomic_set(&sec_tdm_ref_count, 0);
 	pdata->prim_clk_usrs = 0;
 
 	card->dev = &pdev->dev;
