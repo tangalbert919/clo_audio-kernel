@@ -174,15 +174,24 @@ int audio_prm_set_lpass_hw_core_req(struct clk_cfg *cfg, uint32_t hw_core_id, ui
         prm_rsc_request.payload_header.payload_address_lsw = 0;
         prm_rsc_request.payload_header.payload_address_msw = 0;
         prm_rsc_request.payload_header.mem_map_handle = 0;
-        prm_rsc_request.payload_header.payload_size = sizeof(prm_cmd_request_hw_core_t) - sizeof(apm_cmd_header_t);
+        prm_rsc_request.payload_header.payload_size =
+		sizeof(prm_cmd_request_hw_core_t) - sizeof(apm_module_param_data_t) - sizeof(apm_cmd_header_t);
 
         /** Populate the param payload */
         prm_rsc_request.module_payload_0.module_instance_id = PRM_MODULE_INSTANCE_ID;
         prm_rsc_request.module_payload_0.error_code = 0;
         prm_rsc_request.module_payload_0.param_id = PARAM_ID_RSC_HW_CORE;
         prm_rsc_request.module_payload_0.param_size =
-                sizeof(prm_cmd_request_hw_core_t) - sizeof(apm_cmd_header_t) - sizeof(apm_module_param_data_t);
+        sizeof(prm_cmd_request_hw_core_t) - sizeof(apm_cmd_header_t) - (2* sizeof(apm_module_param_data_t));
 
+	if (hw_core_id == HW_CORE_ID_DCODEC) {
+		/** Populate the param payload */
+		prm_rsc_request.module_payload_1.module_instance_id = PRM_MODULE_INSTANCE_ID;
+		prm_rsc_request.module_payload_1.error_code = 0;
+		prm_rsc_request.module_payload_1.param_id = PARAM_ID_RSC_VOTE_AGAINST_ISLAND;
+		prm_rsc_request.module_payload_1.param_size = 0;
+		prm_rsc_request.payload_header.payload_size += sizeof(apm_module_param_data_t);
+	}
 
         prm_rsc_request.hw_core_id = hw_core_id; // HW_CORE_ID_LPASS;
 
