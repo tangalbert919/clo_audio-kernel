@@ -937,7 +937,7 @@ static int monaco_ssr_enable(struct device *dev, void *data)
 	}
 
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_card_notify_user(1);
+	snd_card_notify_user(SND_CARD_STATUS_ONLINE);
 #endif
 	dev_dbg(dev, "%s: setting snd_card to ONLINE\n", __func__);
 
@@ -957,7 +957,7 @@ static void monaco_ssr_disable(struct device *dev, void *data)
 
 	dev_dbg(dev, "%s: setting snd_card to OFFLINE\n", __func__);
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_card_notify_user(0);
+	snd_card_notify_user(SND_CARD_STATUS_OFFLINE);
 #endif /* CONFIG_AUDIO_QGKI */
 
 	if (!strcmp(card->name, "monaco-stub-snd-card")) {
@@ -1177,6 +1177,11 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 
 	is_initial_boot = true;
+
+	 /* change card status to ONLINE */
+	dev_dbg(&pdev->dev, "%s: setting snd_card to ONLINE\n", __func__);
+	snd_card_set_card_status(SND_CARD_STATUS_ONLINE);
+
 	return 0;
 err:
 	devm_kfree(&pdev->dev, pdata);
