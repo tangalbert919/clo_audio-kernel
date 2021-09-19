@@ -361,8 +361,8 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_card *card;
 	struct snd_info_entry *entry;
 	u8 spkleft_ports[WSA883X_MAX_SWR_PORTS] = {0, 1};
-	u8 spkleft_port_types[WSA883X_MAX_SWR_PORTS] = {SPKR_L, SPKR_L_VI};
-	unsigned int ch_rate[WSA883X_MAX_SWR_PORTS] = {SWR_CLK_RATE_2P4MHZ,
+	u8 spkleft_port_types[WSA883X_MAX_SWR_PORTS] = {LO, SPKR_L_VI};
+	unsigned int ch_rate[WSA883X_MAX_SWR_PORTS] = {SWR_CLK_RATE_9P6MHZ,
 							SWR_CLK_RATE_1P2MHZ};
 	unsigned int ch_mask[WSA883X_MAX_SWR_PORTS] = {0x1, 0x3};
 	struct msm_asoc_mach_data *pdata =
@@ -439,6 +439,8 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			besbev_amic_init(component);
 	} else if (!strncmp(component->driver->name, "wsa-codec.1",
 						strlen("wsa-codec.1"))) {
+		bolero_set_port_map(bolero_component,
+			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
 		wsa883x_set_channel_map(component, &spkleft_ports[0],
 					WSA883X_MAX_SWR_PORTS, &ch_mask[0],
 					&ch_rate[0], &spkleft_port_types[0]);
