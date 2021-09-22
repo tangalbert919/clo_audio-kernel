@@ -692,7 +692,11 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct msm_audio *prtd = runtime->private_data;
-	static int first_time = 1;
+#ifdef CONFIG_SND_SOC_MSM_QDSP6V2_VM
+        static int first_time = 0;
+#else
+        static int first_time = 1;
+#endif
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
