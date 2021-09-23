@@ -772,7 +772,7 @@ static int swrm_pcm_port_config(struct swr_mstr_ctrl *swrm, u8 port_num,
 {
 	u16 reg_addr = 0;
 
-	if (!port_num || port_num > 6) {
+	if (!port_num || port_num > SWR_MSTR_PORT_LEN) {
 		dev_err(swrm->dev, "%s: invalid port: %d\n",
 			__func__, port_num);
 		return -EINVAL;
