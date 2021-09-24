@@ -186,6 +186,7 @@ typedef struct prm_cmd_request_hw_core_t
         apm_cmd_header_t payload_header;
         apm_module_param_data_t module_payload_0;
         uint32_t hw_core_id;
+        apm_module_param_data_t module_payload_1;
 }prm_cmd_request_hw_core_t;
 
 
@@ -207,6 +208,9 @@ typedef struct prm_cmd_request_hw_core_t
 #define PARAM_ID_RSC_HW_CORE 0x08001032
 
 #define HW_RSC_ID_AUDIO_HW_CLK 0x0800102C
+
+/* Param ID for vote againsta island */
+#define PARAM_ID_RSC_VOTE_AGAINST_ISLAND 0x0800131D
 
 /* Supported OSR clock values */
 #define OSR_CLOCK_12_P288_MHZ	0xBB8000
