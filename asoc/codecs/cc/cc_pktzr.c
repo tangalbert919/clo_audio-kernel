@@ -113,6 +113,11 @@ int cc_pktzr_send_packet(uint32_t opcode, void *req_payload, size_t req_size,
 	spin_unlock(&ppriv->cc_pktzr_lock);
 
 	reinit_completion(&ppriv->thread_complete);
+
+	/* TODO: Need to fix as part of SSR handling
+	 * registering to avoid NULL pointer expection*/
+	cc_pktzr_register_device();
+
 	ret = audio_cc_ipc_send_pkt(ppriv->handle, msg_pkt, pkt_size);
 	if (ret < 0) {
 		pr_err("%s Failed to send pkt\n", __func__);
@@ -160,6 +165,38 @@ err:
 	return ret;
 }
 EXPORT_SYMBOL(cc_pktzr_send_packet);
+
+/**
+ * cc_pktzr_deregister_device - Function to deregister to CC IPC driver
+ */
+void cc_pktzr_deregister_device(void)
+{
+	int ret = 0;
+
+	if (!ppriv)
+		return;
+
+	ret = audio_cc_ipc_deregister_device(ppriv->handle, ppriv->srvc_id);
+	if (ret < 0)
+		pr_err("%s: Failed to deregister device\n", __func__);
+}
+EXPORT_SYMBOL(cc_pktzr_deregister_device);
+
+/**
+ * cc_pktzr_register_device - Function to register to CC IPC driver
+ */
+void cc_pktzr_register_device(void)
+{
+	int ret = 0;
+	if (!ppriv)
+		return;
+
+	ret = audio_cc_ipc_register_device(ppriv->srvc_id,
+			ppriv->channel_name, cc_pktzr_recv_cb, &(ppriv->handle));
+	if (ret < 0)
+		pr_err("%s: Failed to register device\n", __func__);
+}
+EXPORT_SYMBOL(cc_pktzr_register_device);
 
 /**
  * cc_pktzr_init - Function to register device
@@ -249,12 +286,7 @@ int cc_pktzr_init(struct device *dev)
 	}
 	ppriv->dst_port = dst_port;
 
-	ret = audio_cc_ipc_register_device(ppriv->srvc_id,
-		ppriv->channel_name, cc_pktzr_recv_cb, &(ppriv->handle));
-	if (ret < 0) {
-		pr_err("%s: Failed to register device\n", __func__);
-		goto err;
-	}
+	cc_pktzr_register_device();
 	init_completion(&ppriv->thread_complete);
 	spin_lock_init(&ppriv->cc_pktzr_lock);
 	INIT_LIST_HEAD(&ppriv->cc_list);
@@ -279,11 +311,10 @@ EXPORT_SYMBOL(cc_pktzr_init);
  */
 void cc_pktzr_deinit(void)
 {
-	int ret = 0;
 	if (!ppriv)
 		return;
 
-	ret = audio_cc_ipc_deregister_device(ppriv->handle, ppriv->srvc_id);
+	cc_pktzr_deregister_device();
 	reinit_completion(&ppriv->thread_complete);
 	if (ppriv->handle)
 		kfree(ppriv->handle);
