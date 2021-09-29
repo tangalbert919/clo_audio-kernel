@@ -167,22 +167,23 @@ static int get_mi2s_tdm_auxpcm_intf_index(const char *stream_name)
 	    !strnstr(stream_name, "AUXPCM", strlen(stream_name)))
 		return -EINVAL;
 
-	if (strnstr(stream_name, "PRIMARY", strlen("PRIMARY")))
-		return PRI_MI2S_TDM_AUXPCM;
-	else if (strnstr(stream_name, "SECONDARY", strlen("SECONDARY")))
-		return SEC_MI2S_TDM_AUXPCM;
-	else if (strnstr(stream_name, "TERTIARY", strlen("TERTIARY")))
-		return TER_MI2S_TDM_AUXPCM;
-	else if (strnstr(stream_name, "QUATERNARY", strlen("QUATERNARY")))
+	if (strnstr(stream_name, "LPAIF_RXTX", strlen(stream_name)))
 		return QUAT_MI2S_TDM_AUXPCM;
-	else if (strnstr(stream_name, "QUINARY", strlen("QUINARY")))
+	else if (strnstr(stream_name, "LPAIF_VA", strlen(stream_name)))
 		return QUIN_MI2S_TDM_AUXPCM;
-	else if (strnstr(stream_name, "SENARY", strlen("SENARY")))
+	else if (strnstr(stream_name, "LPAIF_WSA", strlen(stream_name)))
 		return SEN_MI2S_TDM_AUXPCM;
-	else {
-		pr_debug("%s: stream name %s does not match\n", __func__, stream_name);
-		return -EINVAL;
+	else if (strnstr(stream_name, "LPAIF", strlen(stream_name))) {
+		if (strnstr(stream_name, "PRIMARY", strlen(stream_name)))
+			return PRI_MI2S_TDM_AUXPCM;
+		else if (strnstr(stream_name, "SECONDARY", strlen(stream_name)))
+			return SEC_MI2S_TDM_AUXPCM;
+		else if (strnstr(stream_name, "TERTIARY", strlen(stream_name)))
+			return TER_MI2S_TDM_AUXPCM;
 	}
+	else
+		pr_debug("%s: stream name %s does not match\n", __func__, stream_name);
+	return -EINVAL;
 }
 
 static bool is_fractional_sample_rate(unsigned int sample_rate)
