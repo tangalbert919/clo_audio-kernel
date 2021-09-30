@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -3083,7 +3083,7 @@ static void wsa_macro_add_child_devices(struct work_struct *work)
 			goto fail_pdev_add;
 		}
 
-		if (!strcmp(node->name, "wsa_swr_master")) {
+		if (!strcmp(node->name, "wsa_swr_master_ar")) {
 			temp = krealloc(swr_ctrl_data,
 					(ctrl_num + 1) * sizeof(
 					struct wsa_macro_swr_ctrl_data),

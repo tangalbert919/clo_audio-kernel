@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -935,7 +935,7 @@ int swr_register_master(struct swr_master *master)
 	int status = 0;
 
 	mutex_lock(&swr_lock);
-	id = of_alias_get_id(master->dev.of_node, "swr");
+	id = of_alias_get_id(master->dev.of_node, "swr_ar");
 
 	if (id >= 0)
 		master->bus_num = id;
