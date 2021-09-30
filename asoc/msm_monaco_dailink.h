@@ -112,3 +112,8 @@ SND_SOC_DAILINK_DEFS(quat_mi2s_rx,
         DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
         DAILINK_COMP_ARRAY(COMP_CODEC("cc_codec", "RX0_PB")),
         DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+
+SND_SOC_DAILINK_DEFS(quat_mi2s_tx,
+	DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("cc_codec", "VI_SENS_CAP")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));

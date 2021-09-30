@@ -56,6 +56,10 @@
 #undef LPASS_BE_QUAT_MI2S_RX
 #define LPASS_BE_QUAT_MI2S_RX "MI2S-LPAIF_RXTX-RX-PRIMARY"
 #endif
+#ifdef LPASS_BE_QUAT_MI2S_TX
+#undef LPASS_BE_QUAT_MI2S_TX
+#define LPASS_BE_QUAT_MI2S_TX "MI2S-LPAIF_RXTX-TX-PRIMARY"
+#endif
 
 struct msm_asoc_mach_data {
 	struct snd_info_entry *codec_root;
@@ -795,6 +799,17 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ignore_suspend = 1,
 		.ops = &msm_common_be_ops,
 		SND_SOC_DAILINK_REG(quat_mi2s_rx),
+	},
+	{
+		.name = LPASS_BE_QUAT_MI2S_TX,
+		.stream_name = LPASS_BE_QUAT_MI2S_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(quat_mi2s_tx),
 	},
 };
 
