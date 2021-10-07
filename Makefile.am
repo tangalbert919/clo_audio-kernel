@@ -23,7 +23,9 @@ endif
 ifeq ($(TARGET_SUPPORT), sdxnightjar)
 KBUILD_OPTIONS += CONFIG_ARCH_SDXNIGHTJAR=y
 endif
-
+ifeq ($(TARGET_SUPPORT), sa410m)
+KBUILD_OPTIONS += CONFIG_ARCH_SA410M=y
+endif
 subdir-ccflags-y += -I$(AUDIO_ROOT)/include/uapi/
 
 obj-m := ipc/
@@ -40,6 +42,10 @@ obj-m += asoc/codecs/wcd934x/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sdxnightjar))
 obj-m += asoc/codecs/wcd934x/
+endif
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa410m))
+obj-m += asoc/codecs/bolero/
+obj-m += asoc/codecs/rouleur/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), qcs40x))
 obj-m += asoc/codecs/bolero/

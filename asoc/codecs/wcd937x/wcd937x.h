@@ -30,6 +30,8 @@ static const struct wcd937x_swr_slave_ch_map wcd937x_swr_slv_tx_ch_idx[] = {
 	{DMIC5, 9},
 };
 
+#ifdef CONFIG_SND_SOC_WCD937X
+
 static int wcd937x_swr_master_ch_map[] = {
 	ZERO,
 	SWRM_TX1_CH1,
@@ -47,7 +49,6 @@ static int wcd937x_swr_master_ch_map[] = {
 	SWRM_PCM_IN,
 };
 
-#ifdef CONFIG_SND_SOC_WCD937X
 extern int wcd937x_info_create_codec_entry(struct snd_info_entry *codec_root,
 				    struct snd_soc_component *component);
 

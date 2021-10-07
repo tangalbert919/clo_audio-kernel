@@ -1389,7 +1389,7 @@ static int rouleur_get_logical_addr(struct swr_device *swr_dev)
 		ret = swr_get_logical_dev_num(swr_dev, swr_dev->addr, &devnum);
 		if (ret) {
 			dev_err(&swr_dev->dev,
-				"%s get devnum %d for dev addr %lx failed\n",
+				"%s get devnum %d for dev addr %llx failed\n",
 				__func__, devnum, swr_dev->addr);
 			/* retry after 1ms */
 			usleep_range(1000, 1010);
@@ -1764,15 +1764,15 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 				SND_SOC_DAPM_POST_PMD),
 
 	/* micbias widgets*/
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("MIC BIAS1", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("MIC BIAS2", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("MIC BIAS3", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
@@ -1842,15 +1842,15 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("HPHR"),
 
 	/* micbias pull up widgets*/
-	SND_SOC_DAPM_MICBIAS_E("VA MIC BIAS1", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("VA MIC BIAS1", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias_pullup,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("VA MIC BIAS2", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("VA MIC BIAS2", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias_pullup,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("VA MIC BIAS3", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("VA MIC BIAS3", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias_pullup,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
@@ -1977,7 +1977,7 @@ int rouleur_info_create_codec_entry(struct snd_info_entry *codec_root,
 		return 0;
 	}
 	card = component->card;
-	priv->entry = snd_info_create_subdir(codec_root->module,
+	priv->entry = snd_info_create_module_entry(codec_root->module,
 					     "rouleur", codec_root);
 	if (!priv->entry) {
 		dev_dbg(component->dev, "%s: failed to create rouleur entry\n",
@@ -2144,7 +2144,7 @@ static void rouleur_get_foundry_id(struct rouleur_priv *rouleur)
 	ret = pm2250_spmi_read(rouleur->spmi_dev,
 				rouleur->foundry_id_reg, &rouleur->foundry_id);
 	if (ret == 0)
-		pr_debug("%s: rouleur foundry id = %x\n", rouleur->foundry_id,
+		pr_debug("%d: rouleur foundry id = %s\n", rouleur->foundry_id,
 			 __func__);
 	else
 		pr_debug("%s: rouleur error in spmi read ret = %d\n",

@@ -2344,7 +2344,7 @@ static void send_adm_cal_type(int cal_index, int path, int port_id,
 				      cal_block->map_data.map_size,
 				      source_vm, 1, dest_vm, dest_perms, 2);
 		if (ret < 0) {
-			pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %d\n",
+			pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %zu\n",
 				__func__, ret, (void *) cal_block->cal_data.paddr,
 				cal_block->map_data.map_size);
 			ret = -EINVAL;
@@ -4025,7 +4025,7 @@ int adm_close(int port_id, int perf_mode, int copp_idx)
 							source_vm, 2, dest_vm,
 							dest_perms, 1);
 						if (ret < 0) {
-							pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %d\n",
+							pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %zu\n",
 								__func__, ret,
 								(void *)cal_block->cal_data.paddr,
 								cal_block->map_data.map_size);
@@ -4103,7 +4103,7 @@ int adm_close(int port_id, int perf_mode, int copp_idx)
 						source_vm, 2, dest_vm,
 						dest_perms, 1);
 				if (ret < 0) {
-					pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %d\n",
+					pr_err("%s: hyp_assign_phys failed result = %d addr = 0x%pK size = %zu\n",
 						__func__, ret, (void *) cal_block->cal_data.paddr,
 						cal_block->map_data.map_size);
 					ret = -EINVAL;
