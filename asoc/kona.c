@@ -588,35 +588,6 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		.ignore_suspend = 1,
 	},
 	{
-		.name = LPASS_BE_SLIMBUS_7_RX,
-		.stream_name = LPASS_BE_SLIMBUS_7_RX,
-		.cpu_dai_name = "snd-soc-dummy-dai",
-		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
-		.dpcm_playback = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
-		.codec_name = "btfmslim_slave",
-		.ops = &msm_common_be_ops,
-		.codec_dai_name = "btfm_bt_sco_a2dp_slim_rx",
-		.ignore_suspend = 1,
-		/* this dainlink has playback support */
-		.ignore_pmdown_time = 1,
-		.init = &msm_wcn_init,
-	},
-	{
-		.name = LPASS_BE_SLIMBUS_7_TX,
-		.stream_name = LPASS_BE_SLIMBUS_7_TX,
-		.cpu_dai_name = "snd-soc-dummy-dai",
-		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
-		.codec_name = "btfmslim_slave",
-		.ops = &msm_common_be_ops,
-		.codec_dai_name = "btfm_bt_sco_slim_tx",
-		.ignore_suspend = 1,
-	},
-	{
 		.name = LPASS_BE_DISPLAY_PORT_RX,
 		.stream_name = LPASS_BE_DISPLAY_PORT_RX,
 		.cpu_dai_name = "snd-soc-dummy-dai",
@@ -1001,10 +972,43 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_7_RX,
+		.stream_name = LPASS_BE_SLIMBUS_7_RX,
+		.cpu_dai_name = "snd-soc-dummy-dai",
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.codec_name = "btfmslim_slave",
+		.ops = &msm_common_be_ops,
+		.codec_dai_name = "btfm_bt_sco_a2dp_slim_rx",
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.init = &msm_wcn_init,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_7_TX,
+		.stream_name = LPASS_BE_SLIMBUS_7_TX,
+		.cpu_dai_name = "snd-soc-dummy-dai",
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.codec_name = "btfmslim_slave",
+		.ops = &msm_common_be_ops,
+		.codec_dai_name = "btfm_bt_sco_slim_tx",
+		.ignore_suspend = 1,
+	},
+};
+
 static struct snd_soc_dai_link msm_kona_dai_links[
 			ARRAY_SIZE(msm_common_dai_links) +
 			ARRAY_SIZE(msm_mi2s_dai_links) +
-			ARRAY_SIZE(msm_tdm_dai_links)];
+			ARRAY_SIZE(msm_tdm_dai_links)+
+			ARRAY_SIZE(msm_wcn_be_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -1142,6 +1146,17 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 				msm_tdm_dai_links,
 			sizeof(msm_tdm_dai_links));
 			total_links += ARRAY_SIZE(msm_tdm_dai_links);
+		}
+
+		rc = of_property_read_u32(dev->of_node,
+				"qcom,wcn-bt", &val);
+		if (!rc && val) {
+			dev_dbg(dev, "%s(): WCN BT support present\n",
+				__func__);
+			memcpy(msm_kona_dai_links + total_links,
+				msm_wcn_be_dai_links,
+			sizeof(msm_wcn_be_dai_links));
+			total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
 		}
 
 		dailink = msm_kona_dai_links;
