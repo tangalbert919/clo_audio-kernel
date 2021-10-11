@@ -56,6 +56,10 @@
 #undef LPASS_BE_QUAT_MI2S_RX
 #define LPASS_BE_QUAT_MI2S_RX "MI2S-LPAIF_RXTX-RX-PRIMARY"
 #endif
+#ifdef LPASS_BE_QUAT_MI2S_TX
+#undef LPASS_BE_QUAT_MI2S_TX
+#define LPASS_BE_QUAT_MI2S_TX "MI2S-LPAIF_RXTX-TX-PRIMARY"
+#endif
 
 struct msm_asoc_mach_data {
 	struct snd_info_entry *codec_root;
@@ -361,8 +365,8 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_card *card;
 	struct snd_info_entry *entry;
 	u8 spkleft_ports[WSA883X_MAX_SWR_PORTS] = {0, 1};
-	u8 spkleft_port_types[WSA883X_MAX_SWR_PORTS] = {SPKR_L, SPKR_L_VI};
-	unsigned int ch_rate[WSA883X_MAX_SWR_PORTS] = {SWR_CLK_RATE_2P4MHZ,
+	u8 spkleft_port_types[WSA883X_MAX_SWR_PORTS] = {LO, SPKR_L_VI};
+	unsigned int ch_rate[WSA883X_MAX_SWR_PORTS] = {SWR_CLK_RATE_9P6MHZ,
 							SWR_CLK_RATE_1P2MHZ};
 	unsigned int ch_mask[WSA883X_MAX_SWR_PORTS] = {0x1, 0x3};
 	struct msm_asoc_mach_data *pdata =
@@ -439,6 +443,8 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			besbev_amic_init(component);
 	} else if (!strncmp(component->driver->name, "wsa-codec.1",
 						strlen("wsa-codec.1"))) {
+		bolero_set_port_map(bolero_component,
+			ARRAY_SIZE(sm_port_map_besbev), sm_port_map_besbev);
 		wsa883x_set_channel_map(component, &spkleft_ports[0],
 					WSA883X_MAX_SWR_PORTS, &ch_mask[0],
 					&ch_rate[0], &spkleft_port_types[0]);
@@ -794,6 +800,17 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ops = &msm_common_be_ops,
 		SND_SOC_DAILINK_REG(quat_mi2s_rx),
 	},
+	{
+		.name = LPASS_BE_QUAT_MI2S_TX,
+		.stream_name = LPASS_BE_QUAT_MI2S_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(quat_mi2s_tx),
+	},
 };
 
 static struct snd_soc_dai_link msm_monaco_dai_links[
@@ -935,7 +952,7 @@ static int monaco_ssr_enable(struct device *dev, void *data)
 	}
 
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_card_notify_user(1);
+	snd_card_notify_user(SND_CARD_STATUS_ONLINE);
 #endif
 	dev_dbg(dev, "%s: setting snd_card to ONLINE\n", __func__);
 
@@ -955,7 +972,7 @@ static void monaco_ssr_disable(struct device *dev, void *data)
 
 	dev_dbg(dev, "%s: setting snd_card to OFFLINE\n", __func__);
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_card_notify_user(0);
+	snd_card_notify_user(SND_CARD_STATUS_OFFLINE);
 #endif /* CONFIG_AUDIO_QGKI */
 
 	if (!strcmp(card->name, "monaco-stub-snd-card")) {
@@ -1175,6 +1192,11 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 
 	is_initial_boot = true;
+
+	 /* change card status to ONLINE */
+	dev_dbg(&pdev->dev, "%s: setting snd_card to ONLINE\n", __func__);
+	snd_card_set_card_status(SND_CARD_STATUS_ONLINE);
+
 	return 0;
 err:
 	devm_kfree(&pdev->dev, pdata);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/of_platform.h>
@@ -781,6 +781,34 @@ void bolero_unregister_macro(struct device *dev, u16 macro_id)
 		snd_soc_unregister_component(dev->parent);
 }
 EXPORT_SYMBOL(bolero_unregister_macro);
+
+/**
+ * bolero_rx_pa_on - Send PA on event from RX macro to slave.
+ *
+ * @dev: macro device ptr.
+ */
+void bolero_rx_pa_on(struct device *dev)
+{
+	struct bolero_priv *priv;
+
+	if (!dev) {
+		pr_err("%s: dev is null\n", __func__);
+		return;
+	}
+	if (!bolero_is_valid_child_dev(dev)) {
+		dev_err(dev, "%s: not a valid child dev\n",
+			__func__);
+		return;
+	}
+	priv = dev_get_drvdata(dev->parent);
+	if (!priv) {
+		dev_err(dev, "%s: priv is null\n", __func__);
+		return;
+	}
+
+	bolero_cdc_notifier_call(priv, BOLERO_SLV_EVT_RX_MACRO_PA_ON);
+}
+EXPORT_SYMBOL(bolero_rx_pa_on);
 
 void bolero_wsa_pa_on(struct device *dev, bool adie_lb)
 {
