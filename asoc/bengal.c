@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -931,8 +931,6 @@ static int usb_audio_tx_format_get(struct snd_kcontrol *kcontrol,
 static int usb_audio_tx_format_put(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
-	int rc = 0;
-
 	switch (ucontrol->value.integer.value[0]) {
 	case 3:
 		usb_tx_cfg.bit_format = SNDRV_PCM_FORMAT_S32_LE;
@@ -952,7 +950,7 @@ static int usb_audio_tx_format_put(struct snd_kcontrol *kcontrol,
 		 __func__, usb_tx_cfg.bit_format,
 		 ucontrol->value.integer.value[0]);
 
-	return rc;
+	return 0;
 }
 
 static int usb_audio_rx_ch_get(struct snd_kcontrol *kcontrol,
