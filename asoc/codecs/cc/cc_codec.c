@@ -1349,10 +1349,10 @@ static int cc_action_get(uint32_t id, void *ptr, size_t size)
 	rc = cc_pktzr_send_packet(CC_CODEC_OPCODE_GET_PARAM,
 		&get_param, sizeof(get_param), (void **)&resp, &resp_size);
 
-	if (rc || (resp_size != size))
-		return -EINVAL;
+	if (rc)
+		return rc;
 
-	memcpy(ptr, resp->payload, size);
+	memcpy(ptr, resp, size);
 
 	return 0;
 }
@@ -1476,12 +1476,12 @@ static int cc_action_ctl_array_get(struct snd_kcontrol *kcontrol,
 	if (cc_act_is_volatile(act->action_type)) {
 		switch (act->action_type) {
 		case ACTION_TYPE_CHAR_ARRAY_VOLATILE:
-			size = act_val->num_params * sizeof(uint8_t);
+			size = act->num_params * sizeof(uint8_t);
 			ptr = (void *)&ucontrol->value.bytes.data[0];
 			break;
 		case ACTION_TYPE_INT_ARRAY_VOLATILE:
 		case ACTION_TYPE_UINT_ARRAY_VOLATILE:
-			size = act_val->num_params * sizeof(int32_t);
+			size = act->num_params * sizeof(int32_t);
 			ptr = (void *)&ucontrol->value.integer.value[0];
 			break;
 		default:
@@ -1554,12 +1554,12 @@ static int cc_action_ctl_array_put(struct snd_kcontrol *kcontrol,
 	if (cc_act_is_volatile(act->action_type)) {
 		switch (act->action_type) {
 		case ACTION_TYPE_CHAR_ARRAY_VOLATILE:
-			size = act_val->num_params * sizeof(uint8_t);
+			size = act->num_params * sizeof(uint8_t);
 			ptr = (void *)&ucontrol->value.bytes.data[0];
 			break;
 		case ACTION_TYPE_INT_ARRAY_VOLATILE:
 		case ACTION_TYPE_UINT_ARRAY_VOLATILE:
-			size = act_val->num_params * sizeof(int32_t);
+			size = act->num_params * sizeof(int32_t);
 			ptr = (void *)&ucontrol->value.integer.value[0];
 			break;
 		default:
