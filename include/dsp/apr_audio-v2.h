@@ -12598,6 +12598,8 @@ struct afe_av_dev_drift_get_param_resp {
  */
 #define ASM_SESSION_MTMX_STRTR_PARAM_TTP_OFFSET 0x00013228
 
+#define ASM_SESSION_MTMX_STRTR_PARAM_EXTERNAL_SINK_DELAY   0x00013300
+
 /* Generic payload of the window parameters in the
  * #ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC module.
  * This payload is supported only for a Set command
@@ -12726,6 +12728,25 @@ struct asm_session_mtmx_strtr_param_ttp_offset_t {
 
 } __packed;
 
+struct asm_session_mtmx_strtr_param_external_sink_latency_t {
+	uint32_t                  external_sink_latency_lsw;
+	/* Lower 32 bits of the external_sink_latency in microseconds. */
+
+	uint32_t                  external_sink_latency_msw;
+	/* Upper 32 bits of the external_sink_latency in microseconds.
+	 *
+	 * Internal default value is 0 for both values. The 64-bit number
+	 * formed by external_sink_latency_lsw and external_sink_latency_lsw
+	 * is treated as unsigned.
+	 * In case of local DSP loopback when using start flag
+	 * ASM_SESSION_CMD_RUN_STARTIME_RUN_AT_ABSOLUTEIME the max.
+
+	 * This parameter can be set before or while an ASM stream is running,
+	 * allowing “at-run-time” changes of the overall latency.
+	 */
+
+} __packed;
+
 /* Parameter used by #ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC which allows the
  * audio client to specify the clock recovery mechanism that the audio DSP
  * should use.
@@ -12798,6 +12819,7 @@ union asm_session_mtmx_strtr_param_config {
 	struct asm_session_mtmx_strtr_param_clk_rec_t clk_rec_param;
 	struct asm_session_mtmx_param_adjust_session_time_ctl_t adj_time_param;
 	struct asm_session_mtmx_strtr_param_ttp_offset_t ttp_offset;
+	struct asm_session_mtmx_strtr_param_external_sink_latency_t external_sink_latency;
 } __packed;
 
 struct asm_mtmx_strtr_params {
