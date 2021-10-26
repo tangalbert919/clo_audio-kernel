@@ -1609,7 +1609,7 @@ static int kona_ssr_enable(struct device *dev, void *data)
 		dev_dbg(dev, "%s: TODO \n", __func__);
 	}
 
-	snd_card_notify_user(1);
+	snd_card_notify_user(SND_CARD_STATUS_ONLINE);
 	dev_dbg(dev, "%s: setting snd_card to ONLINE\n", __func__);
 
 err:
@@ -1627,7 +1627,7 @@ static void kona_ssr_disable(struct device *dev, void *data)
 	}
 
 	dev_dbg(dev, "%s: setting snd_card to OFFLINE\n", __func__);
-	snd_card_notify_user(0);
+	snd_card_notify_user(SND_CARD_STATUS_OFFLINE);
 
 	if (!strcmp(card->name, "kona-stub-snd-card")) {
 		/* TODO */
@@ -1850,6 +1850,10 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 
 	is_initial_boot = true;
+
+	 /* change card status to ONLINE */
+	dev_dbg(&pdev->dev, "%s: setting snd_card to ONLINE\n", __func__);
+	snd_card_set_card_status(SND_CARD_STATUS_ONLINE);
 
 	return 0;
 err:
