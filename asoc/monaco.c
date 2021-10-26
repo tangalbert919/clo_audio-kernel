@@ -37,6 +37,7 @@
 #include "msm-audio-defs.h"
 #include "msm_common.h"
 #include "msm_monaco_dailink.h"
+#include "dsp/audio_prm.h"
 
 #define DRV_NAME "monaco-asoc-snd"
 #define __CHIPSET__ "MONACO "
@@ -60,6 +61,9 @@
 #undef LPASS_BE_QUAT_MI2S_TX
 #define LPASS_BE_QUAT_MI2S_TX "MI2S-LPAIF_RXTX-TX-PRIMARY"
 #endif
+#define BT_SLIMBUS_CLK_STR "BT SLIMBUS CLK SRC"
+/* Slimbus device id for SLIMBUS_DEVICE_1 */
+#define BT_SLIMBUS_DEV_ID 0
 
 struct msm_asoc_mach_data {
 	struct snd_info_entry *codec_root;
@@ -74,11 +78,17 @@ struct msm_asoc_mach_data {
 	bool visense_enable;
 };
 
+enum bt_slimbus_clk_src {
+	SLIMBUS_CLOCK_SRC_XO = 1,
+	SLIMBUS_CLOCK_SRC_RCO = 2
+};
+
 static bool is_initial_boot;
 static bool codec_reg_done;
 static struct snd_soc_card snd_soc_card_monaco_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
+static atomic_t bt_slim_clk_src_value = ATOMIC_INIT(SLIMBUS_CLOCK_SRC_XO);
 
 static void check_userspace_service_state(struct snd_soc_pcm_runtime *rtd,
 						struct msm_common_pdata *pdata)
@@ -461,12 +471,75 @@ err:
 	return ret;
 }
 
+int slimbus_clock_src_info(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = SLIMBUS_CLOCK_SRC_XO;
+	uinfo->value.integer.max = SLIMBUS_CLOCK_SRC_RCO;
+
+	return 0;
+}
+
+int slimbus_clock_src_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = atomic_read(&bt_slim_clk_src_value);
+	return 0;
+}
+
+int slimbus_clock_src_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	int ret = 0;
+
+	if (ucontrol->value.integer.value[0] < SLIMBUS_CLOCK_SRC_XO ||
+			ucontrol->value.integer.value[0] > SLIMBUS_CLOCK_SRC_RCO) {
+		pr_err("%s: Invalid ctrl value %s=%d\n", __func__, BT_SLIMBUS_CLK_STR,
+				ucontrol->value.integer.value[0]);
+		return -EINVAL;
+	}
+
+	dev_dbg(component->dev, "%s: old_clock = %d : new_clock = %d\n", __func__,
+			atomic_read(&bt_slim_clk_src_value),
+			ucontrol->value.integer.value[0]);
+
+	if (atomic_read(&bt_slim_clk_src_value) != ucontrol->value.integer.value[0]) {
+		ret = audio_prm_set_slimbus_clock_src(ucontrol->value.integer.value[0],
+			BT_SLIMBUS_DEV_ID);
+		if (!ret) {
+			atomic_set(&bt_slim_clk_src_value,
+					ucontrol->value.integer.value[0]);
+		} else {
+			pr_err("%s: audio_prm_set_slimbus_clock_src value = %d failed : ret = %d\n",
+					__func__, ucontrol->value.integer.value[0], ret);
+		}
+	}
+	return ret;
+}
+
+static struct snd_kcontrol_new slimbus_clock_src_ctrls[1] = {
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = BT_SLIMBUS_CLK_STR,
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.info = slimbus_clock_src_info,
+		.get = slimbus_clock_src_get,
+		.put = slimbus_clock_src_put,
+		.private_value = 0,
+	}
+};
+
 static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 {
 	unsigned int rx_ch[WCN_CDC_SLIM_RX_CH_MAX] = {157, 158};
 	unsigned int tx_ch[WCN_CDC_SLIM_TX_CH_MAX]  = {159, 160};
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	int ret = 0;
+	int ret = 0, rc = 0;
+	u32 bt_slim_clk_src_ctrl = 0;
 
 	ret = snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
 					   tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
@@ -474,6 +547,20 @@ static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 
 	msm_common_dai_link_init(rtd);
+
+
+	rc = of_property_read_u32(rtd->card->dev->of_node,
+			"qcom,bt-slim-clk-src-ctrl", &bt_slim_clk_src_ctrl);
+
+	if (!rc && bt_slim_clk_src_ctrl) {
+		ret = snd_soc_add_card_controls(rtd->card,
+				slimbus_clock_src_ctrls,
+				ARRAY_SIZE(slimbus_clock_src_ctrls));
+		if (ret)
+			dev_err(rtd->card->dev, "unable to add %s mixer control\n",
+				BT_SLIMBUS_CLK_STR);
+	}
+
 	return ret;
 }
 
@@ -951,6 +1038,9 @@ static int monaco_ssr_enable(struct device *dev, void *data)
 		dev_dbg(dev, "%s: TODO\n", __func__);
 	}
 
+	atomic_set(&bt_slim_clk_src_value, SLIMBUS_CLOCK_SRC_XO);
+	dev_dbg(dev, "%s: reset bt_slim_clk_src_value = %d\n", __func__,
+		atomic_read(&bt_slim_clk_src_value));
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
 	snd_card_notify_user(SND_CARD_STATUS_ONLINE);
 #endif
