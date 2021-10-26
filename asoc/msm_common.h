@@ -1,4 +1,4 @@
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -48,6 +48,8 @@ struct msm_common_pdata {
 	uint32_t mi2s_clk_attribute[MI2S_TDM_AUXPCM_MAX];
 };
 
+int snd_card_notify_user(int card_status);
+
 struct msm_common_pdata *msm_common_get_pdata(struct snd_soc_card *card);
 
 void msm_common_set_pdata(struct snd_soc_card *card,
@@ -57,6 +59,8 @@ int snd_card_sysfs_init(void);
 
 int msm_common_snd_hw_params(struct snd_pcm_substream *substream,
 			struct snd_pcm_hw_params *params);
+
+int snd_card_sysfs_init(void);
 
 int msm_common_snd_startup(struct snd_pcm_substream *substream);
 
