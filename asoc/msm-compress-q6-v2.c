@@ -260,6 +260,11 @@ static int msm_compr_set_render_mode(struct msm_compr_audio *prtd,
 		prtd->run_mode =
 			ASM_SESSION_CMD_RUN_STARTIME_RUN_WITH_TTP_PASS_THROUGH;
 		break;
+	case SNDRV_COMPRESS_RENDER_MODE_ABSOLUTETIME:
+		render_mode = ASM_SESSION_MTMX_STRTR_PARAM_RENDER_LOCAL_STC;
+		prtd->run_mode =
+			ASM_SESSION_CMD_RUN_STARTIME_RUN_AT_ABSOLUTEIME;
+		break;
 	default:
 		pr_err("%s, Invalid render mode %u\n", __func__,
 			render_mode);
@@ -359,6 +364,30 @@ static int msm_compr_set_ttp_offset(struct audio_client *ac,
 	ret = q6asm_send_mtmx_strtr_ttp_offset(ac, &ttp_offset, param_id, dir);
 	if (ret)
 		pr_err("%s, ttp offset can't be set error %d\n", __func__,
+			ret);
+
+	return ret;
+}
+
+
+static int msm_compr_set_external_sink_latency(struct audio_client *ac,
+		uint32_t offset_lsw, uint32_t offset_msw, int dir)
+{
+	int ret = -EINVAL;
+	struct asm_session_mtmx_strtr_param_external_sink_latency_t external_sink_latency;
+	uint32_t param_id;
+
+	pr_debug("%s, external_sink_latency lsw 0x%x  external_sink_latency msw 0x%x\n",
+		 __func__, offset_lsw, offset_msw);
+
+	memset(&external_sink_latency, 0,
+	       sizeof(struct asm_session_mtmx_strtr_param_external_sink_latency_t));
+	external_sink_latency.external_sink_latency_lsw = offset_lsw;
+	external_sink_latency.external_sink_latency_msw = offset_msw;
+	param_id = ASM_SESSION_MTMX_STRTR_PARAM_EXTERNAL_SINK_DELAY;
+	ret = q6asm_send_mtmx_strtr_external_sink_latency(ac, &external_sink_latency, param_id, dir);
+	if (ret)
+		pr_err("%s, external_sink_latency can't be set error %d\n", __func__,
 			ret);
 
 	return ret;
@@ -3380,6 +3409,9 @@ static int msm_compr_set_metadata(struct snd_compr_stream *cstream,
 				metadata->value[1]);
 	} else if (metadata->key == SNDRV_COMPRESS_IN_TTP_OFFSET) {
 		return msm_compr_set_ttp_offset(ac, metadata->value[0],
+				metadata->value[1], cstream->direction);
+	} else if (metadata->key == SNDRV_COMPRESS_OUT_EXTERNAL_SINK_LATENCY) {
+		return msm_compr_set_external_sink_latency(ac, metadata->value[0],
 				metadata->value[1], cstream->direction);
 	}
 

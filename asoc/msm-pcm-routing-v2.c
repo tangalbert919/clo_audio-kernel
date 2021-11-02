@@ -2633,6 +2633,11 @@ static void msm_pcm_routing_process_voice(u16 reg, u16 val, int set)
 
 	session_id = msm_pcm_routing_get_voc_sessionid(val);
 
+	if (!session_id) {
+		pr_err("%s: Invalid session_id %x\n", __func__, session_id);
+		return;
+	}
+
 	pr_debug("%s: FE DAI 0x%x session_id 0x%x\n",
 		__func__, val, session_id);
 
@@ -5701,6 +5706,38 @@ static int get_ec_ref_port_id(int value, int *index)
 		*index = 37;
 		port_id = AFE_PORT_ID_QUINARY_TDM_TX;
 		break;
+	case 38:
+		*index = 38;
+		port_id = AFE_PORT_ID_QUINARY_TDM_RX;
+		break;
+	case 39:
+		*index = 39;
+		port_id = AFE_PORT_ID_QUINARY_TDM_RX_1;
+		break;
+	case 40:
+		*index = 40;
+		port_id = AFE_PORT_ID_QUINARY_TDM_RX_2;
+		break;
+	case 41:
+		*index = 41;
+		port_id = AFE_PORT_ID_QUINARY_TDM_RX_3;
+		break;
+	case 42:
+		*index = 42;
+		port_id = AFE_PORT_ID_SENARY_TDM_RX;
+		break;
+	case 43:
+		*index = 43;
+		port_id = AFE_PORT_ID_SENARY_TDM_RX_1;
+		break;
+	case 44:
+		*index = 44;
+		port_id = AFE_PORT_ID_SENARY_TDM_RX_2;
+		break;
+	case 45:
+		*index = 45;
+		port_id = AFE_PORT_ID_SENARY_TDM_RX_3;
+		break;
 	default:
 		*index = 0; /* NONE */
 		pr_err("%s: Invalid value %d\n", __func__, value);
@@ -5757,7 +5794,9 @@ static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "I2S_RX",
 	"WSA_CDC_DMA_TX_0", "WSA_CDC_DMA_TX_1", "WSA_CDC_DMA_TX_2",
 	"SLIM_7_RX", "RX_CDC_DMA_RX_0", "RX_CDC_DMA_RX_1", "RX_CDC_DMA_RX_2",
 	"RX_CDC_DMA_RX_3", "TX_CDC_DMA_TX_0", "TERT_TDM_RX_2", "SEC_TDM_TX_0",
-	"QUIN_TDM_TX_0",
+	"QUIN_TDM_TX_0", "QUIN_TDM_RX_0", "QUIN_TDM_RX_1", "QUIN_TDM_RX_2",
+	"QUIN_TDM_RX_3", "SEN_TDM_RX_0", "SEN_TDM_RX_1", "SEN_TDM_RX_2",
+	"SEN_TDM_RX_3",
 };
 
 static const struct soc_enum msm_route_ec_ref_rx_enum[] = {
@@ -28915,6 +28954,14 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"AUDIO_REF_EC_UL1 MUX", "TERT_TDM_RX_2", "TERT_TDM_RX_2"},
 	{"AUDIO_REF_EC_UL1 MUX", "SEC_TDM_TX_0", "SEC_TDM_TX_0"},
 	{"AUDIO_REF_EC_UL1 MUX", "QUIN_TDM_TX_0", "QUIN_TDM_TX_0"},
+	{"AUDIO_REF_EC_UL1 MUX", "QUIN_TDM_RX_0", "QUIN_TDM_RX_0"},
+	{"AUDIO_REF_EC_UL1 MUX", "QUIN_TDM_RX_1", "QUIN_TDM_RX_1"},
+	{"AUDIO_REF_EC_UL1 MUX", "QUIN_TDM_RX_2", "QUIN_TDM_RX_2"},
+	{"AUDIO_REF_EC_UL1 MUX", "QUIN_TDM_RX_3", "QUIN_TDM_RX_3"},
+	{"AUDIO_REF_EC_UL1 MUX", "SEN_TDM_RX_0", "SEN_TDM_RX_0"},
+	{"AUDIO_REF_EC_UL1 MUX", "SEN_TDM_RX_1", "SEN_TDM_RX_1"},
+	{"AUDIO_REF_EC_UL1 MUX", "SEN_TDM_RX_2", "SEN_TDM_RX_2"},
+	{"AUDIO_REF_EC_UL1 MUX", "SEN_TDM_RX_3", "SEN_TDM_RX_3"},
 
 	{"AUDIO_REF_EC_UL2 MUX", "PRI_MI2S_TX", "PRI_MI2S_TX"},
 	{"AUDIO_REF_EC_UL2 MUX", "SEC_MI2S_TX", "SEC_MI2S_TX"},
