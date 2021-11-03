@@ -1,0 +1,72 @@
+# auto-detect subdirs
+ifeq ($(CONFIG_ARCH_SM6150), y)
+include $(srctree)/techpack/audio/config/sa6155auto.conf
+export
+endif
+ifeq ($(CONFIG_ARCH_SM8150), y)
+include $(srctree)/techpack/audio/config/sa8155auto.conf
+export
+endif
+
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(srctree)/techpack/audio/include/uapi \
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio/include/uapi \
+                -I$(srctree)/techpack/audio/include
+
+ifeq ($(CONFIG_ARCH_SM6150), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/sa6155autoconf.h
+endif
+ifeq ($(CONFIG_ARCH_SM8150), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/sa8155autoconf.h
+endif
+
+#audio_platform.ko
+obj-y += msm-audio-effects-q6-v2.o
+obj-y += msm-compress-q6-v2.o
+obj-y += msm-dai-fe.o
+obj-y += msm-dai-q6-hdmi-v2.o
+obj-y += msm-dai-q6-v2.o
+obj-y += msm-dai-slim.o
+obj-y += msm-dai-stub-v2.o
+obj-y += msm-lsm-client.o
+obj-y += msm-pcm-afe-v2.o
+obj-y += msm-pcm-dtmf-v2.o
+obj-y += msm-pcm-hostless.o
+obj-y += msm-pcm-host-voice-v2.o
+obj-y += msm-pcm-loopback-v2.o
+obj-y += msm-pcm-q6-noirq.o
+obj-y += msm-pcm-q6-v2.o
+obj-y += msm-qti-pp-config.o
+obj-y += msm-pcm-routing-v2.o
+obj-y += msm-pcm-voice-v2.o
+obj-y += msm-pcm-voip-v2.o
+obj-y += msm-transcode-loopback-q6-v2.o
+obj-y += platform_init.o
+obj-y += msm-ds2-dap-config.o
+obj-y += msm-pcm-routing-devdep.o
+
+#audio_stub.ko and audio_hdmi.ko
+obj-y += codecs/
+
+#audio_machine_talos.ko
+# For sa6155 sound card driver
+ifdef CONFIG_SND_SOC_SA6155
+obj-y += sa6155.o
+endif
+#audio_machine_hana.ko
+# For sa8155 sound card driver
+ifdef CONFIG_SND_SOC_SA8155
+obj-y += sa8155.o
+endif
+
+
+ccflags-y += -Itechpack/audio/include/uapi/
+ccflags-y += -Itechpack/audio/include/
+

@@ -1,0 +1,57 @@
+# auto-detect subdirs
+ifeq ($(CONFIG_ARCH_SM6150), y)
+include $(srctree)/techpack/audio/config/sa6155auto.conf
+export
+endif
+ifeq ($(CONFIG_ARCH_SM8150), y)
+include $(srctree)/techpack/audio/config/sa8155auto.conf
+export
+endif
+
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(srctree)/techpack/audio/include/uapi \
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio/include/uapi \
+                -I$(srctree)/techpack/audio/include
+
+ifeq ($(CONFIG_ARCH_SM6150), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/sa6155autoconf.h
+endif
+ifeq ($(CONFIG_ARCH_SM8150), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/sa8155autoconf.h
+endif
+
+#audio_q6_notifier.ko
+obj-y += audio_notifier.o
+obj-y += audio_ssr.o
+
+#audio_adsp_loader.ko
+obj-y += adsp-loader.o
+
+#audio_q6.ko
+obj-y += msm-audio-event-notify.o
+obj-y += audio_calibration.o
+obj-y += audio_cal_utils.o
+obj-y += q6adm.o
+obj-y += q6afe.o
+obj-y += q6asm.o
+obj-y += q6audio-v2.o
+obj-y += q6voice.o
+obj-y += q6core.o
+obj-y += q6common.o
+obj-y += rtac.o
+obj-y += q6lsm.o
+obj-y += audio_slimslave.o
+obj-y += adsp_err.o
+obj-y += msm_audio_ion.o
+obj-y += avtimer.o
+obj-y += q6_init.o
+
+#audio_native.ko
+obj-y += codecs/

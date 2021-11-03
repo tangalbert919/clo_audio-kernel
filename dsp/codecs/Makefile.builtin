@@ -1,0 +1,57 @@
+# auto-detect subdirs
+ifeq ($(CONFIG_ARCH_SM6150), y)
+include $(srctree)/techpack/audio/config/sa6155auto.conf
+export
+endif
+ifeq ($(CONFIG_ARCH_SM8150), y)
+include $(srctree)/techpack/audio/config/sa8155auto.conf
+export
+endif
+
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(srctree)/techpack/audio/include/uapi \
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio/include/uapi \
+                -I$(srctree)/techpack/audio/include
+
+ifeq ($(CONFIG_ARCH_SM6150), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/sa6155autoconf.h
+endif
+ifeq ($(CONFIG_ARCH_SM8150), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/sa8155autoconf.h
+endif
+
+obj-y += q6audio_v2.o
+obj-y += q6audio_v2_aio.o
+obj-y += audio_utils_aio.o
+obj-y += audio_utils.o
+obj-y += audio_native.o
+obj-y += aac_in.o
+obj-y += amrnb_in.o
+obj-y += amrwb_in.o
+obj-y += audio_aac.o
+obj-y += audio_alac.o
+obj-y += audio_amrnb.o
+obj-y += audio_amrwb.o
+obj-y += audio_amrwbplus.o
+obj-y += audio_ape.o
+obj-y += audio_evrc.o
+obj-y += audio_g711alaw.o
+obj-y += audio_g711mlaw.o
+obj-y += audio_hwacc_effects.o
+obj-y += audio_mp3.o
+obj-y += audio_multi_aac.o
+obj-y += audio_qcelp.o
+obj-y += audio_wma.o
+obj-y += audio_wmapro.o
+obj-y += evrc_in.o
+obj-y += g711alaw_in.o
+obj-y += g711mlaw_in.o
+obj-y += qcelp_in.o
+

@@ -1,0 +1,4 @@
+#audio_apr.ko
+obj-y += apr.o
+obj-y += apr_v2.o
+obj-y += apr_tal_rpmsg.o
