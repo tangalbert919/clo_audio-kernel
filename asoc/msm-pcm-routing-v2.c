@@ -42142,7 +42142,7 @@ static const struct snd_kcontrol_new
 		},
 };
 
-#define ASRC_PARAM_MAX				10
+#define ASRC_PARAM_MAX				7
 #define ASRC_SCHED_DELAY_MS 			50
 
 #define MODULE_ID_AUTO_ASRC			0x123A7000
@@ -42200,6 +42200,8 @@ struct asrc_config {
 };
 
 static struct asrc_config asrc_cfg[ASRC_PARAM_MAX];
+
+static int asrc_params[ASRC_PARAM_MAX];
 
 static int sched_delay_ms = ASRC_SCHED_DELAY_MS;
 
@@ -42349,8 +42351,7 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 	unsigned long copp = -1;
 	bool copp_is_found = false;
 	struct msm_pcm_routing_bdai_data *bedai = NULL;
-	int port_type = (dir == SESSION_TYPE_RX) ? MSM_AFE_PORT_TYPE_RX :
-			       MSM_AFE_PORT_TYPE_TX;
+	int port_type = -1;
 
 	mutex_lock(&routing_lock);
 
@@ -42364,6 +42365,10 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 	dir = params->dir;
 	be_id = params->be_id;
 	bedai = &msm_bedais[be_id];
+
+	port_type = (dir == SESSION_TYPE_RX) ? MSM_AFE_PORT_TYPE_RX :
+			  MSM_AFE_PORT_TYPE_TX;
+
 	if (afe_get_port_type(bedai->port_id) != port_type) {
 		pr_err("%s: port_type not match: be_dai %d type %d\n",
 			__func__, be_id, port_type);
@@ -42647,20 +42652,21 @@ static int msm_dai_q6_asrc_config_get(
 	return 0;
 }
 
-static int msm_dai_q6_asrc_config_put(
-	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+static int asrc_start()
 {
 	int ret = 0, idx = 0, i = 0, be_id = -1, module_enabled = 0;
 	struct afe_param_id_dev_timing_stats timing_stats = {0};
 	struct asrc_module_config_params params = {0};
 
-	int enable = ucontrol->value.integer.value[0];
-	int fe_id  = ucontrol->value.integer.value[1];
-	int dir    = ucontrol->value.integer.value[2];
-	int be_afe = ucontrol->value.integer.value[3];
-	int m_io   = ucontrol->value.integer.value[4];
-	int param  = ucontrol->value.integer.value[5];
-	int delay  = ucontrol->value.integer.value[6];
+	int enable = asrc_params[0];
+	int fe_id  = asrc_params[1];
+	int dir    = asrc_params[2];
+	int be_afe = asrc_params[3];
+	int m_io   = asrc_params[4];
+	int param  = asrc_params[5];
+	int delay  = asrc_params[6];
+
+	memset(asrc_params,0,sizeof(asrc_params));
 
 	/* group device */
 	be_id = msm_pcm_get_be_id_from_port_id(be_afe & ~0x0100);
@@ -42771,6 +42777,23 @@ static int msm_dai_q6_asrc_config_put(
 	}
 
 done:
+	return ret;
+}
+
+static int msm_dai_q6_asrc_config_put(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0, j = 0;
+	for(j=0; j<ASRC_PARAM_MAX; j++){
+		// if there is a value, update the global variable
+		if( (ucontrol->value.integer.value[j]) != 0 ){
+			asrc_params[j] = ucontrol->value.integer.value[j];
+
+			//asrc starts when the last value is updated
+			if( (j+1) == ASRC_PARAM_MAX)
+				return asrc_start();
+		}
+	}
 	return ret;
 }
 
