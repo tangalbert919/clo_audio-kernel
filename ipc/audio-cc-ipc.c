@@ -20,6 +20,8 @@
 #include <linux/vmalloc.h>
 #include <linux/rpmsg.h>
 #include <ipc/audio-cc-ipc.h>
+#include <dsp/audio_notifier.h>
+#include <soc/snd_event.h>
 
 #define CC_IPC_DRIVER_NAME "audio-cc-ipc"
 #define CC_IPC_NAME_MAX_LEN 32
@@ -87,6 +89,7 @@ struct cc_ipc_plat_private {
 	struct cc_ipc_priv *g_ipriv[CC_IPC_MAX_DEV];
 	struct work_struct add_child_dev_work;
 	struct mutex g_ipriv_lock;
+	struct delayed_work ssr_snd_event_work;
 };
 
 struct cc_ipc_plat_private *cc_ipc_plat_priv;
@@ -102,6 +105,12 @@ static void cc_ipc_add_child_dev_func(struct work_struct *work)
 		return;
 	}
 	cc_ipc_plat_priv->is_initial_boot = false;
+}
+
+static void cc_ipc_snd_event_func(struct work_struct *work)
+{
+	pr_debug("%s:\n", __func__);
+	snd_event_notify_v2(cc_ipc_plat_priv->dev, SND_EVENT_UP, AUDIO_NOTIFIER_CC_DOMAIN);
 }
 
 static ssize_t cc_ipc_fread(struct file *file, char __user *buf,
@@ -535,6 +544,45 @@ done:
 	return ret;
 }
 
+static int cc_ipc_notifier_service_cb(struct notifier_block *this,
+				      unsigned long opcode, void *ptr)
+{
+	struct audio_notifier_cb_data *cb_data = ptr;
+
+	pr_debug("%s: opcode %d\n", __func__, opcode);
+
+	switch (opcode) {
+	case AUDIO_NOTIFIER_SERVICE_DOWN:
+		snd_event_notify_v2(cc_ipc_plat_priv->dev, SND_EVENT_DOWN, cb_data->domain);
+		break;
+	case AUDIO_NOTIFIER_SERVICE_UP:
+		/*
+		 * Delaying work to call SND_EVENT_UP after rpmsg probe
+		 */
+		schedule_delayed_work(&cc_ipc_plat_priv->ssr_snd_event_work,
+				msecs_to_jiffies(3 * 1000));
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block notifier_cc_nb = {
+	.notifier_call  = cc_ipc_notifier_service_cb,
+	.priority = 0,
+};
+
+static void cc_ipc_ssr_disable(struct device *dev, void *data)
+{
+	pr_debug("%s:\n", __func__);
+}
+
+static const struct snd_event_ops cc_ipc_ops = {
+	.disable = cc_ipc_ssr_disable,
+};
+
 static int cc_ipc_rpmsg_probe(struct rpmsg_device *rpdev)
 {
 	int ret = 0;
@@ -668,10 +716,27 @@ static int audio_cc_ipc_platform_driver_probe(struct platform_device *pdev)
 	mutex_init(&cc_ipc_plat_priv->g_ipriv_lock);
 
 	INIT_WORK(&cc_ipc_plat_priv->add_child_dev_work, cc_ipc_add_child_dev_func);
+	INIT_DELAYED_WORK(&cc_ipc_plat_priv->ssr_snd_event_work, cc_ipc_snd_event_func);
 
 	ret = register_rpmsg_driver(&cc_ipc_rpmsg_driver);
 	if (ret < 0)
 		pr_err("audio_cc_ipc: failed to register rpmsg driver\n");
+
+	/*
+	 * TODO: Move audio notififer register/deregister to rpmsg probe/remove to
+	 * get notified about the SSR up and down events and synchronize the SUBSYTEM UP/DOWN events
+	 * with rpmsg probe/remove calls
+	 */
+	ret = audio_notifier_register("audio_cc_ipc", AUDIO_NOTIFIER_CC_DOMAIN,
+						&notifier_cc_nb);
+	if (ret < 0)
+		pr_err("%s: Audio notifier register failed ret = %d\n", __func__, ret);
+
+	ret = snd_event_client_register_v2(&pdev->dev, &cc_ipc_ops, NULL, AUDIO_NOTIFIER_CC_DOMAIN);
+	if (!ret)
+		snd_event_notify_v2(&pdev->dev, SND_EVENT_UP, AUDIO_NOTIFIER_CC_DOMAIN);
+	else
+		pr_err("%s: Registration with SND event FWK failed ret = %d\n",	__func__, ret);
 
 	cc_ipc_plat_priv->is_initial_boot = true;
 
@@ -682,6 +747,8 @@ static int audio_cc_ipc_platform_driver_remove(struct platform_device *pdev)
 {
 	pr_debug("%s",__func__);
 
+	audio_notifier_deregister("audio_cc_ipc");
+	snd_event_client_deregister(&pdev->dev);
 	unregister_rpmsg_driver(&cc_ipc_rpmsg_driver);
 	mutex_destroy(&cc_ipc_plat_priv->g_ipriv_lock);
 	cc_ipc_plat_priv = NULL;
