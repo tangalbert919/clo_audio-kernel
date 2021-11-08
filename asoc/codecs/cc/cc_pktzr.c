@@ -114,10 +114,6 @@ int cc_pktzr_send_packet(uint32_t opcode, void *req_payload, size_t req_size,
 
 	reinit_completion(&ppriv->thread_complete);
 
-	/* TODO: Need to fix as part of SSR handling
-	 * registering to avoid NULL pointer expection*/
-	cc_pktzr_register_device();
-
 	ret = audio_cc_ipc_send_pkt(ppriv->handle, msg_pkt, pkt_size);
 	if (ret < 0) {
 		pr_err("%s Failed to send pkt\n", __func__);
