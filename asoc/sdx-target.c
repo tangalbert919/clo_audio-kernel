@@ -86,6 +86,9 @@
 #define TDM_SLOT_MAX 8
 #define TDM_SLOT_OFFSET_MAX 32
 
+#define MODEM_STATE_ONLINE 1
+#define MODEM_STATE_OFFLINE 0
+
 enum mi2s_types {
 	PRI_MI2S,
 	SEC_MI2S,
@@ -302,6 +305,7 @@ static int sdx_auxpcm_mode = I2S_PCM_MASTER_MODE;
 static int sdx_sec_auxpcm_mode = I2S_PCM_MASTER_MODE;
 static int sdx_prim_tdm_mode = I2S_PCM_MASTER_MODE;
 static int sdx_sec_tdm_mode = I2S_PCM_SLAVE_MODE;
+static int sdx_modem_state = MODEM_STATE_OFFLINE;
 
 static int sdx_spk_control = 1;
 static int sdx_hifi_control;
@@ -323,13 +327,19 @@ static struct snd_soc_card snd_soc_card_auto_sdx = {
 	.name = "sdx-auto-i2s-snd-card",
 };
 
+static void sdx_set_modem_state(void *dev)
+{
+	sdx_modem_state = MODEM_STATE_OFFLINE;
+	dev_info(dev, "%s: setting modem state to 0 \n", __func__);
+}
+
 static int sdx_lpass_io_write(struct snd_soc_card * card, u32 val, void __iomem *addr)
 {
 	int ret = -EINVAL;
 
 	mutex_lock(&snd_card_mutex);
 
-	if (snd_card_is_online_state(card->snd_card )) {
+	if (sdx_modem_state == MODEM_STATE_ONLINE) {
 		iowrite32(val, addr);
 		ret = 0;
 	}
@@ -4310,6 +4320,7 @@ static int sdx_ssr_enable(struct device *dev, void *data)
 	dev_info(dev, "%s: setting snd_card to ONLINE\n", __func__);
 	mutex_lock(&snd_card_mutex);
 	snd_soc_card_change_online_state(card, 1);
+	sdx_modem_state = MODEM_STATE_ONLINE;
 	mutex_unlock(&snd_card_mutex);
 
 err:
@@ -4329,6 +4340,7 @@ static void sdx_ssr_disable(struct device *dev, void *data)
 	dev_info(dev, "%s: setting snd_card to OFFLINE\n", __func__);
 	mutex_lock(&snd_card_mutex);
 	snd_soc_card_change_online_state(card, 0);
+	sdx_modem_state = MODEM_STATE_OFFLINE;
 	mutex_unlock(&snd_card_mutex);
 
 	afe_clear_config(AFE_CDC_REGISTERS_CONFIG);
@@ -4512,6 +4524,8 @@ static int sdx_asoc_machine_probe(struct platform_device *pdev)
 		pr_err("%s: Registration with SND event FWK failed ret = %d\n",
 			__func__, ret);
 
+	subsys_register_early_notifier("modem", AUDIO_LAYER_NOTIF, sdx_set_modem_state, &pdev->dev);
+
 	place_marker("M - DRIVER Audio Ready");
 
 	return 0;
@@ -4538,6 +4552,7 @@ static int sdx_asoc_machine_remove(struct platform_device *pdev)
 	iounmap(pdata->lpass_mux_spkr_ctl_virt_addr);
 	iounmap(pdata->lpaif_sec_muxsel_virt_addr);
 	iounmap(pdata->lpass_mux_mic_ctl_virt_addr);
+	subsys_unregister_early_notifier("modem", AUDIO_LAYER_NOTIF);
 	snd_soc_unregister_card(card);
 
 	return 0;
