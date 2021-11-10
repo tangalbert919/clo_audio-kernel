@@ -107,7 +107,7 @@ typedef struct apm_cmd_header_t
 	@values > 0 bytes, in multiples of 4 bytes */
 }apm_cmd_header_t;
 
-typedef struct apm_module_param_data_t
+struct apm_module_param_data_t
 {
 	uint32_t module_instance_id;
 	/**< Valid instance ID of module
@@ -127,7 +127,9 @@ typedef struct apm_module_param_data_t
 	uint32_t error_code;
 	/**< Error code populated by the entity hosting the	module.
 	 Applicable only for out-of-band command mode  */
-}apm_module_param_data_t;
+}__attribute__((packed, aligned(8)));
+
+typedef struct apm_module_param_data_t apm_module_param_data_t;
 
 typedef struct audio_hw_clk_cfg_req_param_t
 {

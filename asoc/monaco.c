@@ -53,6 +53,11 @@
 #undef LPASS_BE_PRI_MI2S_TX
 #define LPASS_BE_PRI_MI2S_TX "MI2S-LPAIF_VA-TX-PRIMARY"
 #endif
+#ifdef LPASS_BE_PRI_MI2S_RX
+#undef LPASS_BE_PRI_MI2S_RX
+#define LPASS_BE_PRI_MI2S_RX "MI2S-LPAIF_VA-RX-PRIMARY"
+#endif
+
 #ifdef LPASS_BE_QUAT_MI2S_RX
 #undef LPASS_BE_QUAT_MI2S_RX
 #define LPASS_BE_QUAT_MI2S_RX "MI2S-LPAIF_RXTX-RX-PRIMARY"
@@ -60,6 +65,15 @@
 #ifdef LPASS_BE_QUAT_MI2S_TX
 #undef LPASS_BE_QUAT_MI2S_TX
 #define LPASS_BE_QUAT_MI2S_TX "MI2S-LPAIF_RXTX-TX-PRIMARY"
+#endif
+
+#ifdef LPASS_BE_PRI_TDM_TX_0
+#undef LPASS_BE_PRI_TDM_TX_0
+#define LPASS_BE_PRI_TDM_TX_0 "TDM-LPAIF_VA-TX-PRIMARY"
+#endif
+#ifdef LPASS_BE_PRI_TDM_RX_0
+#undef LPASS_BE_PRI_TDM_RX_0
+#define LPASS_BE_PRI_TDM_RX_0 "TDM-LPAIF_VA-RX-PRIMARY"
 #endif
 #define BT_SLIMBUS_CLK_STR "BT SLIMBUS CLK SRC"
 /* Slimbus device id for SLIMBUS_DEVICE_1 */
@@ -900,11 +914,63 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_pri_mi2s_be_dai_links[] = {
+	{
+		.name = LPASS_BE_PRI_MI2S_TX,
+		.stream_name = LPASS_BE_PRI_MI2S_TX,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(pri_mi2s_tx2),
+	},
+	{
+		.name = LPASS_BE_PRI_MI2S_RX,
+		.stream_name = LPASS_BE_PRI_MI2S_RX,
+		.playback_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(pri_mi2s_rx),
+	},
+};
+
+static struct snd_soc_dai_link msm_pri_tdm_be_dai_links[] = {
+	{
+		.name = LPASS_BE_PRI_TDM_TX_0,
+		.stream_name = LPASS_BE_PRI_TDM_TX_0,
+		.capture_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(pri_tdm_tx),
+	},
+	{
+		.name = LPASS_BE_PRI_TDM_RX_0,
+		.stream_name = LPASS_BE_PRI_TDM_RX_0,
+		.playback_only = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+		.ops = &msm_common_be_ops,
+		SND_SOC_DAILINK_REG(pri_tdm_rx),
+	},
+};
+
 static struct snd_soc_dai_link msm_monaco_dai_links[
 	ARRAY_SIZE(msm_common_dai_links) +
 	ARRAY_SIZE(msm_va_dai_links) +
 	ARRAY_SIZE(msm_mi2s_be_dai_links) +
-	ARRAY_SIZE(msm_wcn_be_dai_links)
+	ARRAY_SIZE(msm_wcn_be_dai_links) +
+	ARRAY_SIZE(msm_pri_mi2s_be_dai_links) +
+	ARRAY_SIZE(msm_pri_tdm_be_dai_links)
 ];
 
 static const struct of_device_id monaco_asoc_machine_of_match[]  = {
@@ -986,6 +1052,28 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 				msm_common_dai_links,
 				sizeof(msm_common_dai_links));
 			total_links += ARRAY_SIZE(msm_common_dai_links);
+
+			rc = of_property_read_u32(dev->of_node,
+				"qcom,mi2s-audio-intf", &val);
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): MI2S support present\n",
+					__func__);
+				memcpy(msm_monaco_dai_links + total_links,
+					msm_pri_mi2s_be_dai_links,
+					sizeof(msm_pri_mi2s_be_dai_links));
+				total_links += ARRAY_SIZE(msm_pri_mi2s_be_dai_links);
+			}
+
+			rc = of_property_read_u32(dev->of_node,
+				"qcom,tdm-audio-intf", &val);
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): TDM support present\n",
+					__func__);
+				memcpy(msm_monaco_dai_links + total_links,
+					msm_pri_tdm_be_dai_links,
+					sizeof(msm_pri_tdm_be_dai_links));
+				total_links += ARRAY_SIZE(msm_pri_tdm_be_dai_links);
+			}
 		}
 
 		// WCN BT is common for both ATH & ATH+SL variants
