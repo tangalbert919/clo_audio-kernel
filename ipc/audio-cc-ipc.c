@@ -90,6 +90,7 @@ struct cc_ipc_plat_private {
 	struct work_struct add_child_dev_work;
 	struct mutex g_ipriv_lock;
 	struct delayed_work ssr_snd_event_work;
+	atomic_t audio_cc_state;
 };
 
 struct cc_ipc_plat_private *cc_ipc_plat_priv;
@@ -107,9 +108,24 @@ static void cc_ipc_add_child_dev_func(struct work_struct *work)
 	cc_ipc_plat_priv->is_initial_boot = false;
 }
 
+static enum audio_cc_subsys_state audio_cc_get_state(void)
+{
+	return atomic_read(&cc_ipc_plat_priv->audio_cc_state);
+}
+
+static int audio_cc_set_state(enum audio_cc_subsys_state state)
+{
+	dev_dbg(cc_ipc_plat_priv->dev,"%s: setting audio cc state %d\n", __func__, state);
+	if (state < AUDIO_CC_SUBSYS_DOWN || state > AUDIO_CC_SUBSYS_UP)
+		return -EINVAL;
+	atomic_set(&cc_ipc_plat_priv->audio_cc_state, state);
+	return 0;
+}
+
 static void cc_ipc_snd_event_func(struct work_struct *work)
 {
 	pr_debug("%s:\n", __func__);
+	audio_cc_set_state(AUDIO_CC_SUBSYS_UP);
 	snd_event_notify_v2(cc_ipc_plat_priv->dev, SND_EVENT_UP, AUDIO_NOTIFIER_CC_DOMAIN);
 }
 
@@ -188,6 +204,11 @@ static unsigned int cc_ipc_fpoll(struct file *file, poll_table *wait)
 static int cc_ipc_send_pkt(struct cc_ipc_priv *ipriv, void *pkt, uint32_t pkt_size)
 {
 	int ret;
+
+	if ((audio_cc_get_state() != AUDIO_CC_SUBSYS_UP)) {
+		dev_err(cc_ipc_plat_priv->dev,"%s: Still cc  is not Up\n", __func__);
+		return -ENETRESET;
+	}
 
 	dev_dbg(ipriv->dev, "%s: ch %s, size %d\n",
 		__func__, ipriv->ch_name, pkt_size);
@@ -553,6 +574,7 @@ static int cc_ipc_notifier_service_cb(struct notifier_block *this,
 
 	switch (opcode) {
 	case AUDIO_NOTIFIER_SERVICE_DOWN:
+		audio_cc_set_state(AUDIO_CC_SUBSYS_DOWN);
 		snd_event_notify_v2(cc_ipc_plat_priv->dev, SND_EVENT_DOWN, cb_data->domain);
 		break;
 	case AUDIO_NOTIFIER_SERVICE_UP:
@@ -727,6 +749,7 @@ static int audio_cc_ipc_platform_driver_probe(struct platform_device *pdev)
 	 * get notified about the SSR up and down events and synchronize the SUBSYTEM UP/DOWN events
 	 * with rpmsg probe/remove calls
 	 */
+	audio_cc_set_state(AUDIO_CC_SUBSYS_UP);
 	ret = audio_notifier_register("audio_cc_ipc", AUDIO_NOTIFIER_CC_DOMAIN,
 						&notifier_cc_nb);
 	if (ret < 0)
