@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2019, The Linux Foundation. All rights reserved.
  *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -42,3 +44,5 @@
 #define CONFIG_MSM_QDSP6_NOTIFIER 1
 #define CONFIG_MSM_QDSP6_SSR 1
 #define CONFIG_SND_EVENT 1
+#define CONFIG_SLIMBUS_DISABLE 1
+#define CONFIG_TDM_TERT_QUAT_QUIN_DISABLE 1
