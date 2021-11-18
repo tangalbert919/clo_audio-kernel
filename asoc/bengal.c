@@ -4204,11 +4204,6 @@ static void msm_add_tdm_snd_controls(struct snd_soc_component *component)
 	snd_soc_add_component_controls(component, msm_tdm_snd_controls,
 				ARRAY_SIZE(msm_tdm_snd_controls));
 }
-#else
-static void msm_add_tdm_snd_controls(struct snd_soc_component *component)
-{
-	return;
-}
 #endif
 
 #ifndef CONFIG_MI2S_DISABLE
@@ -4216,11 +4211,6 @@ static void msm_add_mi2s_snd_controls(struct snd_soc_component *component)
 {
 	snd_soc_add_component_controls(component, msm_mi2s_snd_controls,
 				ARRAY_SIZE(msm_mi2s_snd_controls));
-}
-#else
-static void msm_add_mi2s_snd_controls(struct snd_soc_component *component)
-{
-	return;
 }
 #endif
 
@@ -4230,53 +4220,26 @@ static void msm_add_auxpcm_snd_controls(struct snd_soc_component *component)
 	snd_soc_add_component_controls(component, msm_auxpcm_snd_controls,
 				ARRAY_SIZE(msm_auxpcm_snd_controls));
 }
-#else
-static void msm_add_auxpcm_snd_controls(struct snd_soc_component *component)
-{
-	return;
-}
 #endif
 
 static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int ret = -EINVAL;
-	struct snd_soc_component *component;
 	struct snd_soc_component *bolero_component = NULL;
+	struct snd_soc_component *component;
 	struct snd_soc_dapm_context *dapm;
 	struct snd_card *card;
 	struct snd_info_entry *entry;
 	struct msm_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(rtd->card);
 
-	component = snd_soc_rtdcom_lookup(rtd, "bolero_codec");
-	if (!component) {
+	bolero_component = snd_soc_rtdcom_lookup(rtd, "bolero_codec");
+	if (!bolero_component) {
 		pr_err("%s: could not find component for bolero_codec\n",
 			__func__);
 		return ret;
-	} else {
-		bolero_component = component;
 	}
-
-	dapm = snd_soc_component_get_dapm(component);
-
-	ret = snd_soc_add_component_controls(component, msm_int_snd_controls,
-				ARRAY_SIZE(msm_int_snd_controls));
-	if (ret < 0) {
-		pr_err("%s: add_component_controls failed: %d\n",
-			__func__, ret);
-		return ret;
-	}
-	ret = snd_soc_add_component_controls(component, msm_common_snd_controls,
-				ARRAY_SIZE(msm_common_snd_controls));
-	if (ret < 0) {
-		pr_err("%s: add common snd controls failed: %d\n",
-			__func__, ret);
-		return ret;
-	}
-
-	msm_add_tdm_snd_controls(component);
-	msm_add_mi2s_snd_controls(component);
-	msm_add_auxpcm_snd_controls(component);
+	dapm = snd_soc_component_get_dapm(bolero_component);
 
 	snd_soc_dapm_new_controls(dapm, msm_int_dapm_widgets,
 				ARRAY_SIZE(msm_int_dapm_widgets));
@@ -4305,8 +4268,8 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		}
 		pdata->codec_root = entry;
 	}
-	bolero_info_create_codec_entry(pdata->codec_root, component);
-	bolero_register_wake_irq(component, false);
+	bolero_info_create_codec_entry(pdata->codec_root, bolero_component);
+	bolero_register_wake_irq(bolero_component, false);
 
 	component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
 	if (!component) {
@@ -4333,6 +4296,9 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 						strlen(ROULEUR_DRV_NAME))) {
 		rouleur_info_create_codec_entry(pdata->codec_root, component);
 		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map_rouleur), sm_port_map_rouleur);
+	} else {
+		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map),
+						sm_port_map);
 	}
 	codec_reg_done = true;
 	return 0;
@@ -4910,6 +4876,7 @@ static struct snd_soc_dai_link msm_rx_tx_cdc_dma_be_dai_links[] = {
 		.dynamic_be = 1,
 		.no_pcm = 1,
 		.dpcm_playback = 1,
+		.init = &msm_int_audrx_init,
 		.id = MSM_BACKEND_DAI_RX_CDC_DMA_RX_0,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_pmdown_time = 1,
@@ -4987,7 +4954,6 @@ static struct snd_soc_dai_link msm_va_cdc_dma_be_dai_links[] = {
 		.stream_name = "VA CDC DMA0 Capture",
 		.no_pcm = 1,
 		.dpcm_capture = 1,
-		.init = &msm_int_audrx_init,
 		.id = MSM_BACKEND_DAI_VA_CDC_DMA_TX_0,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
