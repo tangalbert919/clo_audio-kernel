@@ -756,6 +756,10 @@ int q6asm_send_mtmx_strtr_ttp_offset(struct audio_client *ac,
 		struct asm_session_mtmx_strtr_param_ttp_offset_t *ttp_offset,
 		uint32_t param_id, int dir);
 
+int q6asm_send_mtmx_strtr_external_sink_latency(struct audio_client *ac,
+		struct asm_session_mtmx_strtr_param_external_sink_latency_t *external_sink_latency,
+		uint32_t param_id, int dir);
+
 /* Configure DSP render mode */
 int q6asm_send_mtmx_strtr_render_mode(struct audio_client *ac,
 		uint32_t render_mode, int dir);
