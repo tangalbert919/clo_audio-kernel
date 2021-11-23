@@ -4233,13 +4233,24 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct msm_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(rtd->card);
 
-	bolero_component = snd_soc_rtdcom_lookup(rtd, "bolero_codec");
-	if (!bolero_component) {
+	component = snd_soc_rtdcom_lookup(rtd, "bolero_codec");
+	if (!component) {
 		pr_err("%s: could not find component for bolero_codec\n",
 			__func__);
 		return ret;
+	} else {
+		bolero_component = component;
 	}
-	dapm = snd_soc_component_get_dapm(bolero_component);
+
+	dapm = snd_soc_component_get_dapm(component);
+
+	ret = snd_soc_add_component_controls(component, msm_int_snd_controls,
+				ARRAY_SIZE(msm_int_snd_controls));
+	if (ret < 0) {
+		pr_err("%s: add_component_controls failed: %d\n",
+			__func__, ret);
+		return ret;
+	}
 
 	snd_soc_dapm_new_controls(dapm, msm_int_dapm_widgets,
 				ARRAY_SIZE(msm_int_dapm_widgets));
@@ -4297,8 +4308,7 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		rouleur_info_create_codec_entry(pdata->codec_root, component);
 		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map_rouleur), sm_port_map_rouleur);
 	} else {
-		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map),
-						sm_port_map);
+		bolero_set_port_map(bolero_component, ARRAY_SIZE(sm_port_map), sm_port_map);
 	}
 	codec_reg_done = true;
 	return 0;
