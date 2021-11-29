@@ -1,4 +1,4 @@
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,6 +28,11 @@
 
 #include "msm_common.h"
 
+struct snd_card_pdata {
+	struct kobject snd_card_kobj;
+	int card_status;
+}*snd_card_pdata;
+
 #define to_asoc_mach_common_pdata(kobj) \
 	container_of((kobj), struct msm_common_pdata, aud_dev_kobj)
 
@@ -51,6 +56,11 @@
 static struct attribute device_state_attr = {
 	.name = "state",
 	.mode = 0660,
+};
+
+static struct attribute card_state_attr = {
+	.name = "card_state",
+	.mode = 0666,
 };
 
 #define MAX_PORT 20
@@ -135,6 +145,71 @@ static int aud_dev_sysfs_init(struct msm_common_pdata *pdata)
 
 fail_create_file:
 	kobject_put(&pdata->aud_dev_kobj);
+done:
+	return ret;
+}
+
+int snd_card_notify_user(snd_card_status_t card_status)
+{
+	snd_card_pdata->card_status = card_status;
+	sysfs_notify(&snd_card_pdata->snd_card_kobj, NULL, "card_state");
+	return 0;
+}
+
+int snd_card_set_card_status(snd_card_status_t card_status)
+{
+	snd_card_pdata->card_status = card_status;
+	return 0;
+}
+
+static ssize_t snd_card_sysfs_show(struct kobject *kobj,
+		struct attribute *attr, char *buf)
+{
+	return snprintf(buf, BUF_SZ, "%d", snd_card_pdata->card_status);
+}
+
+static ssize_t snd_card_sysfs_store(struct kobject *kobj,
+		struct attribute *attr, const char *buf, size_t count)
+{
+	sscanf(buf, "%d", &snd_card_pdata->card_status);
+	sysfs_notify(&snd_card_pdata->snd_card_kobj, NULL, "card_state");
+	return 0;
+}
+
+static const struct sysfs_ops snd_card_sysfs_ops = {
+	.show = snd_card_sysfs_show,
+	.store = snd_card_sysfs_store,
+};
+
+static struct kobj_type snd_card_ktype = {
+	.sysfs_ops = &snd_card_sysfs_ops,
+};
+
+int snd_card_sysfs_init(void)
+{
+	int ret = 0;
+	char dir[DIR_SZ] = "snd_card";
+
+	snd_card_pdata = kcalloc(1, sizeof(struct snd_card_pdata), GFP_KERNEL);
+	ret = kobject_init_and_add(&snd_card_pdata->snd_card_kobj, &snd_card_ktype,
+			kernel_kobj, dir);
+	if (ret < 0) {
+		pr_err("%s: Failed to add kobject %s, err = %d\n",
+				__func__, dir, ret);
+		goto done;
+	}
+
+	ret = sysfs_create_file(&snd_card_pdata->snd_card_kobj, &card_state_attr);
+	if (ret < 0) {
+		pr_err("%s: Failed to add snd_card sysfs entry to %s\n",
+				__func__, dir);
+		goto fail_create_file;
+	}
+
+	return ret;
+
+fail_create_file:
+	kobject_put(&snd_card_pdata->snd_card_kobj);
 done:
 	return ret;
 }
