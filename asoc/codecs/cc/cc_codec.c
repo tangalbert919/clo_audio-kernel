@@ -13,6 +13,8 @@
 #include <sound/soc-dapm.h>
 #include <sound/tlv.h>
 #include <sound/pcm_params.h>
+#include <soc/snd_event.h>
+#include <dsp/audio_notifier.h>
 #include "cc_defs.h"
 #include "cc_pktzr.h"
 
@@ -2387,6 +2389,41 @@ static void cc_cleanup(struct cc_codec_priv *cc_priv)
 	}
 }
 
+static int cc_cdc_get_status(struct device *dev)
+{
+
+	struct cc_get_cdc_status_t *cdc_status = NULL;
+	size_t resp_size = 0;
+	int rc = 0;
+
+	rc =  cc_pktzr_send_packet(CC_CODEC_OPCODE_GET_CODEC_STATUS, NULL, 0,
+				(void **)&cdc_status, &resp_size);
+	if (rc || (cdc_status->status == CC_CDC_STATUS_DOWN)) {
+		pr_err("%s: cc codec is not up\n", __func__);
+		return 0;
+	}
+
+	pr_info("%s: cc codec status %d\n", __func__, cdc_status->status);
+
+	return rc;
+}
+
+static int cc_cdc_ssr_enable(struct device *dev, void *data)
+{
+	cc_pktzr_register_device();
+	return cc_cdc_get_status(dev);
+}
+
+static void cc_cdc_ssr_disable(struct device *dev, void *data)
+{
+	cc_pktzr_deregister_device();
+}
+
+static const struct snd_event_ops cc_cdc_ssr_ops = {
+	.enable = cc_cdc_ssr_enable,
+	.disable = cc_cdc_ssr_disable,
+};
+
 static int cc_cdc_probe(struct platform_device *pdev)
 {
 	struct cc_codec_priv *cc_priv = NULL;
@@ -2431,10 +2468,18 @@ static int cc_cdc_probe(struct platform_device *pdev)
 		goto free_priv;
 	}
 
+	ret = snd_event_client_register_v2(&pdev->dev, &cc_cdc_ssr_ops, NULL,
+					AUDIO_NOTIFIER_CC_DOMAIN);
+	if (!ret)
+		snd_event_notify_v2(&pdev->dev, SND_EVENT_UP, AUDIO_NOTIFIER_CC_DOMAIN);
+	else
+		dev_err(&pdev->dev, "%s: Registration with SND event fwk failed ret = %d\n",
+			__func__, ret);
 	return 0;
 
 free_priv:
 	cc_cleanup(cc_priv);
+	cc_pktzr_deinit();
 	devm_kfree(&pdev->dev, cc_priv);
 	cc_priv = NULL;
 	return ret;
@@ -2444,6 +2489,8 @@ static int cc_cdc_remove(struct platform_device *pdev)
 {
 	struct cc_codec_priv *cc_priv = dev_get_drvdata(&pdev->dev);
 
+	cc_pktzr_deinit();
+	snd_event_client_deregister(&pdev->dev);
 	snd_soc_unregister_component(&pdev->dev);
 	cc_cleanup(cc_priv);
 	devm_kfree(&pdev->dev, cc_priv);

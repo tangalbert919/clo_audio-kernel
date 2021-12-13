@@ -15,6 +15,7 @@
 #include <linux/of_device.h>
 #include <linux/soc/qcom/fsa4480-i2c.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/soc/qcom/slatecom_intf.h>
 #include <sound/core.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
@@ -26,6 +27,7 @@
 #include <soc/soundwire.h>
 #include <dsp/spf-core.h>
 #include <dsp/msm_audio_ion.h>
+#include <dsp/audio_notifier.h>
 #include "device_event.h"
 #include "asoc/msm-cdc-pinctrl.h"
 #include "asoc/wcd-mbhc-v2.h"
@@ -90,6 +92,7 @@ struct msm_asoc_mach_data {
 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
 	struct device_node *fsa_handle;
 	bool visense_enable;
+	struct srcu_notifier_head *slatecom_notifier_chain;
 };
 
 enum bt_slimbus_clk_src {
@@ -103,6 +106,7 @@ static struct snd_soc_card snd_soc_card_monaco_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
 static atomic_t bt_slim_clk_src_value = ATOMIC_INIT(SLIMBUS_CLOCK_SRC_XO);
+static atomic_t card_status;
 
 static void check_userspace_service_state(struct snd_soc_pcm_runtime *rtd,
 						struct msm_common_pdata *pdata)
@@ -1109,6 +1113,55 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	return card;
 }
 
+static void monaco_update_snd_card_status(unsigned long opcode)
+{
+	pr_debug("%s: Service opcode 0x%lx\n", __func__, opcode);
+
+	switch (opcode) {
+	case AUDIO_NOTIFIER_SERVICE_DOWN:
+
+		if (atomic_inc_return(&card_status) == 1) {
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+			snd_card_notify_user(0);
+#endif
+		}
+		break;
+	case AUDIO_NOTIFIER_SERVICE_UP:
+		if (atomic_dec_return(&card_status) == 0) {
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+			snd_card_notify_user(1);
+#endif
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static int monaco_cc_dsp_notifier_service_cb(struct notifier_block *this,
+					 unsigned long opcode, void *ptr)
+{
+	pr_debug("%s: Service opcode 0x%lx\n", __func__, opcode);
+
+	switch (opcode) {
+	case DSP_ERROR:
+		monaco_update_snd_card_status(AUDIO_NOTIFIER_SERVICE_DOWN);
+		break;
+	case DSP_READY:
+		monaco_update_snd_card_status(AUDIO_NOTIFIER_SERVICE_UP);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block notifier_cc_dsp_nb = {
+	.notifier_call  = monaco_cc_dsp_notifier_service_cb,
+	.priority = 0,
+};
+
 static int monaco_ssr_enable(struct device *dev, void *data)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -1129,9 +1182,7 @@ static int monaco_ssr_enable(struct device *dev, void *data)
 	atomic_set(&bt_slim_clk_src_value, SLIMBUS_CLOCK_SRC_XO);
 	dev_dbg(dev, "%s: reset bt_slim_clk_src_value = %d\n", __func__,
 		atomic_read(&bt_slim_clk_src_value));
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_card_notify_user(SND_CARD_STATUS_ONLINE);
-#endif
+	monaco_update_snd_card_status(AUDIO_NOTIFIER_SERVICE_UP);
 	dev_dbg(dev, "%s: setting snd_card to ONLINE\n", __func__);
 
 err:
@@ -1149,9 +1200,7 @@ static void monaco_ssr_disable(struct device *dev, void *data)
 	}
 
 	dev_dbg(dev, "%s: setting snd_card to OFFLINE\n", __func__);
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_card_notify_user(SND_CARD_STATUS_OFFLINE);
-#endif /* CONFIG_AUDIO_QGKI */
+	monaco_update_snd_card_status(AUDIO_NOTIFIER_SERVICE_DOWN);
 
 	if (!strcmp(card->name, "monaco-stub-snd-card")) {
 		/* TODO */
@@ -1364,11 +1413,14 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	else
 		pdata->visense_enable = val;
 
+	atomic_set(&card_status, 1);
 	ret = msm_audio_ssr_register(&pdev->dev);
 	if (ret)
 		pr_err("%s: Registration with SND event FWK failed ret = %d\n",
 			__func__, ret);
 
+	pdata->slatecom_notifier_chain =
+		(struct srcu_notifier_head *)slatecom_register_notifier(&notifier_cc_dsp_nb);
 	is_initial_boot = true;
 
 	 /* change card status to ONLINE */
@@ -1393,6 +1445,7 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	if (pdata)
 		common_pdata = pdata->common_pdata;
 
+	slatecom_unregister_notifier(pdata->slatecom_notifier_chain, &notifier_cc_dsp_nb);
 	msm_common_snd_deinit(common_pdata);
 
 	snd_event_master_deregister(&pdev->dev);
