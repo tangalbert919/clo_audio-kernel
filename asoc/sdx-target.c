@@ -2087,6 +2087,36 @@ static struct snd_soc_dai_link mdm_dai[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(sec_tdm_tx_0_hostless),
 	},
+	{
+		.name = "VoiceMMode1 HOST RX PLAYBACK",
+		.stream_name = "VoiceMMode1 HOST RX PLAYBACK",
+		.dpcm_playback = 1,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(voicemmode1_host_rx_playback),
+	},
+	{
+		.name = "VoiceMMode1 HOST RX CAPTURE",
+		.stream_name = "VoiceMMode1 HOST RX CAPTURE",
+		.dpcm_capture = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(voicemmode1_host_rx_capture),
+	},
+	{
+		.name = "VoiceMMode1 HOST TX PLAYBACK",
+		.stream_name = "VoiceMMode1 HOST TX PLAYBACK",
+		.dpcm_playback = 1,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(voicemmode1_host_tx_playback),
+	},
+	{
+		.name = "VoiceMMode1 HOST TX CAPTURE",
+		.stream_name = "VoiceMMode1 HOST TX CAPTURE",
+		.dpcm_capture = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(voicemmode1_host_tx_capture),
+	},
 #endif
 };
 

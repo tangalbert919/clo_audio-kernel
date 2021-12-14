@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -41,6 +43,18 @@
 #define LOW_SOC_MBIAS_REG_MIN_VOLTAGE 2850000
 
 #define FOUNDRY_ID_SEC 0x5
+
+#define ROULEUR_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
+			SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |\
+			SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_192000 |\
+			SNDRV_PCM_RATE_384000)
+/* Fractional Rates */
+#define ROULEUR_FRAC_RATES (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_88200 |\
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800)
+
+#define ROULEUR_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
+		SNDRV_PCM_FMTBIT_S24_LE |\
+		SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S32_LE)
 
 enum {
 	CODEC_TX = 0,
@@ -97,6 +111,29 @@ static struct regmap_irq_chip rouleur_regmap_irq_chip = {
 	.irq_drv_data = NULL,
 };
 
+static struct snd_soc_dai_driver rouleur_dai[] = {
+	{
+		.name = "rouleur_cdc",
+		.playback = {
+			.stream_name = "ROULEUR_AIF Playback",
+			.rates = ROULEUR_RATES | ROULEUR_FRAC_RATES,
+			.formats = ROULEUR_FORMATS,
+			.rate_max = 384000,
+			.rate_min = 8000,
+			.channels_min = 1,
+			.channels_max = 2,
+		},
+		.capture = {
+			.stream_name = "ROULEUR_AIF Capture",
+			.rates = ROULEUR_RATES,
+			.formats = ROULEUR_FORMATS,
+			.rate_max = 192000,
+			.rate_min = 8000,
+			.channels_min = 1,
+			.channels_max = 2,
+		},
+	},
+};
 static int rouleur_handle_post_irq(void *data)
 {
 	struct rouleur_priv *rouleur = data;
@@ -1389,7 +1426,7 @@ static int rouleur_get_logical_addr(struct swr_device *swr_dev)
 		ret = swr_get_logical_dev_num(swr_dev, swr_dev->addr, &devnum);
 		if (ret) {
 			dev_err(&swr_dev->dev,
-				"%s get devnum %d for dev addr %lx failed\n",
+				"%s get devnum %d for dev addr %llx failed\n",
 				__func__, devnum, swr_dev->addr);
 			/* retry after 1ms */
 			usleep_range(1000, 1010);
@@ -1744,10 +1781,10 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 
 	/*tx widgets*/
 	SND_SOC_DAPM_ADC_E("ADC1", NULL, SND_SOC_NOPM, 0, 0,
-				rouleur_codec_enable_adc,
+				rouleur_tx_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 1, 0,
-				rouleur_codec_enable_adc,
+	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 0, 0,
+				rouleur_tx_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MUX("ADC2 MUX", SND_SOC_NOPM, 0, 0,
@@ -1756,23 +1793,23 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 	/*tx mixers*/
 	SND_SOC_DAPM_MIXER_E("ADC1_MIXER", SND_SOC_NOPM, 0, 0,
 				adc1_switch, ARRAY_SIZE(adc1_switch),
-				rouleur_tx_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				rouleur_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 1, 0,
 				adc2_switch, ARRAY_SIZE(adc2_switch),
-				rouleur_tx_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				rouleur_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
 
 	/* micbias widgets*/
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("MIC BIAS1", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("MIC BIAS2", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("MIC BIAS3", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
@@ -1842,15 +1879,15 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("HPHR"),
 
 	/* micbias pull up widgets*/
-	SND_SOC_DAPM_MICBIAS_E("VA MIC BIAS1", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("VA MIC BIAS1", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias_pullup,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("VA MIC BIAS2", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("VA MIC BIAS2", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias_pullup,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("VA MIC BIAS3", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY("VA MIC BIAS3", SND_SOC_NOPM, 0, 0,
 				rouleur_codec_enable_micbias_pullup,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 				SND_SOC_DAPM_POST_PMD),
@@ -1977,7 +2014,7 @@ int rouleur_info_create_codec_entry(struct snd_info_entry *codec_root,
 		return 0;
 	}
 	card = component->card;
-	priv->entry = snd_info_create_subdir(codec_root->module,
+	priv->entry = snd_info_create_module_entry(codec_root->module,
 					     "rouleur", codec_root);
 	if (!priv->entry) {
 		dev_dbg(component->dev, "%s: failed to create rouleur entry\n",
@@ -2144,7 +2181,7 @@ static void rouleur_get_foundry_id(struct rouleur_priv *rouleur)
 	ret = pm2250_spmi_read(rouleur->spmi_dev,
 				rouleur->foundry_id_reg, &rouleur->foundry_id);
 	if (ret == 0)
-		pr_debug("%s: rouleur foundry id = %x\n", rouleur->foundry_id,
+		pr_debug("%d: rouleur foundry id = %s\n", rouleur->foundry_id,
 			 __func__);
 	else
 		pr_debug("%s: rouleur error in spmi read ret = %d\n",
@@ -2271,7 +2308,7 @@ static int rouleur_soc_codec_resume(struct snd_soc_component *component)
 }
 
 static const struct snd_soc_component_driver soc_codec_dev_rouleur = {
-	.name = DRV_NAME,
+	.name = ROULEUR_DRV_NAME,
 	.probe = rouleur_soc_codec_probe,
 	.remove = rouleur_soc_codec_remove,
 	.controls = rouleur_snd_controls,
@@ -2682,7 +2719,7 @@ static int rouleur_bind(struct device *dev)
 	wcd_disable_irq(&rouleur->irq_info, ROULEUR_IRQ_HPHL_PDM_WD_INT);
 
 	ret = snd_soc_register_component(dev, &soc_codec_dev_rouleur,
-				     NULL, 0);
+				     rouleur_dai, ARRAY_SIZE(rouleur_dai));
 	if (ret) {
 		dev_err(dev, "%s: Codec registration failed\n",
 				__func__);

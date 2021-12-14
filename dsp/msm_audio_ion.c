@@ -311,7 +311,7 @@ static void msm_audio_protect_memory_region(struct platform_device *pdev)
 	size = (size_t)rmem->size;
 
 	ret = qcom_scm_mem_protect_audio((phys_addr_t) addr , (size_t) size);
-	pr_err("%s: addr = %08x size = %zu rc = %d\n", __func__, (phys_addr_t)addr, (size_t) size, ret);
+	pr_err("%s: addr = %p size = %zu rc = %d\n", __func__, (void*)(phys_addr_t)addr, (size_t) size, ret);
 
 exit:
 	return;
