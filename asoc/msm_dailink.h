@@ -1334,3 +1334,18 @@ SND_SOC_DAILINK_DEFS(primary_tdm_tx_0_dummy,
     DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
     DAILINK_COMP_ARRAY(COMP_CODEC("msm-stub-codec.1", "msm-stub-tx")),
     DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+
+SND_SOC_DAILINK_DEFS(voicemmode1_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("VoiceMMode1")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(msmvoip_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("VoIP")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(voicemmode2_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("VoiceMMode2")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
