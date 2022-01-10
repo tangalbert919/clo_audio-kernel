@@ -42207,7 +42207,7 @@ struct asrc_config {
 
 static struct asrc_config asrc_cfg[ASRC_PARAM_MAX];
 
-static int asrc_params[ASRC_PARAM_MAX];
+static int asrc_params[ASRC_PARAM_MAX], asrc_enable;
 
 static int sched_delay_ms = ASRC_SCHED_DELAY_MS;
 
@@ -42668,6 +42668,15 @@ static int msm_dai_q6_asrc_config_get(
 	return 0;
 }
 
+
+static int msm_dai_q6_asrc_start_get(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = asrc_enable;
+	return 0;
+}
+
+
 static int asrc_start()
 {
 	int ret = 0, idx = 0, i = 0, be_id = -1, module_enabled = 0;
@@ -42802,14 +42811,23 @@ static int msm_dai_q6_asrc_config_put(
 	int ret = 0, j = 0;
 	for(j=0; j<ASRC_PARAM_MAX; j++){
 		// if there is a value, update the global variable
-		if( (ucontrol->value.integer.value[j]) != 0 ){
+		if( (ucontrol->value.integer.value[j]) != 0 )
 			asrc_params[j] = ucontrol->value.integer.value[j];
-
-			//asrc starts when the last value is updated
-			if( (j+1) == ASRC_PARAM_MAX)
-				return asrc_start();
-		}
 	}
+	return ret;
+}
+
+static int msm_dai_q6_asrc_start_put(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = -1;
+	asrc_enable = ucontrol->value.integer.value[0];
+
+	if(asrc_enable)
+		ret = asrc_start();
+	else
+		pr_err(" %s : ASRC config is not set.\n",__func__);
+
 	return ret;
 }
 
@@ -42818,6 +42836,13 @@ static const struct snd_kcontrol_new asrc_config_controls[] = {
 				 0xFFFF, 0, ASRC_PARAM_MAX,
 				 msm_dai_q6_asrc_config_get,
 				 msm_dai_q6_asrc_config_put),
+};
+
+static const struct snd_kcontrol_new asrc_start_controls[] = {
+	SOC_SINGLE_MULTI_EXT("ASRC Start", SND_SOC_NOPM, 0,
+				 0xFFFF, 0, 1,
+				 msm_dai_q6_asrc_start_get,
+				 msm_dai_q6_asrc_start_put),
 };
 
 enum {
@@ -43070,6 +43095,8 @@ static int msm_routing_probe(struct snd_soc_component *component)
 				      ARRAY_SIZE(mclk_src_controls));
 	snd_soc_add_component_controls(component, asrc_config_controls,
 				      ARRAY_SIZE(asrc_config_controls));
+	snd_soc_add_component_controls(component, asrc_start_controls,
+				      ARRAY_SIZE(asrc_start_controls));
 #ifdef CONFIG_MSM_INTERNAL_MCLK
 	snd_soc_add_component_controls(component, internal_mclk_control,
 				      ARRAY_SIZE(internal_mclk_control));
