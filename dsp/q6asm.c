@@ -12,6 +12,39 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the
+ *        names of its contributors may be used to endorse or promote
+ *        products derived from this software without specific prior
+ *        written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <linux/fs.h>
 #include <linux/mutex.h>
@@ -260,10 +293,10 @@ static inline int q6asm_get_flag_from_token(union asm_token_struct *asm_token,
 #define OUT_BUFFER_SIZE 56
 #define IN_BUFFER_SIZE 24
 
-static struct timeval out_cold_tv;
-static struct timeval out_warm_tv;
-static struct timeval out_cont_tv;
-static struct timeval in_cont_tv;
+static struct timespec64 out_cold_tv;
+static struct timespec64 out_warm_tv;
+static struct timespec64 out_cont_tv;
+static struct timespec64 in_cont_tv;
 static long out_enable_flag;
 static long in_enable_flag;
 static struct dentry *out_dentry;
@@ -292,9 +325,9 @@ static ssize_t audio_output_latency_dbgfs_read(struct file *file,
 						OUT_BUFFER_SIZE, count);
 		return 0;
 	}
-	snprintf(out_buffer, OUT_BUFFER_SIZE, "%ld,%ld,%ld,%ld,%ld,%ld,",
-		out_cold_tv.tv_sec, out_cold_tv.tv_usec, out_warm_tv.tv_sec,
-		out_warm_tv.tv_usec, out_cont_tv.tv_sec, out_cont_tv.tv_usec);
+	snprintf(out_buffer, OUT_BUFFER_SIZE, "%lld,%ld,%lld,%ld,%lld,%ld,",
+		out_cold_tv.tv_sec, out_cold_tv.tv_nsec/1000, out_warm_tv.tv_sec,
+		out_warm_tv.tv_nsec/1000, out_cont_tv.tv_sec, out_cont_tv.tv_nsec/1000);
 	return  simple_read_from_buffer(buf, OUT_BUFFER_SIZE, ppos,
 						out_buffer, OUT_BUFFER_SIZE);
 }
@@ -349,8 +382,8 @@ static ssize_t audio_input_latency_dbgfs_read(struct file *file,
 						IN_BUFFER_SIZE, count);
 		return 0;
 	}
-	snprintf(in_buffer, IN_BUFFER_SIZE, "%ld,%ld,",
-				in_cont_tv.tv_sec, in_cont_tv.tv_usec);
+	snprintf(in_buffer, IN_BUFFER_SIZE, "%lld,%ld,",
+				in_cont_tv.tv_sec, in_cont_tv.tv_nsec/1000);
 	return  simple_read_from_buffer(buf, IN_BUFFER_SIZE, ppos,
 						in_buffer, IN_BUFFER_SIZE);
 }
@@ -395,22 +428,15 @@ static const struct file_operations audio_input_latency_debug_fops = {
  *
  * ktime_get [nsec]-> ktime_to_timespec [sec,nsec]-> timeval[sec,usec]
  *
- * Returns struct timeval
+ * Returns struct timespec64
 */
-static struct timeval get_monotonic_timeval(void)
+static struct timespec64 get_monotonic_timeval(void)
 {
-	static struct timeval out_tval;
-
 	/* Get time from monotonic clock in nanoseconds */
 	ktime_t kTimeNsec = ktime_get();
 
 	/* Convert it to timespec format and later to timeval as expected by audio HAL */
-	struct timespec temp_tspec = ktime_to_timespec(kTimeNsec);
-
-	/* Time returned above is in sec,nanosec format, needs to convert to sec,microsec */
-	out_tval.tv_usec = temp_tspec.tv_nsec/1000;
-	out_tval.tv_sec = temp_tspec.tv_sec;
-	return out_tval;
+	return ktime_to_timespec64(kTimeNsec);
 }
 
 static void config_debug_fs_write_cb(void)
@@ -421,9 +447,9 @@ static void config_debug_fs_write_cb(void)
 		 */
 		if (out_cold_index != 1) {
 			out_cold_tv = get_monotonic_timeval();
-			pr_debug("COLD: apr_send_pkt at %ld sec %ld microsec\n",
+			pr_debug("COLD: apr_send_pkt at %lld sec %ld nanosec\n",
 				out_cold_tv.tv_sec,
-				out_cold_tv.tv_usec);
+				out_cold_tv.tv_nsec);
 			out_cold_index = 1;
 		}
 		pr_debug("%s: out_enable_flag %ld\n",
@@ -446,9 +472,9 @@ static void config_debug_fs_read_cb(void)
 		 */
 		if (in_cont_index == 7) {
 			in_cont_tv = get_monotonic_timeval();
-			pr_info("%s: read buffer at %ld sec %ld microsec\n",
+			pr_info("%s: read buffer at %lld sec %ld nanosec\n",
 				__func__,
-				in_cont_tv.tv_sec, in_cont_tv.tv_usec);
+				in_cont_tv.tv_sec, in_cont_tv.tv_nsec);
 		}
 		in_cont_index++;
 	}
@@ -463,8 +489,8 @@ static void config_debug_fs_run(void)
 {
 	if (out_enable_flag) {
 		out_cold_tv = get_monotonic_timeval();
-		pr_debug("%s: COLD apr_send_pkt at %ld sec %ld microsec\n",
-			__func__, out_cold_tv.tv_sec, out_cold_tv.tv_usec);
+		pr_debug("%s: COLD apr_send_pkt at %lld sec %ld nanosec\n",
+			__func__, out_cold_tv.tv_sec, out_cold_tv.tv_nsec);
 	}
 }
 
@@ -478,10 +504,10 @@ static void config_debug_fs_write(struct audio_buffer *ab)
 		if ((strcmp(((char *)ab->data), zero_pattern)) &&
 		(!strcmp(((char *)ab->data + 2), zero_pattern))) {
 			out_warm_tv = get_monotonic_timeval();
-			pr_debug("%s: WARM:apr_send_pkt at %ld sec %ld microsec\n",
+			pr_debug("%s: WARM:apr_send_pkt at %lld sec %ld nanosec\n",
 			 __func__,
 			 out_warm_tv.tv_sec,
-			out_warm_tv.tv_usec);
+			out_warm_tv.tv_nsec);
 			pr_debug("%s: Warm Pattern Matched\n", __func__);
 		}
 		/* If First two byte is zero and last two byte is
@@ -490,10 +516,10 @@ static void config_debug_fs_write(struct audio_buffer *ab)
 		else if ((!strcmp(((char *)ab->data), zero_pattern))
 		&& (strcmp(((char *)ab->data + 2), zero_pattern))) {
 			out_cont_tv = get_monotonic_timeval();
-			pr_debug("%s: CONT:apr_send_pkt at %ld sec %ld microsec\n",
+			pr_debug("%s: CONT:apr_send_pkt at %lld sec %ld nanosec\n",
 			__func__,
 			out_cont_tv.tv_sec,
-			out_cont_tv.tv_usec);
+			out_cont_tv.tv_nsec);
 			pr_debug("%s: Cont Pattern Matched\n", __func__);
 		}
 	}
