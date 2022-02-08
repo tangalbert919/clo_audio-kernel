@@ -31652,9 +31652,9 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 					int *copp_index, int *port_id)
 {
 	int ret = 0;
-	int fe_id = params->fe_id;
-	int dir = params->dir;
-	int be_id = params->be_id;
+	int fe_id = 0;
+	int dir = 0;
+	int be_id = 0;
 	int copp_idx = 0;
 	unsigned long copp = -1;
 	bool copp_is_found = false;
@@ -31667,6 +31667,10 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 		ret = -EINVAL;
 		goto done;
 	}
+
+	fe_id = params->fe_id;
+	dir = params->dir;
+	be_id = params->be_id;
 
 	mutex_lock(&routing_lock);
 
@@ -31835,7 +31839,7 @@ static void get_drift_and_put_asrc(struct work_struct *work)
 	struct asrc_config *p_asrc_cfg = NULL;
 	struct afe_param_id_dev_timing_stats timing_stats = {0};
 	struct asrc_module_config_node *config_node = NULL;
-	struct list_head *ptr, *next;
+	struct list_head *ptr = NULL, *next = NULL;
 
 	delayed_drift_work = to_delayed_work(work);
 	if (NULL == delayed_drift_work) {
@@ -32014,6 +32018,11 @@ static int msm_dai_q6_asrc_config_put(
 		break;
 	case ENABLE_ASRC_DRIFT_HW:
 		idx = get_drift_src_idx(param & ~0x0100); /* group device */
+		if (idx < 0 || idx >= DRIFT_SRC_MAX) {
+			pr_err("%s Invalid index: %d\n", __func__, idx);
+			ret = -EINVAL;
+			goto done;
+		}
 		mutex_lock(&asrc_cfg[idx].lock);
 		asrc_cfg[idx].drift_src = param & ~0x0100;
 		mutex_unlock(&asrc_cfg[idx].lock);
