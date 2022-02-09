@@ -334,6 +334,11 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	uint32_t fmt_type = FORMAT_LINEAR_PCM;
 	uint16_t bits_per_sample;
 	uint16_t sample_word_size;
+	uint16_t format_blk_bits_per_sample = 0;
+	uint16_t format_blk_sample_word_size = 0;
+	uint16_t format = 0;
+	uint16_t req_format = 0;
+	uint16_t input_file_format = 0;
 
 	pdata = (struct msm_plat_data *)
 		dev_get_drvdata(soc_prtd->platform->dev);
@@ -361,7 +366,21 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	prtd->audio_client->perf_mode = pdata->perf_mode;
 	pr_debug("%s: perf: %x\n", __func__, pdata->perf_mode);
 
-	switch (params_format(params)) {
+	req_format = msm_pcm_asm_cfg_get(soc_prtd->dai_link->id, MSM_ASM_PLAYBACK_MODE);
+	input_file_format = params_format(params);
+
+	pr_debug("%s : fe_id:%d, req_format:%d, input_file_format:%d\n",__func__,
+			soc_prtd->dai_link->id, req_format, input_file_format);
+
+	if(req_format > input_file_format) {
+		format = req_format;
+		pr_debug("%s : enforce ASM bitwidth to %d from %d\n",__func__,
+				format,input_file_format);
+	}else {
+		format = input_file_format;
+	}
+
+	switch (format) {
 	case SNDRV_PCM_FORMAT_S32_LE:
 		bits_per_sample = 32;
 		sample_word_size = 32;
@@ -380,6 +399,10 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 		sample_word_size = 16;
 		break;
 	}
+
+	pr_debug("%s : fe_id:%d, bits_per_sample:%d, sample_word_size:%d\n",__func__,
+			soc_prtd->dai_link->id, bits_per_sample, sample_word_size);
+
 	if (prtd->compress_enable) {
 		fmt_type = FORMAT_GEN_COMPR;
 		pr_debug("%s: Compressed enabled!\n", __func__);
@@ -432,11 +455,32 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	if (tmp)
 		q6adm_update_rtd_info(soc_prtd, port_id, copp_idx,
 					soc_prtd->dai_link->id, 1);
+
+	/*Format block is configure with input file bits_per_sample*/
+	switch (input_file_format) {
+	case SNDRV_PCM_FORMAT_S32_LE:
+		format_blk_bits_per_sample = 32;
+		format_blk_sample_word_size = 32;
+		break;
+	case SNDRV_PCM_FORMAT_S24_LE:
+		format_blk_bits_per_sample = 24;
+		format_blk_sample_word_size = 32;
+		break;
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		format_blk_bits_per_sample = 24;
+		format_blk_sample_word_size = 24;
+		break;
+	case SNDRV_PCM_FORMAT_S16_LE:
+	default:
+		format_blk_bits_per_sample = 16;
+		format_blk_sample_word_size = 16;
+		break;
+	}
 	if (prtd->compress_enable) {
 		ret = q6asm_media_format_block_gen_compr(
 			prtd->audio_client, runtime->rate,
 			runtime->channels, !prtd->set_channel_map,
-			prtd->channel_map, bits_per_sample);
+			prtd->channel_map, format_blk_bits_per_sample);
 	} else {
 
 		if ((q6core_get_avcs_api_version_per_service(
@@ -446,15 +490,15 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			ret = q6asm_media_format_block_multi_ch_pcm_v5(
 				prtd->audio_client, runtime->rate,
 				runtime->channels, !prtd->set_channel_map,
-				prtd->channel_map, bits_per_sample,
-				sample_word_size, ASM_LITTLE_ENDIAN,
+				prtd->channel_map, format_blk_bits_per_sample,
+				format_blk_sample_word_size, ASM_LITTLE_ENDIAN,
 				DEFAULT_QF);
 		} else {
 			ret = q6asm_media_format_block_multi_ch_pcm_v4(
 				prtd->audio_client, runtime->rate,
 				runtime->channels, !prtd->set_channel_map,
-				prtd->channel_map, bits_per_sample,
-				sample_word_size, ASM_LITTLE_ENDIAN,
+				prtd->channel_map, format_blk_bits_per_sample,
+				format_blk_sample_word_size, ASM_LITTLE_ENDIAN,
 				DEFAULT_QF);
 		}
 	}
