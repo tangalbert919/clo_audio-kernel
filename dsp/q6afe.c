@@ -7948,9 +7948,10 @@ int afe_rt_proxy_port_write(phys_addr_t buf_addr_p,
 		pr_err("%s: AFE rtproxy write to port 0x%x failed %d\n",
 			__func__, afecmd_wr.port_id, ret);
 		ret = -EINVAL;
+		return ret;
 	}
 
-	return ret;
+	return 0;
 
 }
 EXPORT_SYMBOL(afe_rt_proxy_port_write);
@@ -8006,9 +8007,10 @@ int afe_rt_proxy_port_read(phys_addr_t buf_addr_p,
 		pr_err("%s: AFE rtproxy read  cmd to port 0x%x failed %d\n",
 			__func__, afecmd_rd.port_id, ret);
 		ret = -EINVAL;
+		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(afe_rt_proxy_port_read);
 
