@@ -3795,7 +3795,6 @@ static int msm_routing_adm_get_backend_idx(struct snd_kcontrol *kcontrol)
 		backend_id = MSM_BACKEND_DAI_SLIMBUS_7_TX;
 	} else if (strnstr(kcontrol->id.name, "TERT_TDM_TX_0", sizeof("TERT_TDM_TX_0"))) {
 		backend_id = MSM_BACKEND_DAI_TERT_TDM_TX_0;
-		pr_err("%s : backend_id : %d\n", __func__, backend_id);
 	}else {
 		pr_err("%s: unsupported backend id: %s",
 			__func__, kcontrol->id.name);
@@ -26473,6 +26472,10 @@ static const struct snd_kcontrol_new mmul17_mixer_controls[] = {
 	MSM_BACKEND_DAI_USB_TX,
 	MSM_FRONTEND_DAI_MULTIMEDIA17, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
+	SOC_DOUBLE_EXT("TERT_TDM_TX_0", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_TERT_TDM_TX_0,
+	MSM_FRONTEND_DAI_MULTIMEDIA17, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
 };
 
 static const struct snd_kcontrol_new mmul18_mixer_controls[] = {
@@ -38377,6 +38380,8 @@ static const struct snd_soc_dapm_route intercon_tdm[] = {
 	{"MultiMedia10 Mixer", "QUAT_TDM_TX_2", "QUAT_TDM_TX_2"},
 	{"MultiMedia10 Mixer", "QUAT_TDM_TX_3", "QUAT_TDM_TX_3"},
 
+	{"MultiMedia17 Mixer", "TERT_TDM_TX_0", "TERT_TDM_TX_0"},
+
 	{"MultiMedia20 Mixer", "PRI_TDM_TX_0", "PRI_TDM_TX_0"},
 	{"MultiMedia20 Mixer", "PRI_TDM_TX_1", "PRI_TDM_TX_1"},
 	{"MultiMedia20 Mixer", "PRI_TDM_TX_2", "PRI_TDM_TX_2"},
@@ -42143,7 +42148,7 @@ static const struct snd_kcontrol_new
 		},
 };
 
-#define ASRC_PARAM_MAX				10
+#define ASRC_PARAM_MAX				7
 #define ASRC_SCHED_DELAY_MS 			50
 
 #define MODULE_ID_AUTO_ASRC			0x123A7000
@@ -42202,26 +42207,38 @@ struct asrc_config {
 
 static struct asrc_config asrc_cfg[ASRC_PARAM_MAX];
 
+static int asrc_params[ASRC_PARAM_MAX], asrc_enable;
+
 static int sched_delay_ms = ASRC_SCHED_DELAY_MS;
 
 static int get_drift_src_idx(int drift_src)
 {
 	if (drift_src == DRIFT_SRC_SW)
 		return DRIFT_SRC_SW;
-	else if ((drift_src >= AFE_PORT_ID_PRIMARY_TDM_RX)
+	else if (((drift_src >= AFE_PORT_ID_PRIMARY_TDM_RX)
 		&& (drift_src <= AFE_PORT_ID_PRIMARY_TDM_TX_7))
+		|| (drift_src == AFE_PORT_ID_PRIMARY_MI2S_RX)
+		|| (drift_src == AFE_PORT_ID_PRIMARY_MI2S_TX))
 		return DRIFT_SRC_AFE_PRI;
-	else if ((drift_src >= AFE_PORT_ID_SECONDARY_TDM_RX)
+	else if (((drift_src >= AFE_PORT_ID_SECONDARY_TDM_RX)
 		&& (drift_src <= AFE_PORT_ID_SECONDARY_TDM_TX_7))
+		|| (drift_src == AFE_PORT_ID_SECONDARY_MI2S_RX)
+		|| (drift_src == AFE_PORT_ID_SECONDARY_MI2S_TX))
 		return DRIFT_SRC_AFE_SEC;
-	else if ((drift_src >= AFE_PORT_ID_TERTIARY_TDM_RX)
+	else if (((drift_src >= AFE_PORT_ID_TERTIARY_TDM_RX)
 		&& (drift_src <= AFE_PORT_ID_TERTIARY_TDM_TX_7))
+		|| (drift_src == AFE_PORT_ID_TERTIARY_MI2S_RX)
+		|| (drift_src == AFE_PORT_ID_TERTIARY_MI2S_TX))
 		return DRIFT_SRC_AFE_TERT;
-	else if ((drift_src >= AFE_PORT_ID_QUATERNARY_TDM_RX)
+	else if (((drift_src >= AFE_PORT_ID_QUATERNARY_TDM_RX)
 		&& (drift_src <= AFE_PORT_ID_QUATERNARY_TDM_TX_7))
+		|| (drift_src == AFE_PORT_ID_QUATERNARY_MI2S_RX)
+		|| (drift_src == AFE_PORT_ID_QUATERNARY_MI2S_TX))
 		return DRIFT_SRC_AFE_QUAT;
-	else if ((drift_src >= AFE_PORT_ID_QUINARY_TDM_RX)
+	else if (((drift_src >= AFE_PORT_ID_QUINARY_TDM_RX)
 		&& (drift_src <= AFE_PORT_ID_QUINARY_TDM_TX_7))
+		|| (drift_src == AFE_PORT_ID_QUINARY_MI2S_RX)
+		|| (drift_src == AFE_PORT_ID_QUINARY_MI2S_TX))
 		return DRIFT_SRC_AFE_QUIN;
 	else
 		return -EINVAL;
@@ -42350,8 +42367,7 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 	unsigned long copp = -1;
 	bool copp_is_found = false;
 	struct msm_pcm_routing_bdai_data *bedai = NULL;
-	int port_type = (dir == SESSION_TYPE_RX) ? MSM_AFE_PORT_TYPE_RX :
-			       MSM_AFE_PORT_TYPE_TX;
+	int port_type = -1;
 
 	mutex_lock(&routing_lock);
 
@@ -42365,6 +42381,10 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 	dir = params->dir;
 	be_id = params->be_id;
 	bedai = &msm_bedais[be_id];
+
+	port_type = (dir == SESSION_TYPE_RX) ? MSM_AFE_PORT_TYPE_RX :
+			  MSM_AFE_PORT_TYPE_TX;
+
 	if (afe_get_port_type(bedai->port_id) != port_type) {
 		pr_err("%s: port_type not match: be_dai %d type %d\n",
 			__func__, be_id, port_type);
@@ -42648,20 +42668,30 @@ static int msm_dai_q6_asrc_config_get(
 	return 0;
 }
 
-static int msm_dai_q6_asrc_config_put(
+
+static int msm_dai_q6_asrc_start_get(
 	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = asrc_enable;
+	return 0;
+}
+
+
+static int asrc_start()
 {
 	int ret = 0, idx = 0, i = 0, be_id = -1, module_enabled = 0;
 	struct afe_param_id_dev_timing_stats timing_stats = {0};
 	struct asrc_module_config_params params = {0};
 
-	int enable = ucontrol->value.integer.value[0];
-	int fe_id  = ucontrol->value.integer.value[1];
-	int dir    = ucontrol->value.integer.value[2];
-	int be_afe = ucontrol->value.integer.value[3];
-	int m_io   = ucontrol->value.integer.value[4];
-	int param  = ucontrol->value.integer.value[5];
-	int delay  = ucontrol->value.integer.value[6];
+	int enable = asrc_params[0];
+	int fe_id  = asrc_params[1];
+	int dir    = asrc_params[2];
+	int be_afe = asrc_params[3];
+	int m_io   = asrc_params[4];
+	int param  = asrc_params[5];
+	int delay  = asrc_params[6];
+
+	memset(asrc_params,0,sizeof(asrc_params));
 
 	/* group device */
 	be_id = msm_pcm_get_be_id_from_port_id(be_afe & ~0x0100);
@@ -42775,11 +42805,44 @@ done:
 	return ret;
 }
 
+static int msm_dai_q6_asrc_config_put(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0, j = 0;
+	for(j=0; j<ASRC_PARAM_MAX; j++){
+		// if there is a value, update the global variable
+		if( (ucontrol->value.integer.value[j]) != 0 )
+			asrc_params[j] = ucontrol->value.integer.value[j];
+	}
+	return ret;
+}
+
+static int msm_dai_q6_asrc_start_put(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = -1;
+	asrc_enable = ucontrol->value.integer.value[0];
+
+	if(asrc_enable)
+		ret = asrc_start();
+	else
+		pr_err(" %s : ASRC config is not set.\n",__func__);
+
+	return ret;
+}
+
 static const struct snd_kcontrol_new asrc_config_controls[] = {
 	SOC_SINGLE_MULTI_EXT("ASRC Config", SND_SOC_NOPM, 0,
 				 0xFFFF, 0, ASRC_PARAM_MAX,
 				 msm_dai_q6_asrc_config_get,
 				 msm_dai_q6_asrc_config_put),
+};
+
+static const struct snd_kcontrol_new asrc_start_controls[] = {
+	SOC_SINGLE_MULTI_EXT("ASRC Start", SND_SOC_NOPM, 0,
+				 0xFFFF, 0, 1,
+				 msm_dai_q6_asrc_start_get,
+				 msm_dai_q6_asrc_start_put),
 };
 
 enum {
@@ -43032,6 +43095,8 @@ static int msm_routing_probe(struct snd_soc_component *component)
 				      ARRAY_SIZE(mclk_src_controls));
 	snd_soc_add_component_controls(component, asrc_config_controls,
 				      ARRAY_SIZE(asrc_config_controls));
+	snd_soc_add_component_controls(component, asrc_start_controls,
+				      ARRAY_SIZE(asrc_start_controls));
 #ifdef CONFIG_MSM_INTERNAL_MCLK
 	snd_soc_add_component_controls(component, internal_mclk_control,
 				      ARRAY_SIZE(internal_mclk_control));
