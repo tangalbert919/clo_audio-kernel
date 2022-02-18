@@ -735,6 +735,11 @@ static int msm_ext_disp_audio_codec_rx_probe(
 {
 	struct msm_ext_disp_audio_codec_rx_data *codec_data;
 	struct device_node *of_node_parent = NULL;
+	struct msm_ext_disp_codec_id codec_info;
+	int dai_id = DP_DAI1;
+	struct msm_ext_disp_audio_edid_blk edid_blk;
+	int type;
+	int rc = 0;
 
 	codec_data = kzalloc(sizeof(struct msm_ext_disp_audio_codec_rx_data),
 		GFP_KERNEL);
@@ -774,6 +779,47 @@ static int msm_ext_disp_audio_codec_rx_probe(
 
 	dev_dbg(component->dev, "%s(): registered %s with ext disp core\n",
 		__func__, component->name);
+
+	if (!codec_data) {
+		dev_err(component->dev, "%s: codec_data is NULL\n",
+			__func__);
+	}
+	dev_dbg(component->dev, "%s: DP ctl id %d Stream id %d\n", __func__,
+		codec_data->ctl[dai_id], codec_data->stream[dai_id]);
+
+	mutex_lock(&codec_data->dp_ops_lock);
+
+	if (dai_id == HDMI_MS_DAI)
+		type = EXT_DISPLAY_TYPE_HDMI;
+	else
+		type = EXT_DISPLAY_TYPE_DP;
+
+	SWITCH_DP_CODEC(codec_info, codec_data, dai_id, type);
+	rc = msm_ext_disp_select_audio_codec(codec_data->ext_disp_core_pdev,
+						 &codec_info);
+	if (!codec_data->ext_disp_ops.get_audio_edid_blk || rc) {
+		dev_err(component->dev, "%s: No DP device connected\n",
+			__func__);
+		mutex_unlock(&codec_data->dp_ops_lock);
+		return 0;
+	}
+
+	rc = codec_data->ext_disp_ops.get_audio_edid_blk(
+			codec_data->ext_disp_core_pdev, &edid_blk);
+	mutex_unlock(&codec_data->dp_ops_lock);
+
+	dev_err(component->dev, "%s: data_blk_size:%d, spk_alloc_data_blk_size:%d\n",
+		__func__, edid_blk.audio_data_blk_size,
+		edid_blk.spk_alloc_data_blk_size);
+
+	/*try to enable audio on*/
+	rc = msm_ext_soundcard_register_notify_dp(codec_data->ext_disp_core_pdev,
+						&codec_info);
+	if (rc) {
+		dev_err(component->dev, "msm_ext_soundcard_register_notify_dp failed");
+	} else {
+		dev_err(component->dev, "msm_ext_soundcard_register_notify_dp succeed");
+	}
 
 	return 0;
 }
