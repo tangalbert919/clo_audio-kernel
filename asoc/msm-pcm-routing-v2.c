@@ -3778,7 +3778,7 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 	return afe_port_set_mad_type(port_id, mad_type);
 }
 
-static const char *const adm_override_chs_text[] = {"Zero", "One", "Two"};
+static const char *const adm_override_chs_text[] = {"Zero", "One", "Two", "Three", "Four"};
 
 static SOC_ENUM_SINGLE_EXT_DECL(adm_override_chs,
 				adm_override_chs_text);
@@ -3793,7 +3793,9 @@ static int msm_routing_adm_get_backend_idx(struct snd_kcontrol *kcontrol)
 		backend_id = MSM_BACKEND_DAI_SLIMBUS_9_TX;
 	} else if (strnstr(kcontrol->id.name, "SLIM7_TX", sizeof("SLIM7_TX"))) {
 		backend_id = MSM_BACKEND_DAI_SLIMBUS_7_TX;
-	} else {
+	} else if (strnstr(kcontrol->id.name, "TERT_TDM_TX_0", sizeof("TERT_TDM_TX_0"))) {
+		backend_id = MSM_BACKEND_DAI_TERT_TDM_TX_0;
+	}else {
 		pr_err("%s: unsupported backend id: %s",
 			__func__, kcontrol->id.name);
 		return -EINVAL;
@@ -3847,6 +3849,9 @@ static const struct snd_kcontrol_new adm_channel_config_controls[] = {
 			msm_routing_adm_channel_config_get,
 			msm_routing_adm_channel_config_put),
 	SOC_ENUM_EXT("SLIM7_TX ADM Channels", adm_override_chs,
+			msm_routing_adm_channel_config_get,
+			msm_routing_adm_channel_config_put),
+	SOC_ENUM_EXT("TERT_TDM_TX_0 ADM Channels", adm_override_chs,
 			msm_routing_adm_channel_config_get,
 			msm_routing_adm_channel_config_put),
 };
@@ -26480,6 +26485,10 @@ static const struct snd_kcontrol_new mmul17_mixer_controls[] = {
 	MSM_BACKEND_DAI_USB_TX,
 	MSM_FRONTEND_DAI_MULTIMEDIA17, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
+	SOC_DOUBLE_EXT("TERT_TDM_TX_0", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_TERT_TDM_TX_0,
+	MSM_FRONTEND_DAI_MULTIMEDIA17, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
 };
 
 static const struct snd_kcontrol_new mmul18_mixer_controls[] = {
@@ -38383,6 +38392,8 @@ static const struct snd_soc_dapm_route intercon_tdm[] = {
 	{"MultiMedia10 Mixer", "QUAT_TDM_TX_1", "QUAT_TDM_TX_1"},
 	{"MultiMedia10 Mixer", "QUAT_TDM_TX_2", "QUAT_TDM_TX_2"},
 	{"MultiMedia10 Mixer", "QUAT_TDM_TX_3", "QUAT_TDM_TX_3"},
+
+	{"MultiMedia17 Mixer", "TERT_TDM_TX_0", "TERT_TDM_TX_0"},
 
 	{"MultiMedia20 Mixer", "PRI_TDM_TX_0", "PRI_TDM_TX_0"},
 	{"MultiMedia20 Mixer", "PRI_TDM_TX_1", "PRI_TDM_TX_1"},
