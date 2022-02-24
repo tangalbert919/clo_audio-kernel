@@ -4905,8 +4905,8 @@ static int msm_audrx_tavil_init(struct snd_soc_pcm_runtime *rtd)
 	}
 	tavil_codec_info_create_codec_entry(pdata->codec_root, component);
 
-	tavil_set_port_map(component,
-				ARRAY_SIZE(sm_port_map_tavil), sm_port_map_tavil_wsa);
+//	tavil_set_port_map(component,
+//				ARRAY_SIZE(sm_port_map_tavil), sm_port_map_tavil_wsa);
 
 	codec_reg_done = true;
 	return 0;

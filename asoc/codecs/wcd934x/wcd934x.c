@@ -749,7 +749,7 @@ void *tavil_get_afe_config(struct snd_soc_component *component,
 	}
 }
 EXPORT_SYMBOL(tavil_get_afe_config);
-
+/*
 int tavil_set_port_map(struct snd_soc_component *component,
 			u32 size, void *data)
 {
@@ -777,7 +777,7 @@ int tavil_set_port_map(struct snd_soc_component *component,
 	return 0;
 }
 EXPORT_SYMBOL(tavil_set_port_map);
-
+*/
 static bool is_tavil_playback_dai(int dai_id)
 {
 	if ((dai_id == AIF1_PB) || (dai_id == AIF2_PB) ||
