@@ -579,6 +579,19 @@ struct msm_pcm_stream_app_type_cfg {
 	int sample_rate;
 };
 
+struct msm_asm_config {
+	u8 fe_id;
+	u8 mode; /* playback=0, capture=1,loopback=2 */
+	u8 bit_format;
+};
+
+enum {
+	MSM_ASM_PLAYBACK_MODE = 0,
+	MSM_ASM_CAPTURE_MODE,
+	MSM_ASM_LOOPBACK_MODE,
+	MSM_ASM_MAX_MODE
+};
+
 /* dai_id: front-end ID,
  * dspst_id:  DSP audio stream ID
  * stream_type: playback or capture
@@ -628,4 +641,5 @@ int msm_pcm_routing_set_channel_mixer_runtime(
 	struct msm_pcm_channel_mixer *params);
 bool msm_pcm_routing_get_portid_copp_idx(int fe_id,
 	int session_type, int *port_i, int *copp_idx);
+int msm_pcm_asm_cfg_get(int fe_id, int mode);
 #endif /*_MSM_PCM_H*/

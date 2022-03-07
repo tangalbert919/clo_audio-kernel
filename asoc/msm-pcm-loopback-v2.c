@@ -293,6 +293,7 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	struct asm_session_mtmx_strtr_param_window_v2_t asm_mtmx_strtr_window;
 	uint32_t param_id;
 	struct msm_pcm_pdata *pdata;
+	uint16_t format = 0;
 
 	ret =  msm_pcm_loopback_get_session(rtd, &pcm);
 	if (ret)
@@ -333,6 +334,23 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 		}
 
 		pcm->audio_client->perf_mode = pdata->perf_mode;
+
+		format = msm_pcm_asm_cfg_get(rtd->dai_link->id, MSM_ASM_LOOPBACK_MODE);
+		switch (format) {
+		case SNDRV_PCM_FORMAT_S32_LE:
+			bits_per_sample = 32;
+			break;
+		case SNDRV_PCM_FORMAT_S24_LE:
+		case SNDRV_PCM_FORMAT_S24_3LE:
+			bits_per_sample = 24;
+			break;
+		case SNDRV_PCM_FORMAT_S16_LE:
+			default:
+			bits_per_sample = 16;
+		}
+		pr_debug("%s : fe_id:%d, bits_per_sample:%d\n",__func__,
+			rtd->dai_link->id,bits_per_sample);
+
 		ret = q6asm_open_loopback_with_retry(pcm->audio_client,
 					bits_per_sample);
 		pcm->session_id = pcm->audio_client->session;
