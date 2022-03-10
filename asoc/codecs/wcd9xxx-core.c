@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -1602,11 +1603,11 @@ static int wcd9xxx_slim_device_down(struct slim_device *sldev)
 		return 0;
 
 	wcd9xxx->dev_up = false;
+	wcd9xxx_irq_exit(&wcd9xxx->core_res);
 
 	mutex_lock(&wcd9xxx->reset_lock);
 	if (wcd9xxx->dev_down)
 		wcd9xxx->dev_down(wcd9xxx);
-	wcd9xxx_irq_exit(&wcd9xxx->core_res);
 	wcd9xxx_reset_low(wcd9xxx->dev);
 	mutex_unlock(&wcd9xxx->reset_lock);
 
