@@ -1,5 +1,39 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the
+ *        names of its contributors may be used to endorse or promote
+ *        products derived from this software without specific prior
+ *        written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <linux/slab.h>
 #include <linux/debugfs.h>
@@ -8285,6 +8319,105 @@ fail_cmd:
 	return ret;
 }
 EXPORT_SYMBOL(afe_dtmf_generate_rx);
+
+/**
+ * afe_dtmf_generate_rx_session - command to generate AFE DTMF RX
+ *
+ * @duration_in_ms: Duration in ms for dtmf tone
+ * @high_freq: Higher frequency for dtmf
+ * @low_freq: lower frequency for dtmf
+ * @gain: Gain value for DTMF tone
+ * @session_idx: Session index of voice call
+ *
+ * Returns 0 on success, appropriate error code otherwise
+ */
+int afe_dtmf_generate_rx_session(int64_t duration_in_ms,
+				  uint16_t high_freq,
+				  uint16_t low_freq, uint16_t gain, int session_idx)
+{
+	int ret = 0;
+	int index = 0;
+	struct afe_dtmf_generation_command cmd_dtmf;
+
+	pr_debug("%s: DTMF AFE Gen\n", __func__);
+
+	memset(&cmd_dtmf, 0, sizeof(cmd_dtmf));
+
+	if (afe_validate_port(this_afe.dtmf_gen_rx_session_portid[session_idx]) < 0) {
+		pr_err("%s: Failed : Invalid Port id = 0x%x\n",
+		       __func__, this_afe.dtmf_gen_rx_session_portid[session_idx]);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+
+	if (this_afe.apr == NULL) {
+		this_afe.apr = apr_register("ADSP", "AFE", afe_callback,
+					    0xFFFFFFFF, &this_afe);
+		pr_debug("%s: Register AFE\n", __func__);
+		if (this_afe.apr == NULL) {
+			pr_err("%s: Unable to register AFE\n", __func__);
+			ret = -ENODEV;
+			return ret;
+		}
+		rtac_set_afe_handle(this_afe.apr);
+	}
+
+	pr_debug("%s: dur=%lld: hfreq=%d lfreq=%d gain=%d portid=0x%x\n",
+		__func__,
+		duration_in_ms, high_freq, low_freq, gain,
+		this_afe.dtmf_gen_rx_session_portid[session_idx]);
+
+	cmd_dtmf.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	cmd_dtmf.hdr.pkt_size = sizeof(cmd_dtmf);
+	cmd_dtmf.hdr.src_port = 0;
+	cmd_dtmf.hdr.dest_port = 0;
+	cmd_dtmf.hdr.token = 0;
+	cmd_dtmf.hdr.opcode = AFE_PORTS_CMD_DTMF_CTL;
+	cmd_dtmf.duration_in_ms = duration_in_ms;
+	cmd_dtmf.high_freq = high_freq;
+	cmd_dtmf.low_freq = low_freq;
+	cmd_dtmf.gain = gain;
+	cmd_dtmf.num_ports = 1;
+	cmd_dtmf.port_ids = q6audio_get_port_id(this_afe.dtmf_gen_rx_session_portid[session_idx]);
+
+	atomic_set(&this_afe.state, 1);
+	atomic_set(&this_afe.status, 0);
+	ret = apr_send_pkt(this_afe.apr, (uint32_t *) &cmd_dtmf);
+	if (ret < 0) {
+		pr_err("%s: AFE DTMF failed for num_ports:%d ids:0x%x\n",
+		       __func__, cmd_dtmf.num_ports, cmd_dtmf.port_ids);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	index = q6audio_get_port_index(this_afe.dtmf_gen_rx_session_portid[session_idx]);
+	if (index < 0 || index >= AFE_MAX_PORTS) {
+		pr_err("%s: AFE port index[%d] invalid!\n",
+				__func__, index);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	ret = wait_event_timeout(this_afe.wait[index],
+		(atomic_read(&this_afe.state) == 0),
+			msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret) {
+		pr_err("%s: wait_event timeout\n", __func__);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	if (atomic_read(&this_afe.status) > 0) {
+		pr_err("%s: config cmd failed [%s]\n",
+			__func__, adsp_err_get_err_str(
+			atomic_read(&this_afe.status)));
+		ret = adsp_err_get_lnx_err_code(
+				atomic_read(&this_afe.status));
+		goto fail_cmd;
+	}
+	return 0;
+fail_cmd:
+	return ret;
+}
+EXPORT_SYMBOL(afe_dtmf_generate_rx_session);
 
 static int afe_sidetone_iir(u16 tx_port_id)
 {
