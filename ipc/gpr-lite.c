@@ -1,5 +1,6 @@
 /* Copyright (c) 2011-2017, 2019-2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2018, Linaro Limited
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -104,6 +105,12 @@ int gpr_send_pkt(struct gpr_device *adev, struct gpr_pkt *pkt)
 	}
 
 	gpr = dev_get_drvdata(adev->dev.parent);
+
+        if((adev->domain_id != GPR_IDS_DOMAIN_ID_ADSP_V) &&
+           (adev->domain_id != GPR_IDS_DOMAIN_ID_MODEM_V)) {
+                pr_err("%s: Invalid domain_id %d\n", __func__, adev->domain_id);
+                return -ENETRESET;
+        }
 
 	if ((adev->domain_id == GPR_IDS_DOMAIN_ID_ADSP_V) &&
 	    (gpr_get_q6_state() != GPR_SUBSYS_LOADED)) {
