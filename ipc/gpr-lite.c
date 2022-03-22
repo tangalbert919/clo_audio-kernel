@@ -509,15 +509,15 @@ static int gpr_probe(struct rpmsg_device *rpdev)
 		ret = 0;
 	}
 
-	of_register_gpr_devices(dev);
-
-	INIT_WORK(&gpr_priv->notifier_reg_work, gpr_notifier_register);
-
 	ret = of_property_read_u32(dev->of_node, "reg", &gpr_priv->dest_domain_id);
 	if (ret) {
 		dev_err(dev, "GPR Domain ID not specified in DT\n");
 		return ret;
 	}
+
+	of_register_gpr_devices(dev);
+
+	INIT_WORK(&gpr_priv->notifier_reg_work, gpr_notifier_register);
 
 	if (GPR_DOMAIN_ADSP == gpr_priv->dest_domain_id ||
 		GPR_DOMAIN_MODEM == gpr_priv->dest_domain_id) {
