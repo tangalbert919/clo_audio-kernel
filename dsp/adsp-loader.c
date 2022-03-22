@@ -1,6 +1,40 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2014, 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2017-2021, The Linux Foundation. All rights reserved.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the
+ *        names of its contributors may be used to endorse or promote
+ *        products derived from this software without specific prior
+ *        written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <linux/init.h>
@@ -23,6 +57,7 @@
 #define SSR_RESET_CMD 1
 #define IMAGE_UNLOAD_CMD 0
 #define MAX_FW_IMAGES 4
+#define BOOT_FOR_EARLY_CHIME_CMD 2
 
 static ssize_t adsp_boot_store(struct kobject *kobj,
 	struct kobj_attribute *attr,
@@ -170,32 +205,26 @@ static void adsp_load_fw(struct work_struct *adsp_ldr_work)
 
 load_adsp:
 	{
-		adsp_state = apr_get_q6_state();
-		if (adsp_state == APR_SUBSYS_DOWN) {
-			priv = platform_get_drvdata(pdev);
-			if (!priv) {
-				dev_err(&pdev->dev,
-				" %s: Private data get failed\n", __func__);
-				goto fail;
-			}
-			if (!priv->adsp_fw_name) {
-				dev_dbg(&pdev->dev, "%s: Load default ADSP\n",
-					__func__);
-				priv->pil_h = subsystem_get("adsp");
-			} else {
-				dev_dbg(&pdev->dev, "%s: Load ADSP with fw name %s\n",
-					__func__, priv->adsp_fw_name);
-				priv->pil_h = subsystem_get_with_fwname("adsp", priv->adsp_fw_name);
-			}
+		priv = platform_get_drvdata(pdev);
+		if (!priv) {
+			dev_err(&pdev->dev,
+			" %s: Private data get failed\n", __func__);
+			goto fail;
+		}
+		if (!priv->adsp_fw_name) {
+			dev_dbg(&pdev->dev, "%s: Load default ADSP\n",
+				__func__);
+			priv->pil_h = subsystem_get("adsp");
+		} else {
+			dev_dbg(&pdev->dev, "%s: Load ADSP with fw name %s\n",
+				__func__, priv->adsp_fw_name);
+			priv->pil_h = subsystem_get_with_fwname("adsp", priv->adsp_fw_name);
+		}
 
-			if (IS_ERR(priv->pil_h)) {
-				dev_err(&pdev->dev, "%s: pil get failed,\n",
-					__func__);
-				goto fail;
-			}
-		} else if (adsp_state == APR_SUBSYS_LOADED) {
-			dev_dbg(&pdev->dev,
-			"%s: ADSP state = %x\n", __func__, adsp_state);
+		if (IS_ERR(priv->pil_h)) {
+			dev_err(&pdev->dev, "%s: pil get failed,\n",
+				__func__);
+			goto fail;
 		}
 
 		dev_dbg(&pdev->dev, "%s: Q6/ADSP image is loaded\n", __func__);
@@ -258,7 +287,11 @@ static ssize_t adsp_boot_store(struct kobject *kobj,
 	} else if (boot == IMAGE_UNLOAD_CMD) {
 		pr_debug("%s: going to call adsp_unloader\n", __func__);
 		adsp_loader_unload(adsp_private);
+	} else if (boot == BOOT_FOR_EARLY_CHIME_CMD) {
+		pr_debug("%s: going to call adsp_load_fw\n", __func__);
+		adsp_load_fw(NULL);
 	}
+
 	return count;
 }
 
