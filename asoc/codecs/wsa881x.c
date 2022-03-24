@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -650,7 +651,8 @@ static void wsa881x_bandgap_ctrl(struct snd_soc_component *component,
 						0x04, 0x04);
 		}
 	} else {
-		--wsa881x->bg_cnt;
+		if (wsa881x->bg_cnt)
+                        --wsa881x->bg_cnt;
 		if (wsa881x->bg_cnt <= 0) {
 			WARN_ON(wsa881x->bg_cnt < 0);
 			wsa881x->bg_cnt = 0;
@@ -679,7 +681,8 @@ static void wsa881x_clk_ctrl(struct snd_soc_component *component, bool enable)
 					WSA881X_CDC_ANA_CLK_CTL, 0x01);
 		}
 	} else {
-		--wsa881x->clk_cnt;
+		if (wsa881x->clk_cnt)
+		        --wsa881x->clk_cnt;
 		if (wsa881x->clk_cnt <= 0) {
 			WARN_ON(wsa881x->clk_cnt < 0);
 			wsa881x->clk_cnt = 0;
