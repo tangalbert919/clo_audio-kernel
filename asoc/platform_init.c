@@ -9,12 +9,12 @@
 
 static int __init audio_platform_init(void)
 {
-
 	return 0;
 }
 
 static void audio_platform_exit(void)
 {
+
 }
 
 module_init(audio_platform_init);

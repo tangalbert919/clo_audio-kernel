@@ -5,11 +5,7 @@
 
 #ifndef __PLATFORM_INIT_H__
 #define __PLATFORM_INIT_H__
-int msm_dai_q6_hdmi_init(void);
-int msm_dai_q6_init(void);
 
-void msm_dai_q6_exit(void);
-void msm_dai_q6_hdmi_exit(void);
 
 #if IS_ENABLED(CONFIG_WCD9XXX_CODEC_CORE)
 int msm_dai_slim_init(void);

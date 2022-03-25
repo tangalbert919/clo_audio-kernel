@@ -31,7 +31,36 @@ export
 endif
 endif
 
+ifeq ($(CONFIG_SND_SOC_AUTO), y)
+include $(srctree)/techpack/audio-ar/config/sa8295auto.conf
+export
+endif
+
 ifeq ($(CONFIG_QTI_QUIN_GVM), y)
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(srctree)/techpack/audio-ar/include/uapi/audio
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio-ar/include/uapi \
+                -I$(srctree)/techpack/audio-ar/include/uapi/audio \
+                -I$(srctree)/techpack/audio-ar/include
+else
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(srctree)/techpack/audio/include/uapi/audio
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio/include/uapi \
+                -I$(srctree)/techpack/audio/include/uapi/audio \
+                -I$(srctree)/techpack/audio/include
+endif
+
+ifeq ($(CONFIG_SND_SOC_AUTO), y)
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \
                 -I$(srctree)/techpack/audio-ar/include/uapi/audio
@@ -86,6 +115,11 @@ endif
 ifeq ($(CONFIG_ARCH_SA8155), y)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio-ar/config/sa8155autoconf.h
+endif
+
+ifeq ($(CONFIG_SND_SOC_AUTO), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio-ar/config/sa8295autoconf.h
 endif
 
 obj-y += soc/
