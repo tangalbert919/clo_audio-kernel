@@ -3111,10 +3111,11 @@ static int msm_compr_playback_copy(struct snd_compr_stream *cstream,
 	struct snd_compr_runtime *runtime = cstream->runtime;
 	struct msm_compr_audio *prtd = runtime->private_data;
 	void *dstn;
-	size_t copy;
+	size_t copy = 0;
 	uint64_t bytes_available = 0;
 	unsigned long flags;
 	uint32_t num_buffers_available = 0;
+	bool count_check;
 
 	pr_debug("%s: count = %zd, app pointer = %d\n", __func__, count,
 		  prtd->app_pointer);
@@ -3129,20 +3130,23 @@ static int msm_compr_playback_copy(struct snd_compr_stream *cstream,
 		spin_unlock_irqrestore(&prtd->lock, flags);
 		return -ENETRESET;
 	}
-	spin_unlock_irqrestore(&prtd->lock, flags);
-
 	dstn = prtd->buffer + prtd->app_pointer;
 	if (count < prtd->buffer_size - prtd->app_pointer) {
-		if (copy_from_user(dstn, buf, count))
-			return -EFAULT;
-		prtd->app_pointer += count;
+		count_check = true;
 	} else {
 		copy = prtd->buffer_size - prtd->app_pointer;
+		count_check = false;
+	}
+	spin_unlock_irqrestore(&prtd->lock, flags);
+
+	if (count_check) {
+		if (copy_from_user(dstn, buf, count))
+			return -EFAULT;
+	} else {
 		if (copy_from_user(dstn, buf, copy))
 			return -EFAULT;
 		if (copy_from_user(prtd->buffer, buf + copy, count - copy))
 			return -EFAULT;
-		prtd->app_pointer = count - copy;
 	}
 
 	/*
@@ -3151,6 +3155,12 @@ static int msm_compr_playback_copy(struct snd_compr_stream *cstream,
 	 * right away.
 	 */
 	spin_lock_irqsave(&prtd->lock, flags);
+
+	if (count < prtd->buffer_size - prtd->app_pointer) {
+		prtd->app_pointer += count;
+	} else {
+		prtd->app_pointer = count - copy;
+	}
 	prtd->bytes_received += count;
 	if (atomic_read(&prtd->start)) {
 		if (prtd->enable_pre_buffering == true) {
