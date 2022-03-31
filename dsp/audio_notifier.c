@@ -156,9 +156,8 @@ static int audio_notifier_reg_service(int service, int domain)
 
 	switch (service) {
 	case AUDIO_NOTIFIER_SSR_SERVICE:
-		handle = audio_ssr_register(
-			service_data[service][domain].domain_id,
-			service_data[service][domain].nb);
+		handle = audio_ssr_register("lpass",
+			service_data[service][domain].hook.nb);
 		break;
 	case AUDIO_NOTIFIER_PDR_SERVICE:
 		handle = audio_pdr_service_register(

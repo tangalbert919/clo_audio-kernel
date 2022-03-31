@@ -17,7 +17,7 @@
  */
 
 #include <linux/types.h>
-#include <audio/linux/msm_audio_wmapro.h>
+#include <linux/msm_audio_wmapro.h>
 #include <linux/compat.h>
 #include "audio_utils_aio.h"
 
@@ -89,7 +89,7 @@ static long audio_ioctl_shared(struct file *file, unsigned int cmd,
 		}
 		wmapro_cfg.avg_bytes_per_sec =
 				wmapro_config->avgbytespersecond;
-		if ((wmapro_config->asfpacketlength <= 13376) ||
+		if ((wmapro_config->asfpacketlength <= 13376) &&
 		(wmapro_config->asfpacketlength > 0)) {
 			wmapro_cfg.block_align =
 				wmapro_config->asfpacketlength;

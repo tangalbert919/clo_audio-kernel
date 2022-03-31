@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -17,7 +18,7 @@
 #include <sound/pcm.h>
 #include <sound/initval.h>
 #include <sound/control.h>
-#include <audio/sound/audio_effects.h>
+#include <sound/audio_effects.h>
 #include <sound/pcm_params.h>
 #include <sound/timer.h>
 #include <sound/tlv.h>

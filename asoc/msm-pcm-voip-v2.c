@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -705,7 +706,8 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
+static int msm_pcm_trigger(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -735,7 +737,7 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	return ret;
 }
 
-static int msm_pcm_open(struct snd_pcm_substream *substream)
+static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct voip_drv_info *prtd = &voip_info;
@@ -918,7 +920,8 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 	}
 	return ret;
 }
-static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
+static int msm_pcm_copy(struct snd_soc_component *component,
+	struct snd_pcm_substream *substream, int a,
 	 unsigned long hwoff, void __user *buf, unsigned long fbytes)
 {
 	int ret = 0;
@@ -931,7 +934,8 @@ static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
 	return ret;
 }
 
-static int msm_pcm_close(struct snd_pcm_substream *substream)
+static int msm_pcm_close(struct snd_soc_component *component,
+		struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct list_head *ptr = NULL;
@@ -1164,7 +1168,7 @@ done:
 	return ret;
 }
 
-static int msm_pcm_prepare(struct snd_pcm_substream *substream)
+static int msm_pcm_prepare(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -1232,7 +1236,8 @@ msm_pcm_capture_pointer(struct snd_pcm_substream *substream)
 	return bytes_to_frames(runtime, (prtd->pcm_capture_irq_pos));
 }
 
-static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
+static snd_pcm_uframes_t msm_pcm_pointer(struct snd_soc_component *component,
+		struct snd_pcm_substream *substream)
 {
 	snd_pcm_uframes_t ret = 0;
 
@@ -1244,7 +1249,8 @@ static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_pcm_mmap(struct snd_pcm_substream *substream,
+static int msm_pcm_mmap(struct snd_soc_component *component,
+		struct snd_pcm_substream *substream,
 			struct vm_area_struct *vma)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -1257,7 +1263,8 @@ static int msm_pcm_mmap(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
+static int msm_pcm_hw_params(struct snd_soc_component *component,
+		struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -1585,18 +1592,9 @@ static int voip_get_media_type(uint32_t mode, uint32_t rate_type,
 }
 
 
-static const struct snd_pcm_ops msm_pcm_ops = {
-	.open           = msm_pcm_open,
-	.copy_user	= msm_pcm_copy,
-	.hw_params	= msm_pcm_hw_params,
-	.close          = msm_pcm_close,
-	.prepare        = msm_pcm_prepare,
-	.trigger        = msm_pcm_trigger,
-	.pointer        = msm_pcm_pointer,
-	.mmap		= msm_pcm_mmap,
-};
 
-static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
+static int msm_asoc_pcm_new(struct snd_soc_component *component,
+				struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
 	int ret = 0;
@@ -1608,10 +1606,17 @@ static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
 }
 
 static struct snd_soc_component_driver msm_soc_component = {
-	.name		= DRV_NAME,
-	.ops		= &msm_pcm_ops,
-	.pcm_new	= msm_asoc_pcm_new,
+	.name			= DRV_NAME,
+	.pcm_construct	= msm_asoc_pcm_new,
 	.probe		= msm_pcm_voip_probe,
+	.open			= msm_pcm_open,
+	.copy_user		= msm_pcm_copy,
+	.hw_params		= msm_pcm_hw_params,
+	.close		= msm_pcm_close,
+	.prepare		= msm_pcm_prepare,
+	.trigger		= msm_pcm_trigger,
+	.pointer		= msm_pcm_pointer,
+	.mmap			= msm_pcm_mmap,
 };
 
 static int msm_pcm_probe(struct platform_device *pdev)

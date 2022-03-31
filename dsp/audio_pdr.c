@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <soc/qcom/service-locator.h>
-#include <soc/qcom/service-notifier.h>
 #include "audio_pdr.h"
 
-static struct pd_qmi_client_data audio_pdr_services[AUDIO_PDR_DOMAIN_MAX] = {
+
+struct audio_pdr_service {
+	void *pdr_handle;
+	char service_name[SERVREG_NAME_LENGTH + 1];
+	char service_path[SERVREG_NAME_LENGTH + 1];
+}
+static struct audio_pdr_service audio_pdr_services[AUDIO_PDR_DOMAIN_MAX] = {
 	{	/* AUDIO_PDR_DOMAIN_ADSP */
-		.client_name = "audio_pdr_adsp",
-		.service_name = "avs/audio"
+		.service_name = "avs/audio",
+		.service_path = "msm/adsp/audio_pd",
 	}
 };
 
@@ -93,9 +98,8 @@ int audio_pdr_deregister(struct notifier_block *nb)
 EXPORT_SYMBOL(audio_pdr_deregister);
 
 void *audio_pdr_service_register(int domain_id,
-				 struct notifier_block *nb, int *curr_state)
+				 void (*cb)(int, char *, void *))
 {
-	void *handle;
 
 	if ((domain_id < 0) ||
 	    (domain_id >= AUDIO_PDR_DOMAIN_MAX)) {
@@ -103,66 +107,30 @@ void *audio_pdr_service_register(int domain_id,
 		return ERR_PTR(-EINVAL);
 	}
 
-	handle = service_notif_register_notifier(
-		audio_pdr_services[domain_id].domain_list[0].name,
-		audio_pdr_services[domain_id].domain_list[0].instance_id,
-		nb, curr_state);
-	if (IS_ERR_OR_NULL(handle)) {
-		pr_err("%s: Failed to register for service %s, instance %d\n",
-			__func__,
-			audio_pdr_services[domain_id].domain_list[0].name,
-			audio_pdr_services[domain_id].domain_list[0].
-			instance_id);
-	}
-	return handle;
+	audio_pdr_services[domain_id].pdr_handle = pdr_handle_alloc(cb, NULL);
+
+	return pdr_add_lookup(audio_pdr_services[domain_id].pdr_handle,
+						  audio_pdr_services[domain_id].service_name,
+						  audio_pdr_services[domain_id].service_path);
 }
 EXPORT_SYMBOL(audio_pdr_service_register);
 
-int audio_pdr_service_deregister(void *service_handle,
-	struct notifier_block *nb)
+int audio_pdr_service_deregister(int domain_id)
 {
-	int ret;
-
-	if (service_handle == NULL) {
-		pr_err("%s: service handle is NULL\n", __func__);
-		ret = -EINVAL;
-		goto done;
+	if ((domain_id < 0) ||
+		(domain_id >= AUDIO_PDR_DOMAIN_MAX)) {
+			pr_err("%s: Invalid service ID %d\n", __func__, domain_id);
+			return -EINVAL;
 	}
+	pdr_handle_release(audio_pdr_services[domain_id].pdr_handle);
 
-	ret = service_notif_unregister_notifier(
-		service_handle, nb);
-	if (ret < 0)
-		pr_err("%s: Failed to deregister service ret %d\n",
-			__func__, ret);
-done:
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(audio_pdr_service_deregister);
 
-static int __init audio_pdr_subsys_init(void)
-{
-	srcu_init_notifier_head(&audio_pdr_cb_list);
-	return 0;
-}
-
 static int __init audio_pdr_late_init(void)
 {
-	int ret;
-
-	audio_pdr_subsys_init();
-
-	ret = get_service_location(
-		audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].client_name,
-		audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].service_name,
-		&audio_pdr_locator_nb);
-	if (ret < 0) {
-		pr_err("%s get_service_location failed ret %d\n",
-			__func__, ret);
-		srcu_notifier_call_chain(&audio_pdr_cb_list,
-					 AUDIO_PDR_FRAMEWORK_DOWN, NULL);
-	}
-
-	return ret;
+	return 0;
 }
 module_init(audio_pdr_late_init);
 

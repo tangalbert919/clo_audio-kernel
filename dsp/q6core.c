@@ -2046,7 +2046,7 @@ static int q6core_is_avs_up(int32_t *avs_state)
 	if (!adsp_ready) {
 		pr_err_ratelimited("%s: Timeout. ADSP Audio is not ready\n",
 				   __func__);
-		ret = -ETIMEDOUT;
+		ret = -EPROBE_DEFER;
 	}
 
 	return ret;

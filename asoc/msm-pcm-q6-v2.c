@@ -22,12 +22,12 @@
 #include <sound/timer.h>
 #include <asm/dma.h>
 #include <linux/dma-mapping.h>
-#include <audio/linux/msm_audio.h>
+#include <linux/msm_audio.h>
 
 #include <linux/of_device.h>
 #include <sound/tlv.h>
 #include <sound/pcm_params.h>
-#include <audio/sound/devdep_params.h>
+#include <sound/devdep_params.h>
 #include <dsp/msm_audio_ion.h>
 #include <dsp/q6audio-v2.h>
 #include <dsp/q6core.h>
@@ -865,7 +865,8 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
+static int msm_pcm_trigger(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -914,12 +915,10 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	return ret;
 }
 
-static int msm_pcm_open(struct snd_pcm_substream *substream)
+static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
-	struct snd_soc_component *component =
-			snd_soc_rtdcom_lookup(soc_prtd, DRV_NAME);
 	struct msm_audio *prtd;
 	struct msm_plat_data *pdata;
 	enum apr_subsys_state subsys_state;
@@ -1329,7 +1328,8 @@ static int msm_pcm_capture_close(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
+static int msm_pcm_copy(struct snd_soc_component *component,
+	struct snd_pcm_substream *substream, int a,
 	 unsigned long hwoff, void __user *buf, unsigned long fbytes)
 {
 	int ret = 0;
@@ -1341,7 +1341,8 @@ static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
 	return ret;
 }
 
-static int msm_pcm_close(struct snd_pcm_substream *substream)
+static int msm_pcm_close(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 
@@ -1352,7 +1353,8 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_pcm_prepare(struct snd_pcm_substream *substream)
+static int msm_pcm_prepare(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 
@@ -1363,7 +1365,8 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
+static snd_pcm_uframes_t msm_pcm_pointer(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream)
 {
 
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -1376,7 +1379,8 @@ static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
 	return bytes_to_frames(runtime, (prtd->pcm_irq_pos));
 }
 
-static int msm_pcm_mmap(struct snd_pcm_substream *substream,
+static int msm_pcm_mmap(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream,
 				struct vm_area_struct *vma)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -1397,7 +1401,8 @@ static int msm_pcm_mmap(struct snd_pcm_substream *substream,
 	return msm_audio_ion_mmap(ab, vma);
 }
 
-static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
+static int msm_pcm_hw_params(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -1437,7 +1442,7 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int msm_pcm_ioctl(struct snd_pcm_substream *substream,
+static int msm_pcm_ioctl(struct snd_soc_component *component, struct snd_pcm_substream *substream,
 			 unsigned int cmd, void __user *arg)
 {
 	struct msm_audio *prtd = NULL;
@@ -1531,21 +1536,6 @@ static int msm_pcm_compat_ioctl(struct snd_pcm_substream *substream,
 #else
 #define msm_pcm_compat_ioctl NULL
 #endif
-
-static const struct snd_pcm_ops msm_pcm_ops = {
-	.open           = msm_pcm_open,
-	.copy_user	= msm_pcm_copy,
-	.hw_params	= msm_pcm_hw_params,
-	.close          = msm_pcm_close,
-	.ioctl          = msm_pcm_ioctl,
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	.compat_ioctl   = msm_pcm_compat_ioctl,
-#endif /* CONFIG_AUDIO_QGKI */
-	.prepare        = msm_pcm_prepare,
-	.trigger        = msm_pcm_trigger,
-	.pointer        = msm_pcm_pointer,
-	.mmap		= msm_pcm_mmap,
-};
 
 static int msm_pcm_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
@@ -3655,7 +3645,7 @@ static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 	return ret;
 }
 
-static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
+static int msm_asoc_pcm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
 	int ret = 0;
@@ -3735,12 +3725,17 @@ static snd_pcm_sframes_t msm_pcm_delay_blk(struct snd_pcm_substream *substream,
 #endif /* CONFIG_AUDIO_QGKI */
 
 static struct snd_soc_component_driver msm_soc_component = {
-	.name		= DRV_NAME,
-	.ops		= &msm_pcm_ops,
-	.pcm_new	= msm_asoc_pcm_new,
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	.delay_blk      = msm_pcm_delay_blk,
-#endif /* CONFIG_AUDIO_QGKI */
+	.name			= DRV_NAME,
+	.open           	= msm_pcm_open,
+	.copy_user		= msm_pcm_copy,
+	.hw_params		= msm_pcm_hw_params,
+	.close          	= msm_pcm_close,
+	.ioctl          	= msm_pcm_ioctl,
+	.prepare        	= msm_pcm_prepare,
+	.trigger        	= msm_pcm_trigger,
+	.pointer        	= msm_pcm_pointer,
+	.mmap			= msm_pcm_mmap,
+	.pcm_construct	= msm_asoc_pcm_new,
 };
 
 static int msm_pcm_probe(struct platform_device *pdev)
