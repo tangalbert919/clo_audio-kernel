@@ -31675,6 +31675,7 @@ static int asrc_get_module_location(struct asrc_module_config_params *params,
 	}
 
 	mutex_lock(&routing_lock);
+
 	dir = params->dir;
 	be_id = params->be_id;
 	fe_id = params->fe_id;
