@@ -105,8 +105,7 @@ static struct msm_ec_ref_port_cfg ec_ref_port_cfg;
 static struct msm_pcm_channel_mixer channel_mixer[MSM_FRONTEND_DAI_MM_SIZE];
 
 /* all the FES which can support channel mixer for bidirection */
-static struct msm_pcm_channel_mixer
-	channel_mixer_v2[MSM_FRONTEND_DAI_MM_SIZE][2];
+static struct msm_pcm_channel_mixer_v2 channel_mixer_v2[MT_MX_MAX_PORTS];
 
 /* input BE for each FE */
 static int channel_input[MSM_FRONTEND_DAI_MM_SIZE][ADM_MAX_CHANNELS];
@@ -1383,6 +1382,38 @@ static int get_copp_perf_mode(int fe_id, int sess_type, int port)
 	return rc;
 }
 
+static int get_available_chmixer_index(int fe_id, int sess_type, int be_id)
+{
+	int index = 0;
+	bool need_research = true;
+
+	/*
+	 * If there is a item that have the same fe_id sess_type and be_id
+	 * with input, use the index of this item and update it.
+	 */
+	for (index = 0; index < MT_MX_MAX_PORTS; index++) {
+		if ((channel_mixer_v2[index].fedai_id == fe_id) &&
+			(channel_mixer_v2[index].session_type == sess_type) &&
+			(channel_mixer_v2[index].be_id == be_id)) {
+				need_research = false;
+				break;
+		}
+	}
+
+	/*
+	 * If the item with fe_id sess_type and be_id is not exist,
+	 * find an new unused item
+	 */
+	if (need_research) {
+		for (index = 0; index < MT_MX_MAX_PORTS; index++) {
+			if (!channel_mixer_v2[index].is_used)
+				break;
+		}
+	}
+
+	return index;
+}
+
 /*
  * msm_pcm_routing_send_chmix_cfg:
  *	send the channel mixer command to mix the input channels
@@ -1460,31 +1491,46 @@ int msm_pcm_routing_set_channel_mixer_cfg(
 	int fe_id, int type,
 	struct msm_pcm_channel_mixer *params)
 {
-	int i, j = 0;
+	int i, j, index = 0;
+	int be_id = params->port_idx - 1;
 
-	channel_mixer_v2[fe_id][type].enable = params->enable;
-	channel_mixer_v2[fe_id][type].rule = params->rule;
-	channel_mixer_v2[fe_id][type].input_channel =
+	index = get_available_chmixer_index(fe_id, type, be_id);
+	if (index >= MT_MX_MAX_PORTS) {
+		pr_err("%s: Set channel mixer configure Fail!\n", __func__);
+		return -EINVAL;
+	}
+
+	memset(&channel_mixer_v2[index], 0,
+		sizeof(struct msm_pcm_channel_mixer_v2));
+	channel_mixer_v2[index].is_used = true;
+	channel_mixer_v2[index].fedai_id = fe_id;
+	channel_mixer_v2[index].session_type = type;
+	channel_mixer_v2[index].be_id = be_id;
+	channel_mixer_v2[index].mixer_cfg.port_idx = params->port_idx;
+	channel_mixer_v2[index].mixer_cfg.enable = params->enable;
+	channel_mixer_v2[index].mixer_cfg.rule = params->rule;
+	channel_mixer_v2[index].mixer_cfg.input_channel =
 		params->input_channel;
-	channel_mixer_v2[fe_id][type].output_channel =
+	channel_mixer_v2[index].mixer_cfg.output_channel =
 		params->output_channel;
-	channel_mixer_v2[fe_id][type].port_idx = params->port_idx;
+	channel_mixer_v2[index].mixer_cfg.input_channels[0] =
+		params->input_channel;
 
 	for (i = 0; i < ADM_MAX_CHANNELS; i++)
-		channel_mixer_v2[fe_id][type].in_ch_map[i] =
+		channel_mixer_v2[index].mixer_cfg.in_ch_map[i] =
 			params->in_ch_map[i];
 	for (i = 0; i < ADM_MAX_CHANNELS; i++)
-		channel_mixer_v2[fe_id][type].out_ch_map[i] =
+		channel_mixer_v2[index].mixer_cfg.out_ch_map[i] =
 			params->out_ch_map[i];
 
 	for (i = 0; i < ADM_MAX_CHANNELS; i++)
 		for (j = 0; j < ADM_MAX_CHANNELS; j++)
-			channel_mixer_v2[fe_id][type].channel_weight[i][j] =
+			channel_mixer_v2[index].mixer_cfg.channel_weight[i][j] =
 				params->channel_weight[i][j];
 
-	channel_mixer_v2[fe_id][type].override_in_ch_map =
+	channel_mixer_v2[index].mixer_cfg.override_in_ch_map =
 			params->override_in_ch_map;
-	channel_mixer_v2[fe_id][type].override_out_ch_map =
+	channel_mixer_v2[index].mixer_cfg.override_out_ch_map =
 			params->override_out_ch_map;
 
 	return 0;
@@ -2209,9 +2255,10 @@ static u32 msm_pcm_routing_get_voc_sessionid(u16 val)
 static int msm_pcm_routing_channel_mixer_v2(int fe_id, bool perf_mode,
 				int dspst_id, int stream_type)
 {
+	struct msm_pcm_channel_mixer *mixer_config;
 	int copp_idx = 0;
 	int sess_type = 0;
-	int j = 0, be_id = 0;
+	int i = 0, j = 0, be_id = 0;
 	int ret = 0;
 
 	if (fe_id >= MSM_FRONTEND_DAI_MM_SIZE) {
@@ -2224,44 +2271,45 @@ static int msm_pcm_routing_channel_mixer_v2(int fe_id, bool perf_mode,
 	else
 		sess_type = SESSION_TYPE_TX;
 
-	if (!(channel_mixer_v2[fe_id][sess_type].enable)) {
-		pr_debug("%s: channel mixer not enabled for FE %d direction %d\n",
-			__func__, fe_id, sess_type);
-		return 0;
-	}
-
-	be_id = channel_mixer_v2[fe_id][sess_type].port_idx - 1;
-        if (be_id < 0 || be_id >= MSM_BACKEND_DAI_MAX) {
-		pr_err("%s: Received out of bounds be_id %d\n",
-				__func__, be_id);
-		return -EINVAL;
-	}
-	channel_mixer_v2[fe_id][sess_type].input_channels[0] =
-		channel_mixer_v2[fe_id][sess_type].input_channel;
-
-	pr_debug("%s sess type %d,fe_id %d,override in:%d out:%d,be active %d\n",
-			__func__, sess_type, fe_id,
-			channel_mixer_v2[fe_id][sess_type].override_in_ch_map,
-			channel_mixer_v2[fe_id][sess_type].override_out_ch_map,
-			msm_bedais[be_id].active);
-
-	if ((msm_bedais[be_id].active) &&
-		test_bit(fe_id, &msm_bedais[be_id].fe_sessions[0])) {
-		unsigned long copp =
-			session_copp_map[fe_id][sess_type][be_id];
-		for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
-			if (test_bit(j, &copp)) {
-				copp_idx = j;
-				break;
+	for (i = 0; i < MT_MX_MAX_PORTS; i++) {
+		if ((channel_mixer_v2[i].fedai_id == fe_id) &&
+			(channel_mixer_v2[i].session_type == sess_type)) {
+				if ((!channel_mixer_v2[i].mixer_cfg.enable) ||
+					!(channel_mixer_v2[i].is_used)) {
+					pr_debug("%s: channel mixer not enabled for FE %d direction %d\n",
+						__func__, fe_id, sess_type);
+					continue;
+				}
+				be_id = channel_mixer_v2[i].be_id;
+				if (be_id < 0 || be_id >= MSM_BACKEND_DAI_MAX) {
+					pr_err("%s: Received out of bounds be_id %d\n",
+						__func__, be_id);
+					return -EINVAL;
+				}
+				mixer_config = &channel_mixer_v2[i].mixer_cfg;
+				pr_debug("%s sess type %d,fe_id %d,override in:%d out:%d,be active %d\n",
+						__func__, sess_type, fe_id,
+						mixer_config->override_in_ch_map,
+						mixer_config->override_out_ch_map,
+						msm_bedais[be_id].active);
+				if ((msm_bedais[be_id].active) &&
+					test_bit(fe_id, &msm_bedais[be_id].fe_sessions[0])) {
+					unsigned long copp =
+						session_copp_map[fe_id][sess_type][be_id];
+					for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
+						if (test_bit(j, &copp)) {
+							copp_idx = j;
+							break;
+						}
+					}
+					ret = adm_programable_channel_mixer(
+						msm_bedais[be_id].port_id,
+						copp_idx, dspst_id, sess_type,
+						mixer_config, 0);
+					channel_mixer_v2[i].is_used = false;
+				}
 			}
-		}
-
-		ret = adm_programable_channel_mixer(
-			msm_bedais[be_id].port_id,
-			copp_idx, dspst_id, sess_type,
-			&channel_mixer_v2[fe_id][sess_type], 0);
 	}
-
 	return ret;
 }
 
@@ -32661,6 +32709,15 @@ static int spkr_prot_get_vi_rch_port(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static const char * const cdc_dma_rx_0_vi_fb_tx_mux_text[] = {
+	"ZERO", "TX_CDC_DMA_TX_3", "TX_CDC_DMA_TX_4","TX_CDC_DMA_TX_5"
+
+};
+
+static const char * const cdc_dma_rx_1_vi_fb_tx_mux_text[] = {
+	"ZERO", "TX_CDC_DMA_TX_3", "TX_CDC_DMA_TX_4","TX_CDC_DMA_TX_5"
+};
+
 static const char * const slim0_rx_vi_fb_tx_lch_mux_text[] = {
 	"ZERO", "SLIM4_TX"
 };
@@ -32687,6 +32744,14 @@ static const char * const int4_mi2s_rx_vi_fb_tx_mono_mux_text[] = {
 
 static const char * const int4_mi2s_rx_vi_fb_tx_stereo_mux_text[] = {
 	"ZERO", "INT5_MI2S_TX"
+};
+
+static const int cdc_dma_rx_0_vi_fb_tx_value[] = {
+	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_TX_CDC_DMA_TX_3, MSM_BACKEND_DAI_TX_CDC_DMA_TX_4
+};
+
+static const int cdc_dma_rx_1_vi_fb_tx_value[] = {
+	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_TX_CDC_DMA_TX_3, MSM_BACKEND_DAI_TX_CDC_DMA_TX_4
 };
 
 static const int slim0_rx_vi_fb_tx_lch_value[] = {
@@ -32717,6 +32782,16 @@ static const int int4_mi2s_rx_vi_fb_tx_mono_ch_value[] = {
 static const int int4_mi2s_rx_vi_fb_tx_stereo_ch_value[] = {
 	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_INT5_MI2S_TX
 };
+
+static const struct soc_enum cdc_dma_rx_0_vi_fb_mux_enum =
+	SOC_VALUE_ENUM_DOUBLE(0, MSM_BACKEND_DAI_RX_CDC_DMA_RX_0, 0, 0,
+	ARRAY_SIZE(cdc_dma_rx_0_vi_fb_tx_mux_text),
+	cdc_dma_rx_0_vi_fb_tx_mux_text, cdc_dma_rx_0_vi_fb_tx_value);
+
+static const struct soc_enum cdc_dma_rx_1_vi_fb_mux_enum =
+	SOC_VALUE_ENUM_DOUBLE(0, MSM_BACKEND_DAI_RX_CDC_DMA_RX_1, 0, 0,
+	ARRAY_SIZE(cdc_dma_rx_1_vi_fb_tx_mux_text),
+	cdc_dma_rx_1_vi_fb_tx_mux_text, cdc_dma_rx_1_vi_fb_tx_value);
 
 static const struct soc_enum slim0_rx_vi_fb_lch_mux_enum =
 	SOC_VALUE_ENUM_DOUBLE(0, MSM_BACKEND_DAI_SLIMBUS_0_RX, 0, 0,
@@ -32754,6 +32829,16 @@ static const struct soc_enum int4_mi2s_rx_vi_fb_stereo_ch_mux_enum =
 	ARRAY_SIZE(int4_mi2s_rx_vi_fb_tx_stereo_mux_text),
 	int4_mi2s_rx_vi_fb_tx_stereo_mux_text,
 	int4_mi2s_rx_vi_fb_tx_stereo_ch_value);
+
+static const struct snd_kcontrol_new cdc_dma_rx_0_vi_fb_mux =
+	SOC_DAPM_ENUM_EXT("CDC_DMA_RX_0_VI_FB_MUX",
+	cdc_dma_rx_0_vi_fb_mux_enum, spkr_prot_get_vi_lch_port,
+	spkr_prot_put_vi_lch_port);
+
+static const struct snd_kcontrol_new cdc_dma_rx_1_vi_fb_mux =
+	SOC_DAPM_ENUM_EXT("CDC_DMA_RX_1_VI_FB_MUX",
+	cdc_dma_rx_1_vi_fb_mux_enum, spkr_prot_get_vi_lch_port,
+	spkr_prot_put_vi_lch_port);
 
 static const struct snd_kcontrol_new slim0_rx_vi_fb_lch_mux =
 	SOC_DAPM_ENUM_EXT("SLIM0_RX_VI_FB_LCH_MUX",
@@ -32869,6 +32954,8 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 		0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("TX3_CDC_DMA_UL_HL",
 		"TX3_CDC_DMA_HOSTLESS Capture", 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("TX4_CDC_DMA_UL_HL",
+		"TX4_CDC_DMA_HOSTLESS Capture", 0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("CPE_LSM_UL_HL", "CPE LSM capture",
 		0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_IN("SLIM1_DL_HL", "SLIMBUS1_HOSTLESS Playback",
@@ -33369,6 +33456,12 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	/* Virtual Pins to force backends ON atm */
 	SND_SOC_DAPM_OUTPUT("BE_OUT"),
 	SND_SOC_DAPM_INPUT("BE_IN"),
+
+	SND_SOC_DAPM_MUX("CDC_DMA_RX_0_VI_FB_MUX", SND_SOC_NOPM, 0, 0,
+				&cdc_dma_rx_0_vi_fb_mux),
+
+	SND_SOC_DAPM_MUX("CDC_DMA_RX_1_VI_FB_MUX", SND_SOC_NOPM, 0, 0,
+				&cdc_dma_rx_1_vi_fb_mux),
 
 	SND_SOC_DAPM_MUX("SLIM0_RX_VI_FB_LCH_MUX", SND_SOC_NOPM, 0, 0,
 				&slim0_rx_vi_fb_lch_mux),
@@ -36198,6 +36291,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"RX_CDC_DMA_RX_1_DL_HL", "Switch", "CDC_DMA_DL_HL"},
 	{"RX_CDC_DMA_RX_1", NULL, "RX_CDC_DMA_RX_1_DL_HL"},
 	{"TX3_CDC_DMA_UL_HL", NULL, "TX_CDC_DMA_TX_3"},
+	{"TX4_CDC_DMA_UL_HL", NULL, "TX_CDC_DMA_TX_4"},
 	{"LSM1 Mixer", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
 	{"LSM1 Mixer", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
 	{"LSM1 Mixer", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
@@ -36507,10 +36601,16 @@ static const struct snd_soc_dapm_route intercon[] = {
 #endif
 	{"INCALL_RECORD_TX", NULL, "BE_IN"},
 	{"INCALL_RECORD_RX", NULL, "BE_IN"},
+	{"CDC_DMA_RX_0_VI_FB_MUX", "TX_CDC_DMA_TX_3", "TX_CDC_DMA_TX_3"},
+	{"CDC_DMA_RX_0_VI_FB_MUX", "TX_CDC_DMA_TX_4", "TX_CDC_DMA_TX_4"},
+	{"CDC_DMA_RX_1_VI_FB_MUX", "TX_CDC_DMA_TX_3", "TX_CDC_DMA_TX_3"},
+	{"CDC_DMA_RX_1_VI_FB_MUX", "TX_CDC_DMA_TX_4", "TX_CDC_DMA_TX_4"},
 	{"SLIM0_RX_VI_FB_LCH_MUX", "SLIM4_TX", "SLIMBUS_4_TX"},
 	{"SLIM0_RX_VI_FB_RCH_MUX", "SLIM4_TX", "SLIMBUS_4_TX"},
 	{"WSA_RX_0_VI_FB_LCH_MUX", "WSA_CDC_DMA_TX_0", "WSA_CDC_DMA_TX_0"},
 	{"WSA_RX_0_VI_FB_RCH_MUX", "WSA_CDC_DMA_TX_0", "WSA_CDC_DMA_TX_0"},
+	{"RX_CDC_DMA_RX_0", NULL, "CDC_DMA_RX_0_VI_FB_MUX"},
+	{"RX_CDC_DMA_RX_1", NULL, "CDC_DMA_RX_1_VI_FB_MUX"},
 	{"SLIMBUS_0_RX", NULL, "SLIM0_RX_VI_FB_LCH_MUX"},
 	{"SLIMBUS_0_RX", NULL, "SLIM0_RX_VI_FB_RCH_MUX"},
 	{"WSA_CDC_DMA_RX_0", NULL, "WSA_RX_0_VI_FB_LCH_MUX"},
