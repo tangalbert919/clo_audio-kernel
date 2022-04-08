@@ -102,6 +102,8 @@
 #define TDM_CHANNEL_MAX		8
 #define DEV_NAME_STR_LEN	32
 
+#define NUM_OF_BITS_PER_SAMPLE 16
+
 /* time in us to ensure LPM doesn't go in C3/C4 */
 #define MSM_LL_QOS_VALUE	300
 
@@ -109,6 +111,10 @@
 
 #define WCN_CDC_SLIM_RX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX 3
+
+#define I2S_PCM_MASTER_MODE 1
+#define I2S_PCM_SLAVE_MODE 0
+#define MCLK_CLK_12P288MHZ 12288000
 
 enum {
 	TDM_0 = 0,
@@ -285,6 +291,7 @@ static u32 mi2s_ebit_clk[MI2S_MAX] = {
 	Q6AFE_LPASS_CLK_ID_PRI_MI2S_EBIT,
 	Q6AFE_LPASS_CLK_ID_SEC_MI2S_EBIT,
 	Q6AFE_LPASS_CLK_ID_TER_MI2S_EBIT,
+	Q6AFE_LPASS_CLK_ID_QUAD_MI2S_EBIT,
 };
 
 static struct mi2s_conf mi2s_intf_conf[MI2S_MAX];
@@ -479,6 +486,7 @@ static char const *bt_sample_rate_tx_text[] = {"KHZ_8", "KHZ_16",
 					"KHZ_44P1", "KHZ_48",
 					"KHZ_88P2", "KHZ_96"};
 static const char *const afe_loopback_tx_ch_text[] = {"One", "Two"};
+static const char *const mode_text[] = {"master", "slave"};
 
 static SOC_ENUM_SINGLE_EXT_DECL(usb_rx_sample_rate, usb_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(usb_tx_sample_rate, usb_sample_rate_text);
@@ -570,6 +578,7 @@ static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate, bt_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate_rx, bt_sample_rate_rx_text);
 static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate_tx, bt_sample_rate_tx_text);
 static SOC_ENUM_SINGLE_EXT_DECL(afe_loopback_tx_chs, afe_loopback_tx_ch_text);
+static SOC_ENUM_SINGLE_EXT_DECL(msm_mode, mode_text);
 
 static bool is_initial_boot;
 static bool codec_reg_done;
@@ -1466,6 +1475,77 @@ static int tdm_tx_ch_put(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+
+static int tdm_get_mode_idx(struct snd_kcontrol *kcontrol)
+{
+	int idx = 0;
+
+	if (strnstr(kcontrol->id.name, "PRIM_TDM",
+	    sizeof("PRIM_TDM"))) {
+		idx = TDM_PRI;
+	} else if (strnstr(kcontrol->id.name, "SEC_TDM",
+		 sizeof("SEC_TDM"))) {
+		idx = TDM_SEC;
+	} else if (strnstr(kcontrol->id.name, "TERT_TDM",
+		 sizeof("TERT_TDM"))) {
+		idx = TDM_TERT;
+	} else if (strnstr(kcontrol->id.name, "QUAT_TDM",
+		 sizeof("QUAT_TDM"))) {
+		idx = TDM_QUAT;
+	} else {
+		pr_err("%s: unsupported index: %s\n",
+			__func__, kcontrol->id.name);
+		idx = -EINVAL;
+	}
+
+	return idx;
+}
+
+static int tdm_mode_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = tdm_get_mode_idx(kcontrol);
+
+	if (idx < 0)
+		return idx;
+
+	ucontrol->value.enumerated.item[0] =
+		mi2s_intf_conf[idx].msm_is_mi2s_master;
+
+	pr_debug("%s: idx[%d]mode = %d, item = %d\n", __func__,
+		 idx, mi2s_intf_conf[idx].msm_is_mi2s_master,
+		 ucontrol->value.enumerated.item[0]);
+
+	return 0;
+}
+
+static int tdm_mode_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = tdm_get_mode_idx(kcontrol);
+
+	if (idx < 0)
+		return idx;
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_MASTER_MODE;
+		break;
+	case 1:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_SLAVE_MODE;
+		break;
+	default:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_MASTER_MODE;
+		break;
+	}
+
+	pr_debug("%s: msm_tdm_mode = %d ucontrol->value = %d\n",
+		 __func__, mi2s_intf_conf[idx].msm_is_mi2s_master,
+		 (int)ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
 static int aux_pcm_get_port_idx(struct snd_kcontrol *kcontrol)
 {
 	int idx = 0;
@@ -1715,6 +1795,76 @@ static int msm_aux_pcm_tx_format_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int aux_pcm_get_mode_idx(struct snd_kcontrol *kcontrol)
+{
+	int idx = 0;
+
+	if (strnstr(kcontrol->id.name, "PRIM_AUX_PCM",
+	    sizeof("PRIM_AUX_PCM"))) {
+		idx = PRIM_AUX_PCM;
+	} else if (strnstr(kcontrol->id.name, "SEC_AUX_PCM",
+		 sizeof("SEC_AUX_PCM"))) {
+		idx = SEC_AUX_PCM;
+	} else if (strnstr(kcontrol->id.name, "TERT_AUX_PCM",
+		 sizeof("TERT_AUX_PCM"))) {
+		idx = TERT_AUX_PCM;
+	} else if (strnstr(kcontrol->id.name, "QUAT_AUX_PCM",
+		 sizeof("QUAT_AUX_PCM"))) {
+		idx = QUAT_AUX_PCM;
+	} else {
+		pr_err("%s: unsupported index: %s\n",
+			__func__, kcontrol->id.name);
+		idx = -EINVAL;
+	}
+
+	return idx;
+}
+
+static int aux_pcm_mode_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = aux_pcm_get_mode_idx(kcontrol);
+
+	if (idx < 0)
+		return idx;
+
+	ucontrol->value.enumerated.item[0] =
+		mi2s_intf_conf[idx].msm_is_mi2s_master;
+
+	pr_debug("%s: idx[%d]mode = %d, item = %d\n", __func__,
+		 idx, mi2s_intf_conf[idx].msm_is_mi2s_master,
+		 ucontrol->value.enumerated.item[0]);
+
+	return 0;
+}
+
+static int aux_pcm_mode_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = aux_pcm_get_mode_idx(kcontrol);
+
+	if (idx < 0)
+		return idx;
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_MASTER_MODE;
+		break;
+	case 1:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_SLAVE_MODE;
+		break;
+	default:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_MASTER_MODE;
+		break;
+	}
+
+	pr_debug("%s: msm_aux_pcm_mode = %d ucontrol->value = %d\n",
+		 __func__, mi2s_intf_conf[idx].msm_is_mi2s_master,
+		 (int)ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
 static int mi2s_get_port_idx(struct snd_kcontrol *kcontrol)
 {
 	int idx = 0;
@@ -1745,6 +1895,31 @@ static int mi2s_get_port_idx(struct snd_kcontrol *kcontrol)
 		idx = QUAT_MI2S;
 	} else {
 		pr_err("%s: unsupported channel: %s\n",
+			__func__, kcontrol->id.name);
+		idx = -EINVAL;
+	}
+
+	return idx;
+}
+
+static int mi2s_get_mode_idx(struct snd_kcontrol *kcontrol)
+{
+	int idx = 0;
+
+	if (strnstr(kcontrol->id.name, "PRIM_MI2S",
+	    sizeof("PRIM_MI2S"))) {
+		idx = PRIM_MI2S;
+	} else if (strnstr(kcontrol->id.name, "SEC_MI2S",
+		 sizeof("SEC_MI2S"))) {
+		idx = SEC_MI2S;
+	} else if (strnstr(kcontrol->id.name, "TERT_MI2S",
+		 sizeof("TERT_MI2S"))) {
+		idx = TERT_MI2S;
+	} else if (strnstr(kcontrol->id.name, "QUAT_MI2S",
+		 sizeof("QUAT_MI2S"))) {
+		idx = QUAT_MI2S;
+	} else {
+		pr_err("%s: unsupported index: %s\n",
 			__func__, kcontrol->id.name);
 		idx = -EINVAL;
 	}
@@ -1862,6 +2037,51 @@ static int mi2s_rx_sample_rate_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: idx[%d]_rx_sample_rate = %d, item = %d\n", __func__,
 		 idx, mi2s_rx_cfg[idx].sample_rate,
 		 ucontrol->value.enumerated.item[0]);
+
+	return 0;
+}
+
+static int mi2s_mode_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = mi2s_get_mode_idx(kcontrol);
+
+	if (idx < 0)
+		return idx;
+
+	ucontrol->value.enumerated.item[0] =
+		mi2s_intf_conf[idx].msm_is_mi2s_master;
+
+	pr_debug("%s: idx[%d]mode = %d, item = %d\n", __func__,
+		 idx, mi2s_intf_conf[idx].msm_is_mi2s_master,
+		 ucontrol->value.enumerated.item[0]);
+
+	return 0;
+}
+
+static int mi2s_mode_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = mi2s_get_mode_idx(kcontrol);
+
+	if (idx < 0)
+		return idx;
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_MASTER_MODE;
+		break;
+	case 1:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_SLAVE_MODE;
+		break;
+	default:
+		mi2s_intf_conf[idx].msm_is_mi2s_master = I2S_PCM_MASTER_MODE;
+		break;
+	}
+
+	pr_debug("%s: msm_mi2s_mode = %d ucontrol->value = %d\n",
+		 __func__, mi2s_intf_conf[idx].msm_is_mi2s_master,
+		 (int)ucontrol->value.integer.value[0]);
 
 	return 0;
 }
@@ -2137,6 +2357,7 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 	}
 
 	mi2s_clk[index].enable = enable;
+
 	ret = afe_set_lpass_clock_v2(port_id,
 				     &mi2s_clk[index]);
 	if (ret < 0) {
@@ -2149,6 +2370,7 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 err:
 	return ret;
 }
+
 
 static int cdc_dma_get_port_idx(struct snd_kcontrol *kcontrol)
 {
@@ -3096,6 +3318,24 @@ static const struct snd_kcontrol_new msm_tdm_snd_controls[] = {
 	SOC_ENUM_EXT("QUAT_TDM_TX_0 Channels", tdm_tx_chs,
 			tdm_tx_ch_get,
 			tdm_tx_ch_put),
+	SOC_ENUM_EXT("SEC_TDM_RX_1 Channels", tdm_rx_chs,
+			tdm_rx_ch_get,
+			tdm_rx_ch_put),
+	SOC_ENUM_EXT("SEC_TDM_TX_1 Channels", tdm_tx_chs,
+			tdm_tx_ch_get,
+			tdm_tx_ch_put),
+	SOC_ENUM_EXT("PRIM_TDM Mode", msm_mode,
+			tdm_mode_get,
+			tdm_mode_put),
+	SOC_ENUM_EXT("SEC_TDM Mode", msm_mode,
+			tdm_mode_get,
+			tdm_mode_put),
+	SOC_ENUM_EXT("TERT_TDM Mode", msm_mode,
+			tdm_mode_get,
+			tdm_mode_put),
+	SOC_ENUM_EXT("QUAT_TDM Mode", msm_mode,
+			tdm_mode_get,
+			tdm_mode_put),
 };
 
 static const struct snd_kcontrol_new msm_auxpcm_snd_controls[] = {
@@ -3139,6 +3379,18 @@ static const struct snd_kcontrol_new msm_auxpcm_snd_controls[] = {
 			msm_aux_pcm_tx_format_get, msm_aux_pcm_tx_format_put),
 	SOC_ENUM_EXT("QUAT_AUX_PCM_TX Format", aux_pcm_tx_format,
 			msm_aux_pcm_tx_format_get, msm_aux_pcm_tx_format_put),
+	SOC_ENUM_EXT("PRIM_AUX_PCM Mode", msm_mode,
+			aux_pcm_mode_get,
+			aux_pcm_mode_put),
+	SOC_ENUM_EXT("SEC_AUX_PCM Mode", msm_mode,
+			aux_pcm_mode_get,
+			aux_pcm_mode_put),
+	SOC_ENUM_EXT("TERT_AUX_PCM Mode", msm_mode,
+			aux_pcm_mode_get,
+			aux_pcm_mode_put),
+	SOC_ENUM_EXT("QUAT_AUX_PCM Mode", msm_mode,
+			aux_pcm_mode_get,
+			aux_pcm_mode_put),
 };
 
 static const struct snd_kcontrol_new msm_mi2s_snd_controls[] = {
@@ -3153,6 +3405,9 @@ static const struct snd_kcontrol_new msm_mi2s_snd_controls[] = {
 			mi2s_rx_sample_rate_put),
 	SOC_ENUM_EXT("QUAT_MI2S_RX SampleRate", quat_mi2s_rx_sample_rate,
 			mi2s_rx_sample_rate_get,
+			mi2s_tx_sample_rate_put),
+	SOC_ENUM_EXT("PRIM_MI2S_TX SampleRate", sec_mi2s_tx_sample_rate,
+			mi2s_tx_sample_rate_get,
 			mi2s_tx_sample_rate_put),
 	SOC_ENUM_EXT("SEC_MI2S_TX SampleRate", sec_mi2s_tx_sample_rate,
 			mi2s_tx_sample_rate_get,
@@ -3195,6 +3450,18 @@ static const struct snd_kcontrol_new msm_mi2s_snd_controls[] = {
 			msm_mi2s_tx_ch_get, msm_mi2s_tx_ch_put),
 	SOC_ENUM_EXT("QUAT_MI2S_TX Channels", quat_mi2s_tx_chs,
 			msm_mi2s_tx_ch_get, msm_mi2s_tx_ch_put),
+	SOC_ENUM_EXT("PRIM_MI2S Mode", msm_mode,
+			mi2s_mode_get,
+			mi2s_mode_put),
+	SOC_ENUM_EXT("SEC_MI2S Mode", msm_mode,
+			mi2s_mode_get,
+			mi2s_mode_put),
+	SOC_ENUM_EXT("TERT_MI2S Mode", msm_mode,
+			mi2s_mode_get,
+			mi2s_mode_put),
+	SOC_ENUM_EXT("QUAT_MI2S Mode", msm_mode,
+			mi2s_mode_get,
+			mi2s_mode_put),
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -3737,12 +4004,22 @@ static int bengal_tdm_snd_startup(struct snd_pcm_substream *substream)
 	if (pdata->mi2s_gpio_p[tdm_mode]) {
 		if (atomic_read(&(pdata->mi2s_gpio_ref_count[tdm_mode]))
 									== 0) {
-			ret = msm_cdc_pinctrl_select_active_state(
-				pdata->mi2s_gpio_p[tdm_mode]);
-			if (ret) {
-				pr_err("%s: TDM GPIO pinctrl set active failed with %d\n",
-					__func__, ret);
-				goto done;
+			if (mi2s_intf_conf[tdm_mode].msm_is_mi2s_master) {
+				ret = msm_cdc_pinctrl_select_active_state(
+						pdata->mi2s_gpio_p[tdm_mode]);
+				if (ret) {
+					pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
+						__func__, ret);
+					goto done;
+				}
+			} else {
+				ret = msm_cdc_pinctrl_select_alt_active_state(
+						pdata->mi2s_gpio_p[tdm_mode]);
+				if (ret) {
+					pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
+						__func__, ret);
+					goto done;
+				}
 			}
 		}
 		atomic_inc(&(pdata->mi2s_gpio_ref_count[tdm_mode]));
@@ -3800,12 +4077,22 @@ static int bengal_aux_snd_startup(struct snd_pcm_substream *substream)
 	if (pdata->mi2s_gpio_p[aux_mode]) {
 		if (atomic_read(&(pdata->mi2s_gpio_ref_count[aux_mode]))
 									== 0) {
-			ret = msm_cdc_pinctrl_select_active_state(
-				pdata->mi2s_gpio_p[aux_mode]);
-			if (ret) {
-				pr_err("%s: AUX GPIO pinctrl set active failed with %d\n",
-					__func__, ret);
-				goto done;
+			if (mi2s_intf_conf[aux_mode].msm_is_mi2s_master) {
+				ret = msm_cdc_pinctrl_select_active_state(
+						pdata->mi2s_gpio_p[aux_mode]);
+				if (ret) {
+					pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
+						__func__, ret);
+					goto done;
+				}
+			} else {
+				ret = msm_cdc_pinctrl_select_alt_active_state(
+						pdata->mi2s_gpio_p[aux_mode]);
+				if (ret) {
+					pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
+						__func__, ret);
+					goto done;
+				}
 			}
 		}
 		atomic_inc(&(pdata->mi2s_gpio_ref_count[aux_mode]));
@@ -3972,6 +4259,11 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	 */
 	mutex_lock(&mi2s_intf_conf[index].lock);
 	if (++mi2s_intf_conf[index].ref_cnt == 1) {
+		/* Check if msm needs to provide the clock to the interface */
+		if (!mi2s_intf_conf[index].msm_is_mi2s_master) {
+			mi2s_clk[index].clk_id = mi2s_ebit_clk[index];
+			fmt = SND_SOC_DAIFMT_CBM_CFM;
+		}
 		ret = msm_mi2s_set_sclk(substream, true);
 		if (ret < 0) {
 			dev_err(rtd->card->dev,
@@ -3980,30 +4272,36 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			goto clean_up;
 		}
 
+		ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+		if (ret < 0) {
+			pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
+				__func__, index, ret);
+			goto clk_off;
+		}
+
 		if (pdata->mi2s_gpio_p[index]) {
 			if (atomic_read(&(pdata->mi2s_gpio_ref_count[index]))
 									== 0) {
-				ret = msm_cdc_pinctrl_select_active_state(
-						pdata->mi2s_gpio_p[index]);
-				if (ret) {
-					pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
-						__func__, ret);
-					goto clk_off;
+				if (mi2s_intf_conf[index].msm_is_mi2s_master) {
+					ret = msm_cdc_pinctrl_select_active_state(
+							pdata->mi2s_gpio_p[index]);
+					if (ret) {
+						pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
+							__func__, ret);
+						goto clk_off;
+					}
+				} else {
+					ret = msm_cdc_pinctrl_select_alt_active_state(
+							pdata->mi2s_gpio_p[index]);
+					if (ret) {
+						pr_err("%s: MI2S GPIO pinctrl set active failed with %d\n",
+							__func__, ret);
+						goto clk_off;
+					}
 				}
 			}
 			atomic_inc(&(pdata->mi2s_gpio_ref_count[index]));
 		}
-	}
-	/* Check if msm needs to provide the clock to the interface */
-	if (!mi2s_intf_conf[index].msm_is_mi2s_master) {
-		mi2s_clk[index].clk_id = mi2s_ebit_clk[index];
-		fmt = SND_SOC_DAIFMT_CBM_CFM;
-	}
-	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
-	if (ret < 0) {
-		pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
-			__func__, index, ret);
-		goto clk_off;
 	}
 clk_off:
 	if (ret < 0)
@@ -4238,6 +4536,11 @@ static void msm_add_tdm_snd_controls(struct snd_soc_component *component)
 	snd_soc_add_component_controls(component, msm_tdm_snd_controls,
 				ARRAY_SIZE(msm_tdm_snd_controls));
 }
+#else
+static void msm_add_tdm_snd_controls(struct snd_soc_component *component)
+{
+	return;
+}
 #endif
 
 #ifndef CONFIG_MI2S_DISABLE
@@ -4246,6 +4549,11 @@ static void msm_add_mi2s_snd_controls(struct snd_soc_component *component)
 	snd_soc_add_component_controls(component, msm_mi2s_snd_controls,
 				ARRAY_SIZE(msm_mi2s_snd_controls));
 }
+#else
+static void msm_add_mi2s_snd_controls(struct snd_soc_component *component)
+{
+	return;
+}
 #endif
 
 #ifndef CONFIG_AUXPCM_DISABLE
@@ -4253,6 +4561,11 @@ static void msm_add_auxpcm_snd_controls(struct snd_soc_component *component)
 {
 	snd_soc_add_component_controls(component, msm_auxpcm_snd_controls,
 				ARRAY_SIZE(msm_auxpcm_snd_controls));
+}
+#else
+static void msm_add_auxpcm_snd_controls(struct snd_soc_component *component)
+{
+	return;
 }
 #endif
 
@@ -4285,6 +4598,17 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			__func__, ret);
 		return ret;
 	}
+	ret = snd_soc_add_component_controls(component, msm_common_snd_controls,
+				ARRAY_SIZE(msm_common_snd_controls));
+	if (ret < 0) {
+		pr_err("%s: add common snd controls failed: %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	msm_add_tdm_snd_controls(component);
+	msm_add_mi2s_snd_controls(component);
+	msm_add_auxpcm_snd_controls(component);
 
 	snd_soc_dapm_new_controls(dapm, msm_int_dapm_widgets,
 				ARRAY_SIZE(msm_int_dapm_widgets));
@@ -4508,20 +4832,245 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(tx3_cdcdma_hostless),
 	},
-	/* Hostless PCM purpose */
 	{/* hw:x,10 */
-		.name = "AUXPCM Hostless",
-		.stream_name = "AUXPCM Hostless",
+		.name = "Primary MI2S RX_Hostless",
+		.stream_name = "Primary MI2S_RX Hostless Playback",
 		.dynamic = 1,
 		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(pri_mi2s_rx_hostless),
+	},
+	{/* hw:x,11 */
+		.name = "Primary MI2S TX Hostless",
+		.stream_name = "Primary MI2S_TX Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(pri_mi2s_tx_hostless),
+	},
+	{/* hw:x,12 */
+		.name = "Secondary MI2S RX Hostless",
+		.stream_name = "Secondary MI2S_RX Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_mi2s_rx_hostless),
+	},
+	{/* hw:x,13 */
+		.name = "Secondary MI2S TX Hostless",
+		.stream_name = "Secondary MI2S_TX Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_mi2s_tx_hostless),
+	},
+	{/* hw:x,14 */
+		.name = "Primary AUXPCM RX Hostless",
+		.stream_name = "AUXPCM_HOSTLESS Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+					SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(auxpcm_hostless),
+	},
+	{/* hw:x,15 */
+		.name = "Primary AUXPCM TX Hostless",
+		.stream_name = "AUXPCM_HOSTLESS Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+					SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(auxpcm_hostless),
+	},
+	{/* hw:x,16 */
+		.name = "Secondary AUXPCM RX Hostless",
+		.stream_name = "SEC_AUXPCM_HOSTLESS Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+					SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_auxpcm_rx_hostless),
+	},
+	{/* hw:x,17 */
+		.name = "Secondary AUXPCM TX Hostless",
+		.stream_name = "SEC_AUXPCM_HOSTLESS Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+					SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_auxpcm_tx_hostless),
+	},
+	{/* hw:x,18 */
+		.name = "Primary TDM RX 0 Hostless",
+		.stream_name = "Primary TDM RX 0 Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(pri_tdm_rx_0_hostless),
+	},
+	{/* hw:x,19 */
+		.name = "Primary TDM TX 0 Hostless",
+		.stream_name = "Primary TDM TX 0 Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(pri_tdm_tx_0_hostless),
+	},
+	{/* hw:x,20 */
+		.name = "Secondary TDM RX 0 Hostless",
+		.stream_name = "Secondary TDM RX 0 Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_tdm_rx_0_hostless),
+	},
+	{/* hw:x,21 */
+		.name = "Secondary TDM TX 0 Hostless",
+		.stream_name = "Secondary TDM TX 0 Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_tdm_tx_0_hostless),
+	},
+	{/* hw:x,22 */
+		.name = "Tertiary TDM RX 0 Hostless",
+		.stream_name = "Tertiary TDM RX 0 Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_tdm_rx_0_hostless),
+	},
+	{/* hw:x,23 */
+		.name = "Tertiary TDM TX 0 Hostless",
+		.stream_name = "Tertiary TDM TX 0 Hostless Capture",
+		.dynamic = 1,
 		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST},
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_suspend = 1,
-		/* this dainlink has playback support */
 		.ignore_pmdown_time = 1,
-		SND_SOC_DAILINK_REG(auxpcm_hostless),
+		SND_SOC_DAILINK_REG(tert_tdm_tx_0_hostless),
+	},
+	{/* hw:x,24 */
+		.name = "Quaternary TDM RX 0 Hostless",
+		.stream_name = "Quaternary TDM RX 0 Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(quat_tdm_rx_0_hostless),
+	},
+	{/* hw:x,25 */
+		.name = "Quaternary TDM TX 0 Hostless",
+		.stream_name = "Quaternary TDM TX 0 Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(quat_tdm_tx_0_hostless),
+	},
+	{/* hw:x,26 */
+		.name = "Tertiary MI2S RX_Hostless",
+		.stream_name = "Tertiary MI2S_RX Hostless Capture",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_mi2s_rx_hostless),
+	},
+	{/* hw:x,27 */
+		.name = "Tertiary MI2S TX_Hostless",
+		.stream_name = "Tertiary MI2S_TX Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_mi2s_tx_hostless),
+	},
+	{/* hw:x,28 */
+		.name = "Quaternary MI2S_RX Hostless",
+		.stream_name = "Quaternary MI2S_RX Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(quat_mi2s_rx_hostless),
+	},
+	{/* hw:x,29 */
+		.name = "Quaternary MI2S_TX Hostless",
+		.stream_name = "Quaternary MI2S_TX Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(quat_mi2s_tx_hostless),
 	},
 };
 
@@ -5083,8 +5632,10 @@ static struct snd_soc_dai_link msm_bengal_dai_links[
 			ARRAY_SIZE(msm_common_dai_links) +
 			ARRAY_SIZE(msm_common_be_dai_links) +
 			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links) +
-			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links)];
-
+			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links)+
+			ARRAY_SIZE(msm_mi2s_be_dai_links) +
+			ARRAY_SIZE(msm_auxpcm_be_dai_links) +
+			ARRAY_SIZE(msm_tdm_be_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -5395,37 +5946,35 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       sizeof(msm_va_cdc_dma_be_dai_links));
 		total_links += ARRAY_SIZE(msm_va_cdc_dma_be_dai_links);
 
-		goto bypass;
-		/*TO-DO Implementation for remaining dai links*/
 		rc = of_property_read_u32(dev->of_node, "qcom,mi2s-audio-intf",
 					  &mi2s_audio_intf);
-		if (!rc && val) {
-			memcpy(msm_bengal_dai_links + total_links,
-				msm_mi2s_be_dai_links,
-				sizeof(msm_mi2s_be_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_mi2s_be_dai_links);
+		if (rc) {
+			dev_dbg(dev, "%s: No DT match MI2S audio interface\n",
+				__func__);
+		} else {
+			if (mi2s_audio_intf) {
+				memcpy(msm_bengal_dai_links + total_links,
+					msm_mi2s_be_dai_links,
+					sizeof(msm_mi2s_be_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_mi2s_be_dai_links);
+			}
 		}
 
 		rc = of_property_read_u32(dev->of_node,
 					  "qcom,auxpcm-audio-intf",
 					  &auxpcm_audio_intf);
-		if (!rc && val) {
-			memcpy(msm_bengal_dai_links + total_links,
-				msm_auxpcm_be_dai_links,
-				sizeof(msm_auxpcm_be_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_auxpcm_be_dai_links);
-		}
-
-		rc = of_property_read_u32(dev->of_node, "qcom,afe-rxtx-lb",
-				&val);
-		if (!rc && val) {
-			memcpy(msm_bengal_dai_links + total_links,
-				msm_afe_rxtx_lb_be_dai_link,
-				sizeof(msm_afe_rxtx_lb_be_dai_link));
-			total_links +=
-				ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link);
+		if (rc) {
+			dev_dbg(dev, "%s: No DT match Aux PCM interface\n",
+				__func__);
+		} else {
+			if (auxpcm_audio_intf) {
+				memcpy(msm_bengal_dai_links + total_links,
+					msm_auxpcm_be_dai_links,
+					sizeof(msm_auxpcm_be_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_auxpcm_be_dai_links);
+			}
 		}
 
 		rc = of_property_read_u32(dev->of_node, "qcom,tdm-audio-intf",
@@ -5436,6 +5985,18 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 				sizeof(msm_tdm_be_dai_links));
 			total_links +=
 				ARRAY_SIZE(msm_tdm_be_dai_links);
+		}
+
+		goto bypass;
+		/*TO-DO Implementation for remaining dai links*/
+		rc = of_property_read_u32(dev->of_node, "qcom,afe-rxtx-lb",
+				&val);
+		if (!rc && val) {
+			memcpy(msm_bengal_dai_links + total_links,
+				msm_afe_rxtx_lb_be_dai_link,
+				sizeof(msm_afe_rxtx_lb_be_dai_link));
+			total_links +=
+				ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link);
 		}
 
 		rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm",
@@ -5735,6 +6296,10 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 					"qcom,pri-mi2s-gpios", 0);
 	pdata->mi2s_gpio_p[SEC_MI2S] = of_parse_phandle(pdev->dev.of_node,
 					"qcom,sec-mi2s-gpios", 0);
+	pdata->mi2s_gpio_p[TERT_MI2S] = of_parse_phandle(pdev->dev.of_node,
+					"qcom,tert-mi2s-gpios", 0);
+	pdata->mi2s_gpio_p[QUAT_MI2S] = of_parse_phandle(pdev->dev.of_node,
+					"qcom,quat-mi2s-gpios", 0);
 
 	for (index = PRIM_MI2S; index < MI2S_MAX; index++)
 		atomic_set(&(pdata->mi2s_gpio_ref_count[index]), 0);

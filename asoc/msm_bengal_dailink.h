@@ -81,6 +81,16 @@ SND_SOC_DAILINK_DEFS(auxpcm_hostless,
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
 
+SND_SOC_DAILINK_DEFS(sec_auxpcm_rx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_AUXPCM_RX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(sec_auxpcm_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_AUXPCM_TX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
 SND_SOC_DAILINK_DEFS(cdcdma_hostless,
 	DAILINK_COMP_ARRAY(COMP_CPU("CDC_DMA_HOSTLESS")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
@@ -96,6 +106,85 @@ SND_SOC_DAILINK_DEFS(dtmf_rx_hostless,
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-dtmf")));
 
+SND_SOC_DAILINK_DEFS(pri_mi2s_rx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("PRI_MI2S_RX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(pri_mi2s_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("PRI_MI2S_TX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(sec_mi2s_rx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_MI2S_RX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(sec_mi2s_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_MI2S_TX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(tert_mi2s_rx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("TERT_MI2S_RX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(tert_mi2s_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("TERT_MI2S_TX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(quat_mi2s_rx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("QUAT_MI2S_RX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(quat_mi2s_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("QUAT_MI2S_TX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(pri_tdm_rx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("PRI_TDM_RX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(pri_tdm_tx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("PRI_TDM_TX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(sec_tdm_rx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_TDM_RX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(sec_tdm_tx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("SEC_TDM_TX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(tert_tdm_rx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("TERT_TDM_RX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(tert_tdm_tx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("TERT_TDM_TX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(quat_tdm_rx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("QUAT_TDM_RX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(quat_tdm_tx_0_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("QUAT_TDM_TX_0_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
 #endif
 /* BE dai-links */
 SND_SOC_DAILINK_DEFS(afe_pcm_rx,
