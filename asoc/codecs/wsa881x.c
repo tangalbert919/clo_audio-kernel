@@ -1731,6 +1731,16 @@ static int wsa881x_swr_remove(struct swr_device *pdev)
 	if (wsa881x->pd_gpio)
 		gpio_free(wsa881x->pd_gpio);
 	swr_set_dev_data(pdev, NULL);
+	kfree(wsa881x->wsa881x_name_prefix);
+	if (wsa881x->dai_driver) {
+		devm_kfree(&pdev->dev, wsa881x->dai_driver->name);
+		devm_kfree(&pdev->dev, wsa881x->dai_driver->playback.stream_name);
+		devm_kfree(&pdev->dev, wsa881x->dai_driver);
+	}
+	if (wsa881x->driver) {
+		devm_kfree(&pdev->dev, wsa881x->driver->name);
+		devm_kfree(&pdev->dev, wsa881x->driver);
+	}
 	return 0;
 }
 
