@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -991,19 +992,22 @@ static int wsa_macro_event_handler(struct snd_soc_codec *codec, u16 event,
 
 	switch (event) {
 	case BOLERO_MACRO_EVT_SSR_DOWN:
-		swrm_wcd_notify(
-			wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
-			SWR_DEVICE_DOWN, NULL);
-		swrm_wcd_notify(
-			wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
-			SWR_DEVICE_SSR_DOWN, NULL);
+		if (wsa_priv->swr_ctrl_data) {
+			swrm_wcd_notify(
+				wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
+				SWR_DEVICE_DOWN, NULL);
+			swrm_wcd_notify(
+				wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
+				SWR_DEVICE_SSR_DOWN, NULL);
+		}
 		break;
 	case BOLERO_MACRO_EVT_SSR_UP:
 		/* reset swr after ssr/pdr */
 		wsa_priv->reset_swr = true;
-		swrm_wcd_notify(
-			wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
-			SWR_DEVICE_SSR_UP, NULL);
+		if (wsa_priv->swr_ctrl_data)
+			swrm_wcd_notify(
+				wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
+				SWR_DEVICE_SSR_UP, NULL);
 		break;
 	case BOLERO_MACRO_EVT_CLK_RESET:
 		wsa_macro_mclk_reset(wsa_dev);
@@ -1211,12 +1215,14 @@ static int wsa_macro_enable_swr(struct snd_soc_dapm_widget *w,
 			wsa_priv->rx_1_count++;
 		ch_cnt = wsa_priv->rx_0_count + wsa_priv->rx_1_count;
 
-		swrm_wcd_notify(
-			wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
-			SWR_DEVICE_UP, NULL);
-		swrm_wcd_notify(
-			wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
-			SWR_SET_NUM_RX_CH, &ch_cnt);
+		if (wsa_priv->swr_ctrl_data) {
+			swrm_wcd_notify(
+				wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
+				SWR_DEVICE_UP, NULL);
+			swrm_wcd_notify(
+				wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
+				SWR_SET_NUM_RX_CH, &ch_cnt);
+		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		if (!(strnstr(w->name, "RX0", sizeof("WSA_RX0"))) &&
@@ -1227,9 +1233,10 @@ static int wsa_macro_enable_swr(struct snd_soc_dapm_widget *w,
 			wsa_priv->rx_1_count--;
 		ch_cnt = wsa_priv->rx_0_count + wsa_priv->rx_1_count;
 
-		swrm_wcd_notify(
-			wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
-			SWR_SET_NUM_RX_CH, &ch_cnt);
+		if (wsa_priv->swr_ctrl_data)
+			swrm_wcd_notify(
+				wsa_priv->swr_ctrl_data[0].wsa_swr_pdev,
+				SWR_SET_NUM_RX_CH, &ch_cnt);
 		break;
 	}
 	dev_dbg(wsa_priv->dev, "%s: current swr ch cnt: %d\n",
@@ -2967,6 +2974,8 @@ static int wsa_macro_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct clk *wsa_core_clk, *wsa_npl_clk;
 	u8 bcl_pmic_params[3];
+	u32 is_used_wsa_swr_gpio = 1;
+	const char *is_used_wsa_swr_gpio_dt = "qcom,is-used-swr-gpio";
 
 	wsa_priv = devm_kzalloc(&pdev->dev, sizeof(struct wsa_macro_priv),
 				GFP_KERNEL);
@@ -2981,9 +2990,20 @@ static int wsa_macro_probe(struct platform_device *pdev)
 			__func__, "reg");
 		return ret;
 	}
+	if (of_find_property(pdev->dev.of_node, is_used_wsa_swr_gpio_dt,
+				NULL)) {
+		ret = of_property_read_u32(pdev->dev.of_node,
+								is_used_wsa_swr_gpio_dt,
+								&is_used_wsa_swr_gpio);
+		if (ret) {
+			dev_err(&pdev->dev, "%s: error reading %s in dt\n",
+				__func__, is_used_wsa_swr_gpio_dt);
+			is_used_wsa_swr_gpio = 1;
+		}
+	}
 	wsa_priv->wsa_swr_gpio_p = of_parse_phandle(pdev->dev.of_node,
 					"qcom,wsa-swr-gpios", 0);
-	if (!wsa_priv->wsa_swr_gpio_p) {
+	if (!wsa_priv->wsa_swr_gpio_p && is_used_wsa_swr_gpio) {
 		dev_err(&pdev->dev, "%s: swr_gpios handle not provided!\n",
 			__func__);
 		return -EINVAL;
@@ -3073,6 +3093,8 @@ static int wsa_macro_remove(struct platform_device *pdev)
 	mutex_destroy(&wsa_priv->mclk_lock);
 	mutex_destroy(&wsa_priv->swr_clk_lock);
 	mutex_destroy(&wsa_priv->clk_lock);
+	if (wsa_priv->swr_ctrl_data)
+		kfree(wsa_priv->swr_ctrl_data);
 	return 0;
 }
 
