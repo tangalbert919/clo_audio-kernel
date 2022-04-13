@@ -30,6 +30,8 @@ legacy_audio_headers_out = [
     "sound/msmcal-hwdep.h",
     "sound/voice_params.h",
     "sound/wcd-dsp-glink.h",
+    "sound/compress_params.h",
+    "sound/compress_offload.h",
     "linux/mfd/wcd9xxx/wcd9320_registers.h",
     "linux/mfd/wcd9xxx/wcd9xxx_registers.h"
 ]
