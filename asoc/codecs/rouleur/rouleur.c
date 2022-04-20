@@ -2677,7 +2677,7 @@ static int rouleur_bind(struct device *dev)
 	if (ret) {
 		dev_err(dev, "%s: Slave bind failed, ret = %d\n",
 			__func__, ret);
-		goto err_bind_all;
+		goto err_disable;
 	}
 
 	ret = rouleur_parse_port_mapping(dev, "qcom,rx_swr_ch_map", CODEC_RX);
@@ -2766,6 +2766,9 @@ err_irq:
 	mutex_destroy(&rouleur->rx_clk_lock);
 err:
 	component_unbind_all(dev, rouleur);
+err_disable:
+	msm_cdc_disable_static_supplies(dev, rouleur->supplies,
+				pdata->regulator, pdata->num_supplies);
 err_bind_all:
 	dev_set_drvdata(dev, NULL);
 	kfree(pdata);
