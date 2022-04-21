@@ -1,5 +1,39 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the
+ *        names of its contributors may be used to endorse or promote
+ *        products derived from this software without specific prior
+ *        written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <linux/init.h>
@@ -889,6 +923,33 @@ static int msm_dtmf_detect_voice_rx_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_dtmf_rx_generate_put_session(struct snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_value *ucontrol)
+{
+	uint16_t low_freq = ucontrol->value.integer.value[0];
+	uint16_t high_freq = ucontrol->value.integer.value[1];
+	int64_t duration = ucontrol->value.integer.value[2];
+	uint16_t gain = ucontrol->value.integer.value[3];
+	uint32_t session_id = ucontrol->value.integer.value[4];
+	int session_idx = voice_get_idx_for_session(session_id);
+
+	pr_debug("%s: low=%d high=%d duration=%lld gain=%d session_id=%d  session_idx=%d\n",
+		 __func__, low_freq, high_freq, duration, gain, session_id, session_idx);
+	if (duration == DTMF_MAX_DURATION)
+		duration = -1;
+	afe_dtmf_generate_rx_session(duration, high_freq, low_freq, gain,
+				     session_idx);
+	return 0;
+}
+
+static int msm_dtmf_rx_generate_get_session(struct  snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s:\n", __func__);
+	ucontrol->value.integer.value[0] = 0;
+	return 0;
+}
+
 static struct snd_kcontrol_new msm_voice_controls[] = {
 	SOC_SINGLE_MULTI_EXT("Voice Rx Device Mute", SND_SOC_NOPM, 0, VSID_MAX,
 				0, 3, NULL, msm_voice_rx_device_mute_put),
@@ -926,10 +987,14 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 			     msm_voice_sidetone_get, msm_voice_sidetone_put),
 	SOC_SINGLE_BOOL_EXT("Voice Mic Break Enable", 0, msm_voice_mbd_get,
 				msm_voice_mbd_put),
-        SOC_SINGLE_MULTI_EXT("DTMF_Generate Rx Low High Duration Gain",
+	SOC_SINGLE_MULTI_EXT("DTMF_Generate Rx Low High Duration Gain",
 				SND_SOC_NOPM, 0, 5000, 0, 4,
 				msm_dtmf_rx_generate_get,
 				msm_dtmf_rx_generate_put),
+	SOC_SINGLE_MULTI_EXT("DTMF_Generate Rx Low High Period Gain VSID",
+				SND_SOC_NOPM, 0, VSID_MAX, 0, 5,
+				msm_dtmf_rx_generate_get_session,
+				msm_dtmf_rx_generate_put_session),
 	SOC_SINGLE_EXT("DTMF_Detect Rx Voice enable", SND_SOC_NOPM, 0, 1, 0,
 				msm_dtmf_detect_voice_rx_get,
 				msm_dtmf_detect_voice_rx_put),
