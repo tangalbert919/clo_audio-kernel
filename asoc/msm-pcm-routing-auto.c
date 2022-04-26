@@ -2245,7 +2245,7 @@ static int msm_pcm_routing_channel_mixer_v2(int fe_id, bool perf_mode,
 	int j = 0, be_id = 0;
 	int ret = 0;
 
-	if (fe_id >= MSM_FRONTEND_DAI_MM_SIZE) {
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
 		pr_err("%s: invalid FE %d\n", __func__, fe_id);
 		return 0;
 	}
@@ -2312,7 +2312,7 @@ static int msm_pcm_routing_channel_mixer(int fe_id, bool perf_mode,
 		return ret;
 	}
 
-	if (fe_id >= MSM_FRONTEND_DAI_MM_SIZE) {
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
 		pr_err("%s: invalid FE %d\n", __func__, fe_id);
 		return 0;
 	}
@@ -32366,6 +32366,11 @@ static int msm_routing_put_device_pp_params_mixer(struct snd_kcontrol *kcontrol,
 
 	for_each_set_bit(i, &msm_bedais[be_idx].fe_sessions[0],
 				MSM_FRONTEND_DAI_MM_SIZE) {
+                if (i >= MSM_FRONTEND_DAI_MAX) {
+                        pr_debug("%s: Invalid FE id %d\n", __func__, i);
+                        return  -EINVAL;
+                }
+
 		if ((fe_dai_map[i][session_type].passthr_mode == LEGACY_PCM) ||
 			(fe_dai_map[i][session_type].passthr_mode == LISTEN))
 			compr_passthr_mode = false;
