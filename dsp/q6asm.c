@@ -42,6 +42,7 @@
 #include <dsp/q6common.h>
 #include <dsp/q6core.h>
 #include "adsp_err.h"
+#include "../asoc/compress_ext.h"
 
 #define TIMEOUT_MS  1000
 #define TRUE        0x01
