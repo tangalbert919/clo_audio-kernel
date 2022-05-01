@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -126,7 +127,8 @@ static enum hrtimer_restart afe_hrtimer_rec_callback(struct hrtimer *hrt)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	u32 mem_map_handle = 0;
-	int port_id = rtd->cpu_dai->id;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	int port_id = cpu_dai->id;
 	int ret;
 
 	mem_map_handle = afe_req_mmap_handle(prtd->audio_client);
@@ -264,13 +266,15 @@ static void pcm_afe_process_rx_pkt(uint32_t opcode,
 	uint64_t bytes_one_sec;
 	uint32_t mem_map_handle = 0;
 	int port_id = 0;
+	struct snd_soc_dai *cpu_dai = NULL;
 
 	if (prtd == NULL)
 		return;
 	substream =  prtd->substream;
 	runtime = substream->runtime;
 	rtd = substream->private_data;
-	port_id = rtd->cpu_dai->id;
+	cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	port_id = cpu_dai->id;
 	pr_debug("%s\n", __func__);
 	spin_lock_irqsave(&prtd->dsp_lock, dsp_flags);
 	switch (opcode) {
@@ -371,7 +375,7 @@ static int msm_afe_playback_prepare(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *dai = rtd->cpu_dai;
+	struct snd_soc_dai *dai = asoc_rtd_to_cpu(rtd, 0);
 	int ret = 0;
 
 	pr_debug("%s: sample_rate=%d\n", __func__, runtime->rate);
@@ -393,7 +397,7 @@ static int msm_afe_capture_prepare(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *dai = rtd->cpu_dai;
+	struct snd_soc_dai *dai = asoc_rtd_to_cpu(rtd, 0);
 	int ret = 0;
 
 	pr_debug("%s\n", __func__);
@@ -421,7 +425,7 @@ static struct snd_pcm_hw_constraint_list constraints_sample_rates = {
 	.mask = 0,
 };
 
-static int msm_afe_open(struct snd_pcm_substream *substream)
+static int msm_afe_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = NULL;
@@ -551,7 +555,8 @@ static int msm_afe_capture_copy(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	int port_id = rtd->cpu_dai->id;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	int port_id = cpu_dai->id;
 	char *hwbuf = runtime->dma_area + hwoff;
 	u32 mem_map_handle = 0;
 
@@ -607,7 +612,8 @@ fail:
 	return ret;
 }
 
-static int msm_afe_copy(struct snd_pcm_substream *substream, int channel,
+static int msm_afe_copy(struct snd_soc_component *component,
+			struct snd_pcm_substream *substream, int channel,
 			unsigned long hwoff, void __user *buf,
 			unsigned long fbytes)
 {
@@ -631,7 +637,7 @@ static int msm_afe_copy(struct snd_pcm_substream *substream, int channel,
 	return ret;
 }
 
-static int msm_afe_close(struct snd_pcm_substream *substream)
+static int msm_afe_close(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	int rc = 0;
 	struct snd_dma_buffer *dma_buf;
@@ -648,7 +654,7 @@ static int msm_afe_close(struct snd_pcm_substream *substream)
 		return -EINVAL;
 	}
 	rtd = substream->private_data;
-	dai = rtd->cpu_dai;
+	dai = asoc_rtd_to_cpu(rtd, 0);
 	runtime = substream->runtime;
 	prtd = runtime->private_data;
 
@@ -691,7 +697,7 @@ done:
 	runtime->private_data = NULL;
 	return 0;
 }
-static int msm_afe_prepare(struct snd_pcm_substream *substream)
+static int msm_afe_prepare(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -708,7 +714,7 @@ static int msm_afe_prepare(struct snd_pcm_substream *substream)
 	mutex_unlock(&prtd->lock);
 	return ret;
 }
-static int msm_afe_mmap(struct snd_pcm_substream *substream,
+static int msm_afe_mmap(struct snd_soc_component *component, struct snd_pcm_substream *substream,
 				struct vm_area_struct *vma)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -729,7 +735,8 @@ static int msm_afe_mmap(struct snd_pcm_substream *substream,
 
 	return msm_audio_ion_mmap((struct audio_buffer *)ab, vma);
 }
-static int msm_afe_trigger(struct snd_pcm_substream *substream, int cmd)
+static int msm_afe_trigger(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -757,7 +764,8 @@ static int msm_afe_trigger(struct snd_pcm_substream *substream, int cmd)
 	}
 	return ret;
 }
-static int msm_afe_hw_params(struct snd_pcm_substream *substream,
+static int msm_afe_hw_params(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -827,7 +835,8 @@ static int msm_afe_hw_params(struct snd_pcm_substream *substream,
 
 	return rc;
 }
-static snd_pcm_uframes_t msm_afe_pointer(struct snd_pcm_substream *substream)
+static snd_pcm_uframes_t msm_afe_pointer(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
@@ -845,19 +854,9 @@ static snd_pcm_uframes_t msm_afe_pointer(struct snd_pcm_substream *substream)
 	return bytes_to_frames(runtime, (prtd->pcm_irq_pos));
 }
 
-static const struct snd_pcm_ops msm_afe_ops = {
-	.open           = msm_afe_open,
-	.copy_user      = msm_afe_copy,
-	.hw_params	= msm_afe_hw_params,
-	.trigger	= msm_afe_trigger,
-	.close          = msm_afe_close,
-	.prepare        = msm_afe_prepare,
-	.mmap		= msm_afe_mmap,
-	.pointer	= msm_afe_pointer,
-};
 
 
-static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
+static int msm_asoc_pcm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
 	int ret = 0;
@@ -876,9 +875,16 @@ static int msm_afe_afe_probe(struct snd_soc_component *component)
 
 static struct snd_soc_component_driver msm_soc_component = {
 	.name		= DRV_NAME,
-	.ops		= &msm_afe_ops,
-	.pcm_new	= msm_asoc_pcm_new,
+	.pcm_construct	= msm_asoc_pcm_new,
 	.probe		= msm_afe_afe_probe,
+	.open           = msm_afe_open,
+	.copy_user      = msm_afe_copy,
+	.hw_params	= msm_afe_hw_params,
+	.trigger	= msm_afe_trigger,
+	.close          = msm_afe_close,
+	.prepare        = msm_afe_prepare,
+	.mmap		= msm_afe_mmap,
+	.pointer	= msm_afe_pointer,
 };
 
 static int msm_afe_probe(struct platform_device *pdev)

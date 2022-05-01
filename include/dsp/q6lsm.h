@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __Q6LSM_H__
 #define __Q6LSM_H__
@@ -8,7 +9,7 @@
 #include <linux/list.h>
 #include <linux/msm_ion.h>
 #include <dsp/apr_audio-v2.h>
-#include <audio/sound/lsm_params.h>
+#include <sound/lsm_params.h>
 #include <ipc/apr.h>
 
 #define MAX_NUM_CONFIDENCE 20

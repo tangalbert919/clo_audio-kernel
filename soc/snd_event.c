@@ -8,7 +8,6 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <soc/snd_event.h>
-#include <soc/qcom/boot_stats.h>
 
 struct snd_event_client {
 	struct list_head node;
@@ -493,7 +492,7 @@ EXPORT_SYMBOL(snd_event_notify);
 
 static int __init snd_event_init(void)
 {
-	place_marker("M - Driver Sound Event Init");
+	//place_marker("M - Driver Sound Event Init");
 	return 0;
 }
 module_init(snd_event_init);

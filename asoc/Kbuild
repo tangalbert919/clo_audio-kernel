@@ -206,14 +206,14 @@ ifdef CONFIG_SND_SOC_QDSP6V2
 	PLATFORM_OBJS += msm-pcm-afe-v2.o
 	PLATFORM_OBJS += msm-pcm-dtmf-v2.o
 	PLATFORM_OBJS += msm-pcm-hostless.o
-	PLATFORM_OBJS += msm-pcm-host-voice-v2.o
+#	PLATFORM_OBJS += msm-pcm-host-voice-v2.o
 	PLATFORM_OBJS += msm-pcm-loopback-v2.o
 	PLATFORM_OBJS += msm-pcm-q6-noirq.o
 	PLATFORM_OBJS += msm-pcm-q6-v2.o
 	PLATFORM_OBJS += msm-pcm-routing-v2.o
 	PLATFORM_OBJS += msm-pcm-voice-v2.o
 	PLATFORM_OBJS += msm-pcm-voip-v2.o
-	PLATFORM_OBJS += msm-transcode-loopback-q6-v2.o
+#	PLATFORM_OBJS += msm-transcode-loopback-q6-v2.o
 	PLATFORM_OBJS += platform_init.o
 endif
 ifdef CONFIG_WCD9XXX_CODEC_CORE
@@ -270,9 +270,9 @@ KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codec
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codecs/wcd934x/Module.symvers
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/codecs/wcd937x/Module.symvers
 endif
-ifeq ($(KERNEL_BUILD), 1)
-	obj-y += codecs/
-endif
+
+obj-y += codecs/
+
 # Module information used by KBuild framework
 obj-$(CONFIG_SND_SOC_QDSP6V2) += platform_dlkm.o
 platform_dlkm-y := $(PLATFORM_OBJS)

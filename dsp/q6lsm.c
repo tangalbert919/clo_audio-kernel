@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/fs.h>
 #include <linux/mutex.h>
@@ -15,7 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/time.h>
 #include <linux/atomic.h>
-#include <audio/sound/lsm_params.h>
+#include <sound/lsm_params.h>
 #include <asm/ioctls.h>
 #include <linux/memory.h>
 #include <dsp/msm_audio_ion.h>
@@ -3087,12 +3088,10 @@ int __init q6lsm_init(void)
 #ifdef CONFIG_DEBUG_FS
 	lsm_common.entry = debugfs_create_dir("q6lsm_apr", NULL);
 	if (!IS_ERR_OR_NULL(lsm_common.entry)) {
-		if (IS_ERR(debugfs_create_bool("panic_on_timeout", 0644,
+		debugfs_create_bool("panic_on_timeout", 0644,
 					       lsm_common.entry,
-					       &lsm_common.panic_on_timeout)))
-			lsm_common.panic_on_timeout = false;
-		else
-			pr_info("%s: panic_on_timeout debugfs flag is created\n", __func__);
+					       &lsm_common.panic_on_timeout);
+		pr_info("%s: panic_on_timeout debugfs flag is created\n", __func__);
 	}
 #endif
 	return 0;

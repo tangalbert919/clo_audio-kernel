@@ -290,12 +290,10 @@ exit:
 	return ret;
 }
 
-static int msm_pcm_open(struct snd_pcm_substream *substream)
+static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct snd_soc_component *component =
-			snd_soc_rtdcom_lookup(rtd, DRV_NAME);
 	struct msm_pcm_loopback *pcm = NULL;
 	int ret = 0;
 	uint16_t bits_per_sample = 16;
@@ -422,13 +420,12 @@ static void stop_pcm(struct msm_pcm_loopback *pcm)
 	mutex_unlock(&loopback_session_lock);
 }
 
-static int msm_pcm_close(struct snd_pcm_substream *substream)
+static int msm_pcm_close(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct msm_pcm_loopback *pcm = runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct snd_soc_component *component =
-			snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+
 	int ret = 0, n;
 	bool found = false;
 
@@ -480,14 +477,11 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_pcm_prepare(struct snd_pcm_substream *substream)
+static int msm_pcm_prepare(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct msm_pcm_loopback *pcm = runtime->private_data;
-	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct snd_soc_component *component =
-			snd_soc_rtdcom_lookup(rtd, DRV_NAME);
 	struct msm_pcm_routing_evt event;
 
 	memset(&event, 0, sizeof(event));
@@ -545,13 +539,11 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
+static int msm_pcm_trigger(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream, int cmd)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct msm_pcm_loopback *pcm = runtime->private_data;
-	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct snd_soc_component *component =
-			snd_soc_rtdcom_lookup(rtd, DRV_NAME);
 
 	if (!component) {
 		pr_err("%s: component is NULL\n", __func__);
@@ -585,12 +577,6 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	return 0;
 }
 
-static const struct snd_pcm_ops msm_pcm_ops = {
-	.open           = msm_pcm_open,
-	.close          = msm_pcm_close,
-	.prepare        = msm_pcm_prepare,
-	.trigger        = msm_pcm_trigger,
-};
 
 #if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
@@ -2255,7 +2241,7 @@ static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 	return ret;
 }
 
-static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
+static int msm_asoc_pcm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
 	int ret = 0;
@@ -2270,10 +2256,13 @@ static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
 }
 
 static struct snd_soc_component_driver msm_soc_component = {
-	.name		= DRV_NAME,
-	.ops            = &msm_pcm_ops,
-	.pcm_new        = msm_asoc_pcm_new,
-	.probe          = msm_pcm_loopback_probe,
+	.name			= DRV_NAME,
+	.pcm_construct    = msm_asoc_pcm_new,
+	.open           	= msm_pcm_open,
+	.close          	= msm_pcm_close,
+	.prepare        	= msm_pcm_prepare,
+	.trigger        	= msm_pcm_trigger,
+	.probe          	= msm_pcm_loopback_probe,
 };
 
 static int msm_pcm_probe(struct platform_device *pdev)

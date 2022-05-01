@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QDSP6VOICE_H__
 #define __QDSP6VOICE_H__
 
 #include <linux/msm_ion.h>
-#include <audio/sound/voice_params.h>
+#include <sound/voice_params.h>
 #include <dsp/rtac.h>
 #include <dsp/q6core.h>
 #include <ipc/apr.h>

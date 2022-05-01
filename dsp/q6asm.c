@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -25,6 +26,7 @@
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/time.h>
+#include <linux/time64.h>
 #include <linux/atomic.h>
 #include <linux/mm.h>
 
@@ -261,10 +263,10 @@ static inline int q6asm_get_flag_from_token(union asm_token_struct *asm_token,
 #define OUT_BUFFER_SIZE 56
 #define IN_BUFFER_SIZE 24
 
-static struct timeval out_cold_tv;
-static struct timeval out_warm_tv;
-static struct timeval out_cont_tv;
-static struct timeval in_cont_tv;
+static struct __kernel_old_timeval out_cold_tv;
+static struct __kernel_old_timeval out_warm_tv;
+static struct __kernel_old_timeval out_cont_tv;
+static struct __kernel_old_timeval in_cont_tv;
 static long out_enable_flag;
 static long in_enable_flag;
 static struct dentry *out_dentry;
@@ -398,15 +400,15 @@ static const struct file_operations audio_input_latency_debug_fops = {
  *
  * Returns struct timeval
 */
-static struct timeval get_monotonic_timeval(void)
+static struct __kernel_old_timeval get_monotonic_timeval(void)
 {
-	static struct timeval out_tval;
+	static struct __kernel_old_timeval out_tval;
 
 	/* Get time from monotonic clock in nanoseconds */
 	ktime_t kTimeNsec = ktime_get();
 
 	/* Convert it to timespec format and later to timeval as expected by audio HAL */
-	struct timespec temp_tspec = ktime_to_timespec(kTimeNsec);
+	struct timespec64 temp_tspec = ktime_to_timespec64(kTimeNsec);
 
 	/* Time returned above is in sec,nanosec format, needs to convert to sec,microsec */
 	out_tval.tv_usec = temp_tspec.tv_nsec/1000;

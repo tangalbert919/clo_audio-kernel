@@ -20,7 +20,7 @@
 #include <sound/timer.h>
 #include <sound/initval.h>
 #include <sound/control.h>
-#include <audio/sound/lsm_params.h>
+#include <sound/lsm_params.h>
 #include <sound/pcm_params.h>
 #include <dsp/msm_audio_ion.h>
 #include <dsp/q6lsm.h>
@@ -2431,7 +2431,7 @@ done:
 #define msm_lsm_ioctl_compat NULL
 #endif
 
-static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
+static int msm_lsm_ioctl(struct snd_soc_component *component, struct snd_pcm_substream *substream,
 			 unsigned int cmd, void __user *arg)
 {
 	int err = 0;
@@ -2856,7 +2856,7 @@ done:
 	return err;
 }
 
-static int msm_lsm_open(struct snd_pcm_substream *substream)
+static int msm_lsm_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct lsm_priv *prtd;
@@ -3010,7 +3010,7 @@ static int msm_lsm_send_ch_mix_config(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_lsm_prepare(struct snd_pcm_substream *substream)
+static int msm_lsm_prepare(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct lsm_priv *prtd = runtime->private_data;
@@ -3061,7 +3061,7 @@ static int msm_lsm_prepare(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static int msm_lsm_close(struct snd_pcm_substream *substream)
+static int msm_lsm_close(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	unsigned long flags;
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -3195,7 +3195,8 @@ static int msm_lsm_close(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int msm_lsm_hw_params(struct snd_pcm_substream *substream,
+static int msm_lsm_hw_params(struct snd_soc_component *component, 
+				struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -3262,6 +3263,7 @@ static int msm_lsm_hw_params(struct snd_pcm_substream *substream,
 }
 
 static snd_pcm_uframes_t msm_lsm_pcm_pointer(
+	struct snd_soc_component *component,
 	struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -3287,7 +3289,8 @@ static snd_pcm_uframes_t msm_lsm_pcm_pointer(
 	return bytes_to_frames(runtime, prtd->dma_write);
 }
 
-static int msm_lsm_pcm_copy(struct snd_pcm_substream *substream, int ch,
+static int msm_lsm_pcm_copy(struct snd_soc_component *component,
+	struct snd_pcm_substream *substream, int ch,
 	unsigned long hwoff, void __user *buf, unsigned long fbytes)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -3544,20 +3547,8 @@ static int msm_lsm_add_controls(struct snd_soc_pcm_runtime *rtd)
 	return ret;
 }
 
-static const struct snd_pcm_ops msm_lsm_ops = {
-	.open           = msm_lsm_open,
-	.close          = msm_lsm_close,
-	.ioctl          = msm_lsm_ioctl,
-	.prepare	= msm_lsm_prepare,
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	.compat_ioctl   = msm_lsm_ioctl_compat,
-#endif /* CONFIG_AUDIO_QGKI */
-	.hw_params      = msm_lsm_hw_params,
-	.copy_user      = msm_lsm_pcm_copy,
-	.pointer        = msm_lsm_pcm_pointer,
-};
 
-static int msm_asoc_lsm_new(struct snd_soc_pcm_runtime *rtd)
+static int msm_asoc_lsm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
 	int ret = 0;
@@ -3580,9 +3571,15 @@ static int msm_asoc_lsm_probe(struct snd_soc_component *component)
 }
 
 static struct snd_soc_component_driver msm_soc_component = {
-	.name		= DRV_NAME,
-	.ops		= &msm_lsm_ops,
-	.pcm_new	= msm_asoc_lsm_new,
+	.name			= DRV_NAME,
+	.open			= msm_lsm_open,
+	.close          	= msm_lsm_close,
+	.ioctl          	= msm_lsm_ioctl,
+	.prepare		= msm_lsm_prepare,
+	.hw_params      	= msm_lsm_hw_params,
+	.copy_user      	= msm_lsm_pcm_copy,
+	.pointer        	= msm_lsm_pcm_pointer,
+	.pcm_construct	= msm_asoc_lsm_new,
 	.probe		= msm_asoc_lsm_probe,
 };
 

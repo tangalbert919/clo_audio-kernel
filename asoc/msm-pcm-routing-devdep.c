@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2014, 2016-2017, 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -7,7 +8,7 @@
 #include <linux/err.h>
 #include <linux/module.h>
 #include <sound/hwdep.h>
-#include <audio/sound/devdep_params.h>
+#include <sound/devdep_params.h>
 #include "msm-pcm-routing-devdep.h"
 #include "msm-ds2-dap-config.h"
 

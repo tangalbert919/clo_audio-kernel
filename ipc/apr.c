@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2014, 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -23,8 +24,6 @@
 #include <linux/ipc_logging.h>
 #include <linux/of_platform.h>
 #include <linux/ratelimit.h>
-#include <soc/qcom/boot_stats.h>
-#include <soc/qcom/subsystem_restart.h>
 #include <linux/qcom_scm.h>
 #include <soc/snd_event.h>
 #include <dsp/apr_audio-v2.h>
@@ -315,7 +314,6 @@ static void apr_add_child_devices(struct work_struct *work)
 static void apr_adsp_up(void)
 {
 	pr_info("%s: Q6 is Up\n", __func__);
-	place_marker("M - ADSP Ready");
 	apr_set_q6_state(APR_SUBSYS_LOADED);
 
 	spin_lock(&apr_priv->apr_lock);
@@ -324,29 +322,6 @@ static void apr_adsp_up(void)
 	spin_unlock(&apr_priv->apr_lock);
 	snd_event_notify(apr_priv->dev, SND_EVENT_UP);
 	cancel_work_sync(&apr_cb_work);
-}
-
-int apr_load_adsp_image(void)
-{
-	int rc = 0;
-
-	mutex_lock(&q6.lock);
-	if (apr_get_q6_state() == APR_SUBSYS_UP) {
-		q6.pil = subsystem_get("adsp");
-		if (IS_ERR(q6.pil)) {
-			rc = PTR_ERR(q6.pil);
-			pr_err("APR: Unable to load q6 image, error:%d\n", rc);
-		} else {
-			apr_set_q6_state(APR_SUBSYS_LOADED);
-			pr_debug("APR: Image is loaded, stated\n");
-		}
-	} else if (apr_get_q6_state() == APR_SUBSYS_LOADED) {
-		pr_debug("APR: q6 image already loaded\n");
-	} else {
-		pr_debug("APR: cannot load state %d\n", apr_get_q6_state());
-	}
-	mutex_unlock(&q6.lock);
-	return rc;
 }
 
 struct apr_client *apr_get_client(int dest_id, int client_id)
