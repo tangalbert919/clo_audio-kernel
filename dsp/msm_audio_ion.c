@@ -385,7 +385,7 @@ int msm_audio_ion_alloc(struct dma_buf **dma_buf, size_t bufsz,
 
 	if (msm_audio_ion_data.smmu_enabled == true) {
 		pr_debug("%s: system heap is used\n", __func__);
-		heap = dma_heap_find("qcom,system");
+		heap = dma_heap_find("qcom,system-uncached");
 	} else {
 		pr_debug("%s: audio heap is used\n", __func__);
 		heap = dma_heap_find("qcom,audio");
