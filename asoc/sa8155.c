@@ -53,7 +53,7 @@
 #include "device_event.h"
 #include "msm-pcm-routing-v2.h"
 #include "msm_dailink.h"
-
+#include "msm_common.h"
 
 #define DRV_NAME "sa8155-asoc-snd"
 
@@ -10657,9 +10657,7 @@ static int sa8155_ssr_enable(struct device *dev, void *data)
 	}
 
 	dev_info(dev, "%s: setting snd_card to ONLINE\n", __func__);
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_soc_card_change_online_state(card, 1);
-#endif /* CONFIG_AUDIO_QGKI */
+	snd_card_notify_user(SND_CARD_STATUS_ONLINE);
 err:
 	return ret;
 }
@@ -10675,9 +10673,7 @@ static void sa8155_ssr_disable(struct device *dev, void *data)
 	}
 
 	dev_dbg(dev, "%s: setting snd_card to OFFLINE\n", __func__);
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-	snd_soc_card_change_online_state(card, 0);
-#endif /* CONFIG_AUDIO_QGKI */
+	snd_card_notify_user(SND_CARD_STATUS_OFFLINE);
 }
 
 static const struct snd_event_ops sa8155_ssr_ops = {
@@ -10830,6 +10826,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	if (ret)
 		pr_err("%s: Registration with SND event FWK failed ret = %d\n",
 			__func__, ret);
+
+	snd_card_set_card_status(SND_CARD_STATUS_ONLINE);
 
 	return 0;
 err:

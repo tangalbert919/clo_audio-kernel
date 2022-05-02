@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __PLATFORM_INIT_H__
@@ -23,6 +24,7 @@ int msm_pcm_voice_init(void);
 int msm_pcm_voip_init(void);
 int msm_transcode_loopback_init(void);
 int msm_cpe_lsm_init(void);
+int msm_common_init(void);
 
 void msm_cpe_lsm_exit(void);
 void msm_transcode_loopback_exit(void);
@@ -42,6 +44,7 @@ void msm_dai_q6_exit(void);
 void msm_dai_q6_hdmi_exit(void);
 void msm_fe_dai_exit(void);
 void msm_compress_dsp_exit(void);
+void msm_common_exit(void);
 
 #if IS_ENABLED(CONFIG_WCD9XXX_CODEC_CORE)
 int msm_dai_slim_init(void);
