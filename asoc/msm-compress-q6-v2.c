@@ -40,6 +40,7 @@
 #include <dsp/msm-audio-effects-q6-v2.h>
 #include "msm-pcm-routing-v2.h"
 #include "msm-qti-pp-config.h"
+#include "compress_ext.h"
 
 #define DRV_NAME "msm-compress-q6-v2"
 
