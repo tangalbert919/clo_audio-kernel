@@ -387,9 +387,10 @@ static void lsm_event_handler(uint32_t opcode, uint32_t token,
 		spin_unlock_irqrestore(&prtd->event_lock, flags);
 		wake_up(&prtd->event_wait);
 
+#ifdef CONFIG_SND_SVA_SYMBOL_TRIMMING
 		if (substream->timer_running)
 			snd_timer_interrupt(substream->timer, 1);
-
+#endif
 		dev_dbg(rtd->dev,
 			"%s: Generic det event status = %d payload size = %d\n",
 			__func__, prtd->det_event->status,
@@ -449,8 +450,11 @@ static void lsm_event_handler(uint32_t opcode, uint32_t token,
 				"%s: Couldn't allocate %d bytes of memory\n",
 				__func__, payload_size);
 		}
+
+#ifdef CONFIG_SND_SVA_SYMBOL_TRIMMING
 		if (substream->timer_running)
 			snd_timer_interrupt(substream->timer, 1);
+#endif
 	}
 	dev_dbg(rtd->dev, "%s: leave\n", __func__);
 }
