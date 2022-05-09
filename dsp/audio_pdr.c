@@ -46,7 +46,7 @@ static int audio_pdr_locator_callback(struct notifier_block *this,
 		domain_list_temp = (struct servreg_loc_entry_v01 *)kzalloc(
 			sizeof(domain_list_size), GFP_KERNEL);
 
-		if(!domain_list_size)
+		if(!domain_list_temp)
 		{
 			pr_err("%s: Service %s total domains %d could not allocate memory",
 			__func__,

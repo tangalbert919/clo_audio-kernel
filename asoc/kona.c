@@ -1876,7 +1876,8 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	msm_common_snd_deinit(common_pdata);
 
 	snd_event_master_deregister(&pdev->dev);
-	snd_soc_unregister_card(card);
+	if (card)
+		snd_soc_unregister_card(card);
 
 	return 0;
 }
