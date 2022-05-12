@@ -1,4 +1,5 @@
-/* Copyright (c) 2015-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2015-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +34,7 @@
 #include "wcd-mbhc-legacy.h"
 #include "wcd-mbhc-adc.h"
 #include "wcd-mbhc-v2-api.h"
+static u8 current_plug_val = MBHC_PLUG_TYPE_NONE;
 
 void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 			  struct snd_soc_jack *jack, int status, int mask)
@@ -605,6 +607,7 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
 		hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
+		current_plug_val   = mbhc->current_plug;
 		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
 		mbhc->force_linein = false;
 	} else {
@@ -1927,6 +1930,7 @@ void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 		if (mbhc->mbhc_cb && mbhc->mbhc_cb->skip_imped_detect)
 			mbhc->mbhc_cb->skip_imped_detect(mbhc->codec);
 	}
+	current_plug_val   = mbhc->current_plug;
 	mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
 	mbhc->hph_status = 0;
 	if (mbhc->mbhc_cb && mbhc->mbhc_cb->irq_control) {
@@ -2036,7 +2040,7 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	}
 
 	mbhc->in_swch_irq_handler = false;
-	mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
+	mbhc->current_plug = current_plug_val;
 	mbhc->is_btn_press = false;
 	mbhc->codec = codec;
 	mbhc->intr_ids = mbhc_cdc_intr_ids;
