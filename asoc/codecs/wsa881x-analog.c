@@ -1190,7 +1190,7 @@ static int wsa881x_probe(struct snd_soc_component *component)
 	client = dev_get_drvdata(component->dev);
 	ret = wsa881x_i2c_get_client_index(client, &wsa881x_index);
 	if (ret != 0) {
-		pr_err("%s: I2C get codec I2C\n"
+		dev_err(&client->dev, "%s: I2C get codec I2C\n"
 			"client failed\n", __func__);
 		return ret;
 	}
@@ -1202,7 +1202,7 @@ static int wsa881x_probe(struct snd_soc_component *component)
 		retry--;
 	}
 	if (!retry) {
-		pr_err("%s: max retry expired and regmap of\n"
+		dev_err(&client->dev, "%s: max retry expired and regmap of\n"
 				"analog slave not initilized\n", __func__);
 		return -EPROBE_DEFER;
 	}
