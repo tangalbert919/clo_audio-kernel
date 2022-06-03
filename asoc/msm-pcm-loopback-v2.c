@@ -290,6 +290,63 @@ exit:
 	return ret;
 }
 
+#define PLAYBACK_MIN_NUM_PERIODS    2
+#define PLAYBACK_MAX_NUM_PERIODS    8
+#define PLAYBACK_MAX_PERIOD_SIZE    122880
+#define PLAYBACK_MIN_PERIOD_SIZE    120
+#define CAPTURE_MIN_NUM_PERIODS     2
+#define CAPTURE_MAX_NUM_PERIODS     8
+#define CAPTURE_MAX_PERIOD_SIZE     122880
+#define CAPTURE_MIN_PERIOD_SIZE     120
+
+static struct snd_pcm_hardware msm_pcm_hardware_capture = {
+	.info =                 (SNDRV_PCM_INFO_MMAP |
+				SNDRV_PCM_INFO_BLOCK_TRANSFER |
+				SNDRV_PCM_INFO_MMAP_VALID |
+				SNDRV_PCM_INFO_INTERLEAVED |
+				SNDRV_PCM_INFO_PAUSE | SNDRV_PCM_INFO_RESUME),
+	.formats =              (SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE |
+				SNDRV_PCM_FMTBIT_S32_LE),
+	.rates =                SNDRV_PCM_RATE_8000_384000,
+	.rate_min =             8000,
+	.rate_max =             384000,
+	.channels_min =         1,
+	.channels_max =         8,
+	.buffer_bytes_max =     CAPTURE_MAX_NUM_PERIODS *
+				CAPTURE_MAX_PERIOD_SIZE,
+	.period_bytes_min =     CAPTURE_MIN_PERIOD_SIZE,
+	.period_bytes_max =     CAPTURE_MAX_PERIOD_SIZE,
+	.periods_min =          CAPTURE_MIN_NUM_PERIODS,
+	.periods_max =          CAPTURE_MAX_NUM_PERIODS,
+	.fifo_size =            0,
+};
+
+static struct snd_pcm_hardware msm_pcm_hardware_playback = {
+	.info =                 (SNDRV_PCM_INFO_MMAP |
+				SNDRV_PCM_INFO_BLOCK_TRANSFER |
+				SNDRV_PCM_INFO_MMAP_VALID |
+				SNDRV_PCM_INFO_INTERLEAVED |
+				SNDRV_PCM_INFO_PAUSE | SNDRV_PCM_INFO_RESUME),
+	.formats =              (SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE |
+				SNDRV_PCM_FMTBIT_S32_LE),
+	.rates =                SNDRV_PCM_RATE_8000_384000,
+	.rate_min =             8000,
+	.rate_max =             384000,
+	.channels_min =         1,
+	.channels_max =         8,
+	.buffer_bytes_max =     PLAYBACK_MAX_NUM_PERIODS *
+				PLAYBACK_MAX_PERIOD_SIZE,
+	.period_bytes_min =     PLAYBACK_MIN_PERIOD_SIZE,
+	.period_bytes_max =     PLAYBACK_MAX_PERIOD_SIZE,
+	.periods_min =          PLAYBACK_MIN_NUM_PERIODS,
+	.periods_max =          PLAYBACK_MAX_NUM_PERIODS,
+	.fifo_size =            0,
+};
+
 static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -309,6 +366,17 @@ static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_subs
 	ret =  msm_pcm_loopback_get_session(rtd, &pcm);
 	if (ret)
 		return ret;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		runtime->hw = msm_pcm_hardware_playback;
+
+	/* Capture path */
+	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+		runtime->hw = msm_pcm_hardware_capture;
+	else {
+		pr_err("Invalid Stream type %d\n", substream->stream);
+		return -EINVAL;
+	}
 
 	mutex_lock(&pcm->lock);
 
@@ -533,7 +601,7 @@ static int msm_pcm_prepare(struct snd_soc_component *component, struct snd_pcm_s
 			pcm->session_id, pcm->playback_substream->stream,
 			event);
 	}
-
+	runtime->stop_threshold = runtime->boundary;
 	mutex_unlock(&pcm->lock);
 
 	return ret;
