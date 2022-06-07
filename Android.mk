@@ -6,6 +6,10 @@ ifeq ($(call is-board-platform, msmnile),true)
 AUDIO_SELECT  := CONFIG_SND_SOC_SA8155=m
 endif
 
+ifeq ($(TARGET_BOARD_AUTO),true)
+KBUILD_OPTIONS += CONFIG_BOARD_AUTO_AUDIO=y
+endif
+
 # Build/Package only in case of supported target
 ifeq ($(call is-board-platform-in-list,msmnile), true)
 
@@ -23,7 +27,7 @@ DLKM_DIR := $(TOP)/device/qcom/common/dlkm
 
 ###########################################################
 # This is set once per LOCAL_PATH, not per (kernel) module
-KBUILD_OPTIONS := AUDIO_ROOT=$(AUDIO_BLD_DIR)
+KBUILD_OPTIONS += AUDIO_ROOT=$(AUDIO_BLD_DIR)
 
 # We are actually building audio.ko here, as per the
 # requirement we are specifying <chipset>_audio.ko as LOCAL_MODULE.
