@@ -32514,6 +32514,17 @@ enum {
 	DRIFT_SRC_MAX,
 };
 
+enum {
+	TDM_PRI = 0,
+	TDM_SEC,
+	TDM_TERT,
+	TDM_QUAT,
+	TDM_QUIN,
+	TDM_SEN,
+	TDM_SEP,
+	TDM_INTERFACE_MAX,
+};
+
 struct asrc_module_config_params {
 	int enable;
 	int fe_id;
@@ -32540,6 +32551,8 @@ struct asrc_config {
 static struct asrc_config asrc_cfg[ASRC_PARAM_MAX];
 
 static int asrc_params[ASRC_PARAM_MAX], asrc_enable;
+
+static int afe_ref_cnt[TDM_INTERFACE_MAX];
 
 static int sched_delay_ms = ASRC_SCHED_DELAY_MS;
 
@@ -32803,6 +32816,42 @@ done:
 	return ret;
 }
 
+static int asrc_get_backend_dai_grp(int be_id)
+{
+	if ((be_id >= MSM_BACKEND_DAI_PRI_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_PRI_TDM_TX_7)){
+		pr_debug("%s : TDM_PRI",__func__);
+		return TDM_PRI;
+	}
+	else if((be_id >= MSM_BACKEND_DAI_SEC_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_SEC_TDM_TX_7)){
+		pr_debug("%s : TDM_SEC",__func__);
+		return TDM_SEC;
+	}
+	else if((be_id >= MSM_BACKEND_DAI_TERT_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_TERT_TDM_TX_7)){
+		pr_debug("%s : TDM_TERT",__func__);
+		return TDM_TERT;
+	}
+	else if((be_id >= MSM_BACKEND_DAI_QUAT_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_QUAT_TDM_TX_7)){
+		pr_debug("%s : TDM_QUAT",__func__);
+		return TDM_QUAT;
+	}
+	else if((be_id >= MSM_BACKEND_DAI_QUIN_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_QUIN_TDM_TX_7)){
+		pr_debug("%s : TDM_QUIN",__func__);
+		return TDM_QUIN;
+	}
+	else if((be_id >= MSM_BACKEND_DAI_SEN_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_SEN_TDM_TX_7)){
+		pr_debug("%s : TDM_SEN",__func__);
+		return TDM_SEN;
+	}
+	else if((be_id >= MSM_BACKEND_DAI_SEP_TDM_RX_0) && (be_id <= MSM_BACKEND_DAI_SEP_TDM_TX_7)){
+		pr_debug("%s : TDM_SEP",__func__);
+		return TDM_SEP;
+	}
+	else{
+		pr_err("%s : Invalid be id",__func__);
+		return -EINVAL;
+	}
+}
+
 static int asrc_enable_module(struct asrc_module_config_params *params)
 {
 	int ret = 0;
@@ -32813,11 +32862,35 @@ static int asrc_enable_module(struct asrc_module_config_params *params)
 	void *param_module = (void *)&params->enable;
 	int port_id = -1;
 	int copp_idx = -1;
+	int port_group = -1;
 
 	ret = asrc_get_module_location(params, &copp_idx, &port_id);
 	if (ret) {
 		pr_err("%s: Failed to get module copp_idx, ret=%d\n",
 			__func__, ret);
+		goto done;
+	}
+
+	port_group = asrc_get_backend_dai_grp(params->be_id); //get BE grp based on the be_id
+
+	if(port_group < 0)
+		return -EINVAL;
+
+	if(params->enable){
+		afe_ref_cnt[port_group] += 1; //increase ref cnt for the BE group received
+		pr_debug("%s : Increasing ref cnt of afe_ref_cnt[%d] =  %d",
+			__func__,port_group,afe_ref_cnt[port_group]);
+	}
+	else{
+		if(afe_ref_cnt[port_group]){
+			afe_ref_cnt[port_group] -= 1; //decrease ref cnt for the BE group received
+			pr_debug("%s : Decreasing ref cnt of afe_ref_cnt[%d] =  %d",
+			__func__,port_group,afe_ref_cnt[port_group]);
+		}
+		else
+			pr_debug("%s : Ref cnt of afe_ref_cnt is 0",__func__);
+
+		if(afe_ref_cnt[port_group]) //if ref cnt is not 0 , dont send to DSP
 		goto done;
 	}
 
