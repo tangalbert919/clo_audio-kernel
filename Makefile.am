@@ -23,6 +23,9 @@ endif
 ifeq ($(TARGET_SUPPORT), sdxnightjar)
 KBUILD_OPTIONS += CONFIG_ARCH_SDXNIGHTJAR=y
 endif
+ifeq ($(TARGET_SUPPORT), sdxprairie)
+KBUILD_OPTIONS += CONFIG_ARCH_SA515M=y
+endif
 ifeq ($(TARGET_SUPPORT), sa410m)
 KBUILD_OPTIONS += CONFIG_ARCH_SA410M=y
 endif
@@ -41,6 +44,9 @@ ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), mdm9650))
 obj-m += asoc/codecs/wcd934x/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sdxnightjar))
+obj-m += asoc/codecs/wcd934x/
+endif
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sdxprairie))
 obj-m += asoc/codecs/wcd934x/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa410m))

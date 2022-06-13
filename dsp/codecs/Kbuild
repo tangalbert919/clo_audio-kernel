@@ -63,6 +63,11 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdxtargetautoconf.h
 	endif
+	ifeq ($(CONFIG_ARCH_SA515M), y)
+		include $(AUDIO_ROOT)/config/sdxpraireauto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdxpraireautoconf.h
+	endif
 	ifeq ($(CONFIG_ARCH_SA410M), y)
 		include $(AUDIO_ROOT)/config/bengalauto.conf
 		export
