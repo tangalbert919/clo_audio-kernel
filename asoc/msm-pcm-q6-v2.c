@@ -1745,7 +1745,6 @@ done:
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_set_volume(struct msm_audio *prtd, uint32_t volume)
 {
 	int rc = 0;
@@ -1889,13 +1888,6 @@ static int msm_pcm_add_volume_control(struct snd_soc_pcm_runtime *rtd,
 	kctl->tlv.p = msm_pcm_vol_gain;
 	return 0;
 }
-#else
-static int msm_pcm_add_volume_control(struct snd_soc_pcm_runtime *rtd,
-				      int stream)
-{
-	return 0;
-}
-#endif /* CONFIG_AUDIO_QGKI */
 
 static int msm_pcm_compress_ctl_info(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_info *uinfo)
