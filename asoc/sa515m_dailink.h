@@ -5,6 +5,7 @@
  */
 
 #include <sound/soc.h>
+#define DISABLE_COMPRESS 1
 
 /* FE dai-links */
 SND_SOC_DAILINK_DEFS(voicemmode1,
@@ -146,20 +147,23 @@ SND_SOC_DAILINK_DEFS(dtmf_tx,
 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-stub-dev.4")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("msm-stub-codec.1", "msm-stub-tx")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-dtmf")));
-
+#ifndef DISABLE_COMPRESS
 SND_SOC_DAILINK_DEFS(multimedia4,
 	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia4")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-compress-dsp")));
-
+#endif
 SND_SOC_DAILINK_DEFS(multimedia5,
 	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia5")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-dsp.1")));
+
+#ifndef DISABLE_COMPRESS
 SND_SOC_DAILINK_DEFS(multimedia7,
 	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia7")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-compress-dsp")));
+#endif
 
 SND_SOC_DAILINK_DEFS(multimedia6,
 	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia6")),
