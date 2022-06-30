@@ -2975,7 +2975,6 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(dtmf_tx),
 	},
-#ifndef DISABLE_COMPRESS
 	{
 		.name = SDX_DAILINK_NAME(Compress1),
 		.stream_name = "COMPR",
@@ -2989,7 +2988,6 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA4,
 		SND_SOC_DAILINK_REG(multimedia4),
 	},
-#endif
 	{
 		.name = SDX_DAILINK_NAME(Media2),
 		.stream_name = "MultiMedia2",
@@ -3234,7 +3232,6 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(sec_tdm_tx_0_hostless),
 	},
-#ifndef DISABLE_COMPRESS
 	{
 		.name = SDX_DAILINK_NAME(Compress2),
 		.stream_name = "COMPR2",
@@ -3247,7 +3244,6 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA7,
 		SND_SOC_DAILINK_REG(multimedia7),
 	},
-#endif
 	{
 		.name = "Secondary TDM RX 1 Hostless",
 		.stream_name = "Secondary TDM RX 1 Hostless",

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017 The Linux Foundation. All rights reserved.
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
 */
 
 #include <linux/kernel.h>
@@ -9,6 +11,7 @@
 
 static int __init audio_platform_init(void)
 {
+	msm_compress_dsp_init();
 	msm_fe_dai_init();
 	msm_dai_q6_init();
 	msm_dai_stub_init();
@@ -39,6 +42,7 @@ static void audio_platform_exit(void)
 	msm_dai_stub_exit();
 	msm_dai_q6_exit();
 	msm_fe_dai_exit();
+	msm_compress_dsp_exit();
 }
 
 module_init(audio_platform_init);
