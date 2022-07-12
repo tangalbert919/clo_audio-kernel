@@ -43189,6 +43189,19 @@ void msm_routing_pcm_free(struct snd_soc_component *component, struct snd_pcm *p
 	msm_pcm_routing_hwdep_free(pcm);
 }
 
+static unsigned int msm_routing_reg_read(struct snd_soc_component *component,
+                                       unsigned int reg)
+{
+        /* dummy */
+        return 0;
+}
+
+static int msm_routing_reg_write(struct snd_soc_component *component,
+                               unsigned int reg, unsigned int val)
+{
+        /* dummy */
+        return 0;
+}
 static struct snd_soc_component_driver msm_soc_routing_component = {
 	.name			= DRV_NAME,
 	.hw_params		= msm_pcm_routing_hw_params,
@@ -43197,6 +43210,8 @@ static struct snd_soc_component_driver msm_soc_routing_component = {
 	.probe		= msm_routing_probe,
 	.pcm_construct	= msm_routing_pcm_new,
 	.pcm_destruct	= msm_routing_pcm_free,
+	.read	= msm_routing_reg_read,
+	.write	= msm_routing_reg_write,
 
 };
 

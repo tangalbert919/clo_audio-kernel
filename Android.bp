@@ -45,7 +45,7 @@ genrule {
     tool_files: [
          "audio_kernel_headers.py",
     ],
-    srcs: headers_src,
+    srcs: legacy_headers_src,
     cmd: "python3 -u $(location audio_kernel_headers.py) " +
         legacy_audio_kernel_headers_verbose +
         "--header_arch arm64 " +
