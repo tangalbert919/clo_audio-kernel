@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -280,13 +282,17 @@ exit:
 	return addr;
 }
 
-static void msm_audio_protect_memory_region(struct platform_device *pdev)
+static int msm_audio_protect_memory_region(struct platform_device *pdev)
 {
 	int ret = 0;
 	phys_addr_t addr = 0;
 	struct reserved_mem *rmem = NULL;
 	u64 size = 0;
 	struct device_node *node = NULL;
+	int srcVM[1] = {VMID_HLOS};
+	int destVM[2] = {VMID_MSS_MSA, VMID_HLOS};
+	int destVMperm[2] = {PERM_READ | PERM_WRITE,
+	                     PERM_READ | PERM_WRITE};
 
 	node = of_parse_phandle(pdev->dev.of_node, "memory-region", 0);
 	if (!node) {
@@ -310,11 +316,11 @@ static void msm_audio_protect_memory_region(struct platform_device *pdev)
 	addr = rmem->base;
 	size = (size_t)rmem->size;
 
-	ret = qcom_scm_mem_protect_audio((phys_addr_t) addr , (size_t) size);
-	pr_err("%s: addr = %p size = %zu rc = %d\n", __func__, (void*)(phys_addr_t)addr, (size_t) size, ret);
+	pr_debug("%s: addr = %p size = %zu rc = %d\n", __func__, (void*)(phys_addr_t)addr, (size_t) size, ret);
+	return hyp_assign_phys(addr, size, srcVM, 1, destVM, destVMperm, 2);
 
 exit:
-	return;
+	return ret;
 }
 
 static int msm_audio_ion_unmap_kernel(struct dma_buf *dma_buf)
@@ -885,8 +891,14 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 		dev_dbg(dev, "%s: SMMU is Disabled\n", __func__);
 		scm_mp_enabled = of_property_read_bool(dev->of_node,
 						       mdm_audio_ion_scm);
-		if (scm_mp_enabled)
-			msm_audio_protect_memory_region(pdev);
+		if (scm_mp_enabled){
+			pr_debug("%s: Calling HYP ASSIGN\n", __func__);
+			rc = msm_audio_protect_memory_region(pdev);
+			if (rc) {
+				rc = 0;
+				pr_debug("%s: HYP ASSIGN Failed\n", __func__);
+			}
+		}
 		else
 			pr_debug("%s: scm mp enabled not found\n", __func__);
 		goto exit;
