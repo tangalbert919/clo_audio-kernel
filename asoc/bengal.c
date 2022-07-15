@@ -5026,7 +5026,7 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 	},
 	{/* hw:x,26 */
 		.name = "Tertiary MI2S RX_Hostless",
-		.stream_name = "Tertiary MI2S_RX Hostless Capture",
+		.stream_name = "Tertiary MI2S_RX Hostless Playback",
 		.dynamic = 1,
 		.dpcm_playback = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
