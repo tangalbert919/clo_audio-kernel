@@ -156,6 +156,7 @@ static unsigned int devnum;
 
 static int32_t wsa881x_resource_acquire(struct snd_soc_component *component,
 						bool enable);
+static int wsa881x_swr_reset(struct swr_device *pdev);
 
 static const char * const wsa_pa_gain_text[] = {
 	"G_18_DB", "G_16P5_DB", "G_15_DB", "G_13P5_DB", "G_12_DB", "G_10P5_DB",
@@ -876,6 +877,8 @@ static int wsa881x_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		break;
+	case SND_SOC_DAPM_POST_PMU:
 		wsa881x_set_port(component, SWR_DAC_PORT,
 				&port_id[num_port], &num_ch[num_port],
 				&ch_mask[num_port], &ch_rate[num_port],
@@ -907,8 +910,7 @@ static int wsa881x_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 				&ch_mask[0], &ch_rate[0], &num_ch[0],
 					&port_type[0]);
 		break;
-	case SND_SOC_DAPM_POST_PMU:
-		break;
+
 	case SND_SOC_DAPM_PRE_PMD:
 		break;
 	case SND_SOC_DAPM_POST_PMD:
@@ -961,6 +963,9 @@ static int wsa881x_rdac_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		wsa881x_swr_reset(wsa881x->swr_slave);
+		break;
+	case SND_SOC_DAPM_POST_PMU:
 		mutex_lock(&wsa881x->temp_lock);
 		wsa881x_resource_acquire(component, ENABLE);
 		mutex_unlock(&wsa881x->temp_lock);
@@ -1035,6 +1040,8 @@ static int wsa881x_spkr_pa_event(struct snd_soc_dapm_widget *w,
 	dev_dbg(component->dev, "%s: %s %d\n", __func__, w->name, event);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		break;
+	case SND_SOC_DAPM_POST_PMU:
 		snd_soc_component_update_bits(component, WSA881X_SPKR_OCP_CTL,
 				0xC0, 0x80);
 		regmap_multi_reg_write(wsa881x->regmap,
@@ -1053,8 +1060,7 @@ static int wsa881x_spkr_pa_event(struct snd_soc_dapm_widget *w,
 					WSA881X_SPKR_DRV_GAIN,
 					0x08, 0x00);
 
-		break;
-	case SND_SOC_DAPM_POST_PMU:
+
 		if (!wsa881x->bolero_dev)
 			snd_soc_component_update_bits(component,
 					      WSA881X_SPKR_DRV_EN,
@@ -1118,7 +1124,7 @@ static const struct snd_soc_dapm_widget wsa881x_dapm_widgets[] = {
 
 	SND_SOC_DAPM_DAC_E("RDAC", NULL, WSA881X_SPKR_DAC_CTL, 7, 0,
 		wsa881x_rdac_event,
-		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_PGA_E("SPKR PGA", SND_SOC_NOPM, 0, 0, NULL, 0,
 			wsa881x_spkr_pa_event, SND_SOC_DAPM_PRE_PMU |
@@ -1340,6 +1346,7 @@ static const struct snd_soc_component_driver soc_codec_dev_wsa881x = {
 static int wsa881x_gpio_ctrl(struct wsa881x_priv *wsa881x, bool enable)
 {
 	int ret = 0;
+	bool pin_state_current = false;
 
 	if (wsa881x->pd_gpio < 0) {
 		dev_err(wsa881x->dev, "%s: gpio is not valid %d\n",
@@ -1348,10 +1355,12 @@ static int wsa881x_gpio_ctrl(struct wsa881x_priv *wsa881x, bool enable)
 	}
 
 	if (wsa881x->wsa_rst_np) {
-		if (enable)
+		pin_state_current = msm_cdc_pinctrl_get_state(
+					wsa881x->wsa_rst_np);
+		if (!pin_state_current && enable)
 			ret = msm_cdc_pinctrl_select_active_state(
 							wsa881x->wsa_rst_np);
-		else
+		else if (pin_state_current && !enable)
 			ret = msm_cdc_pinctrl_select_sleep_state(
 							wsa881x->wsa_rst_np);
 		if (ret != 0)
