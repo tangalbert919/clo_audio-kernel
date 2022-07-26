@@ -91,6 +91,16 @@ SND_SOC_DAILINK_DEFS(sec_auxpcm_tx_hostless,
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
 
+SND_SOC_DAILINK_DEFS(tert_auxpcm_rx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("TERT_AUXPCM_RX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
+SND_SOC_DAILINK_DEFS(tert_auxpcm_tx_hostless,
+	DAILINK_COMP_ARRAY(COMP_CPU("TERT_AUXPCM_TX_HOSTLESS")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+
 SND_SOC_DAILINK_DEFS(cdcdma_hostless,
 	DAILINK_COMP_ARRAY(COMP_CPU("CDC_DMA_HOSTLESS")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),

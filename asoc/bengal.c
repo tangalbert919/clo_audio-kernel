@@ -5072,6 +5072,30 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(quat_mi2s_tx_hostless),
 	},
+	{/* hw:x,30 */
+		.name = "Tertiary AUXPCM RX Hostless",
+		.stream_name = "TERT_AUXPCM_HOSTLESS Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+					SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_auxpcm_rx_hostless),
+	},
+	{/* hw:x,31 */
+		.name = "Tertiary AUXPCM TX Hostless",
+		.stream_name = "TERT_AUXPCM_HOSTLESS Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+					SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_auxpcm_tx_hostless),
+	},
 };
 
 static struct snd_soc_dai_link msm_common_be_dai_links[] = {
