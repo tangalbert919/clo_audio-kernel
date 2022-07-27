@@ -108,6 +108,11 @@ else
 			export
 			INCS    +=  -include $(AUDIO_ROOT)/config/bengalautoconf.h
 		endif
+		ifeq ($(CONFIG_ARCH_SA415M), y)
+			include $(AUDIO_ROOT)/config/sdxpoorwillsauto.conf
+			export
+			INCS    +=  -include $(AUDIO_ROOT)/config/sdxpoorwillsautoconf.h
+		endif
 	endif
 endif
 
@@ -183,6 +188,10 @@ endif
 
 ifdef CONFIG_SND_SOC_SA410M
 	MACHINE_OBJS += bengal.o
+endif
+
+ifdef CONFIG_SND_SOC_MACHINE_SDXPOORWILLS
+	MACHINE_OBJS += sdxpoorwills.o
 endif
 
 # for HOLI sound card driver
@@ -313,6 +322,9 @@ obj-$(CONFIG_SND_SOC_MACHINE_SDXPRAIRIE) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_SA410M) += machine_dlkm.o
+machine_dlkm-y := $(MACHINE_OBJS)
+
+obj-$(CONFIG_SND_SOC_MACHINE_SDXPOORWILLS) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_HOLI) += machine_dlkm.o
