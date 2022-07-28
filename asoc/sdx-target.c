@@ -2980,7 +2980,6 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.stream_name = "COMPR",
 		.dynamic = 1,
 		.dpcm_playback = 1,
-		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			    SND_SOC_DPCM_TRIGGER_POST},
 		.ignore_suspend = 1,
