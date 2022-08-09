@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -7972,6 +7973,25 @@ struct asm_stream_cmd_set_pp_params {
 	 * q6core_pack_pp_params to pack the header and param data correctly.
 	 */
 	u32 param_data[0];
+} __packed;
+
+struct asm_stream_param_data_v2 {
+	u32                  module_id;
+	/* Unique module ID. */
+
+	u32                  param_id;
+	/* Unique parameter ID. */
+
+	u16                  param_size;
+/* Data size of the param_id/module_id combination. This is
+ * a multiple of 4 bytes.
+ */
+
+	u16                  reserved;
+/* Reserved for future enhancements. This field must be set to
+ * zero.
+ */
+
 } __packed;
 
 #define ASM_STREAM_CMD_GET_PP_PARAMS_V2		0x00010DA2
