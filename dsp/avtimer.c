@@ -26,6 +26,7 @@
 #include <linux/of.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/pm_runtime.h>
 #if IS_ENABLED(CONFIG_AVTIMER_LEGACY)
 #include <media/msmb_isp.h>
 #endif
@@ -44,6 +45,7 @@
 #define AVCS_CMD_RSP_REMOTE_AVTIMER_VOTE_REQUEST 0x00012915
 #define AVCS_CMD_REMOTE_AVTIMER_RELEASE_REQUEST 0x00012916
 #define AVTIMER_REG_CNT 2
+#define AVTIMER_AUTO_SUSPEND_DELAY 100
 
 struct adsp_avt_timer {
 	struct apr_hdr hdr;
@@ -56,6 +58,7 @@ struct adsp_avt_timer {
 static int major;
 
 struct avtimer_t {
+	struct device *dev;
 	struct apr_svc *core_handle_q;
 	struct cdev myc;
 	struct class *avtimer_class;
@@ -126,6 +129,13 @@ static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
 		atomic_set(&avtimer.adsp_ready, 0);
 		schedule_delayed_work(&avtimer.ssr_dwork,
 				  msecs_to_jiffies(SSR_WAKETIME));
+		if ((!pm_runtime_enabled(avtimer.dev) ||
+			!pm_runtime_suspended(avtimer.dev))) {
+			avtimer_runtime_suspend(avtimer.dev);
+			pm_runtime_disable(avtimer.dev);
+			pm_runtime_set_suspended(avtimer.dev);
+			pm_runtime_enable(avtimer.dev);
+		}
 		break;
 	}
 
@@ -336,19 +346,24 @@ int avcs_core_query_timer_offset(int64_t *av_offset, int32_t clock_id)
 	uint64_t avtimer_tick_temp, avtimer_tick, sys_time = 0;
 	struct timespec ts;
 
-	if (!atomic_read(&avtimer.adsp_ready)) {
-		pr_debug("%s:In SSR, return\n", __func__);
-		return -ENETRESET;
-	}
-
 	if ((avtimer.p_avtimer_lsw == NULL) ||
 	    (avtimer.p_avtimer_msw == NULL)) {
+		return -EINVAL;
+	}
+
+	pm_runtime_get_sync(avtimer.dev);
+	if (!atomic_read(&avtimer.adsp_ready)) {
+		pr_debug("%s: lpass vote for avtimer failed \n", __func__);
+		pm_runtime_mark_last_busy(avtimer.dev);
+		pm_runtime_put_autosuspend(avtimer.dev);
 		return -EINVAL;
 	}
 
 	memset(&ts, 0, sizeof(struct timespec));
 	avtimer_lsw = ioread32(avtimer.p_avtimer_lsw);
 	avtimer_msw = ioread32(avtimer.p_avtimer_msw);
+	pm_runtime_mark_last_busy(avtimer.dev);
+	pm_runtime_put_autosuspend(avtimer.dev);
 
 	switch (clock_id) {
 	case CLOCK_MONOTONIC_RAW:
@@ -563,6 +578,13 @@ static int dev_avtimer_probe(struct platform_device *pdev)
 
 	avcs_set_isp_fptr(true);
 
+	avtimer.dev = &pdev->dev;
+	pm_runtime_set_autosuspend_delay(&pdev->dev,
+			AVTIMER_AUTO_SUSPEND_DELAY);
+	pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+
 	pr_debug("%s: avtimer.clk_div = %d, avtimer.clk_mult = %d\n",
 		 __func__, avtimer.clk_div, avtimer.clk_mult);
 	return 0;
@@ -590,6 +612,8 @@ static int dev_avtimer_remove(struct platform_device *pdev)
 		devm_iounmap(&pdev->dev, avtimer.p_avtimer_lsw);
 	if (avtimer.p_avtimer_msw)
 		devm_iounmap(&pdev->dev, avtimer.p_avtimer_msw);
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
 	device_destroy(avtimer.avtimer_class, avtimer.myc.dev);
 	cdev_del(&avtimer.myc);
 	class_destroy(avtimer.avtimer_class);
@@ -598,6 +622,47 @@ static int dev_avtimer_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+static int avtimer_runtime_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	int ret = 0;
+
+	ret = avcs_core_disable_power_collapse(1);
+	if (ret < 0) {
+		pr_err("%s: enable power collapse failed %d\n", __func__, ret);
+		goto exit;
+	}
+exit:
+	pm_runtime_set_autosuspend_delay(&pdev->dev,
+			AVTIMER_AUTO_SUSPEND_DELAY);
+	return 0;
+}
+
+
+int avtimer_runtime_suspend(struct device *dev)
+{
+	int ret = 0;
+
+	ret = avcs_core_disable_power_collapse(0);
+	if (ret < 0)
+		pr_debug("%s: disable power collapse failed\n", __func__);
+
+	return 0;
+}
+EXPORT_SYMBOL(avtimer_runtime_suspend);
+
+static const struct dev_pm_ops avtimer_dev_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(
+		pm_runtime_force_suspend,
+		pm_runtime_force_resume
+	)
+	SET_RUNTIME_PM_OPS(
+		avtimer_runtime_suspend,
+		avtimer_runtime_resume,
+		NULL
+	)
+};
 
 static const struct of_device_id avtimer_machine_of_match[]  = {
 	{ .compatible = "qcom,avtimer", },
@@ -609,6 +674,7 @@ static struct platform_driver dev_avtimer_driver = {
 	.driver = {
 		.name = "dev_avtimer",
 		.of_match_table = avtimer_machine_of_match,
+		.pm = &avtimer_dev_pm_ops,
 	},
 };
 
