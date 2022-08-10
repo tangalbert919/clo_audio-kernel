@@ -11724,8 +11724,9 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 					&dai_data->lane_cfg);
 				if (rc < 0) {
 					dev_err(dai->dev,
-					"%s: fail to enable AFE group 0x%x\n",
+					"%s: fail to enable AFE group 0x%x disable Clk\n",
 					__func__, group_id);
+					 msm_dai_q6_tdm_set_clk(dai_data, dai->id, false);
 					goto rtn;
 				}
 			}
