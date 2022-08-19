@@ -24,11 +24,17 @@
 
 #define MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID 1
 #define MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID 2
-#define MSM_DAI_SEC_AUXPCM_DT_DEV_ID 3
-#define MSM_DAI_TERT_AUXPCM_DT_DEV_ID 4
-#define MSM_DAI_QUAT_AUXPCM_DT_DEV_ID 5
-#define MSM_DAI_QUIN_AUXPCM_DT_DEV_ID 6
-#define MSM_DAI_SEN_AUXPCM_DT_DEV_ID 7
+#define MSM_DAI_SEC_RX_AUXPCM_DT_DEV_ID 3
+#define MSM_DAI_SEC_TX_AUXPCM_DT_DEV_ID 4
+#define MSM_DAI_TERT_RX_AUXPCM_DT_DEV_ID 5
+#define MSM_DAI_TERT_TX_AUXPCM_DT_DEV_ID 6
+#define MSM_DAI_QUAT_RX_AUXPCM_DT_DEV_ID 7
+#define MSM_DAI_QUAT_TX_AUXPCM_DT_DEV_ID 8
+#define MSM_DAI_QUIN_RX_AUXPCM_DT_DEV_ID 9
+#define MSM_DAI_QUIN_TX_AUXPCM_DT_DEV_ID 10
+#define MSM_DAI_SEN_RX_AUXPCM_DT_DEV_ID 11
+#define MSM_DAI_SEN_TX_AUXPCM_DT_DEV_ID 12
+
 
 #define MSM_DAI_TWS_CHANNEL_MODE_ONE 1
 #define MSM_DAI_TWS_CHANNEL_MODE_TWO 2
@@ -1701,35 +1707,17 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 
 	dev_dbg(dai->dev, "%s: dai->id = %d closing PCM AFE ports\n",
 			__func__, dai->id);
-
-	switch (dai->id) {
-	case MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID:
-		rc = afe_close(aux_dai_data->rx_pid); /* can block */
-		if (rc < 0)
+	if (dai->id & 1) {
+	    rc = afe_close(aux_dai_data->rx_pid); /* can block */
+	    if (rc < 0)
 			dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
 
-		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
-		break;
-	case MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID:
-		rc = afe_close(aux_dai_data->tx_pid);
-		if (rc < 0)
+	    msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
+	} else {
+	    rc = afe_close(aux_dai_data->tx_pid);
+	    if (rc < 0)
 			dev_err(dai->dev, "fail to close AUX PCM TX port\n");
-
-		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
-		break;
-	default:
-		rc = afe_close(aux_dai_data->rx_pid); /* can block */
-		if (rc < 0)
-			dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
-		rc = afe_close(aux_dai_data->tx_pid);
-		if (rc < 0)
-			dev_err(dai->dev, "fail to close AUX PCM TX port\n");
-		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
-		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
-
-		dev_err(dai->dev, "%s: DUAL AUXPCM id: %d  supported\n",
-			__func__, dai->id);
-		break;
+	    msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
 	}
 exit:
 	mutex_unlock(&aux_dai_data->rlock);
@@ -1826,7 +1814,7 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_PRI_PCM_EBIT;
 			break;
-		case MSM_DAI_SEC_AUXPCM_DT_DEV_ID:
+		case MSM_DAI_SEC_RX_AUXPCM_DT_DEV_ID:
 			if (pcm_clk_rate)
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_SEC_PCM_IBIT;
@@ -1834,7 +1822,15 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_SEC_PCM_EBIT;
 			break;
-		case MSM_DAI_TERT_AUXPCM_DT_DEV_ID:
+		case MSM_DAI_SEC_TX_AUXPCM_DT_DEV_ID:
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_SEC_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_SEC_PCM_EBIT;
+			break;
+		case MSM_DAI_TERT_RX_AUXPCM_DT_DEV_ID:
 			if (pcm_clk_rate)
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_TER_PCM_IBIT;
@@ -1842,7 +1838,15 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_TER_PCM_EBIT;
 			break;
-		case MSM_DAI_QUAT_AUXPCM_DT_DEV_ID:
+		case MSM_DAI_TERT_TX_AUXPCM_DT_DEV_ID:
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_TER_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_TER_PCM_EBIT;
+			break;
+		case MSM_DAI_QUAT_RX_AUXPCM_DT_DEV_ID:
 			if (pcm_clk_rate)
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_QUAD_PCM_IBIT;
@@ -1850,7 +1854,15 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_QUAD_PCM_EBIT;
 			break;
-		case MSM_DAI_QUIN_AUXPCM_DT_DEV_ID:
+		case MSM_DAI_QUAT_TX_AUXPCM_DT_DEV_ID:
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_QUAD_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_QUAD_PCM_EBIT;
+			break;
+		case MSM_DAI_QUIN_RX_AUXPCM_DT_DEV_ID:
 			if (pcm_clk_rate)
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_QUIN_PCM_IBIT;
@@ -1858,7 +1870,23 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_QUIN_PCM_EBIT;
 			break;
-		case MSM_DAI_SEN_AUXPCM_DT_DEV_ID:
+		case MSM_DAI_QUIN_TX_AUXPCM_DT_DEV_ID:
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_QUIN_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_QUIN_PCM_EBIT;
+			break;
+		case MSM_DAI_SEN_RX_AUXPCM_DT_DEV_ID:
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_SEN_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_SEN_PCM_EBIT;
+			break;
+		case MSM_DAI_SEN_TX_AUXPCM_DT_DEV_ID:
 			if (pcm_clk_rate)
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_SEN_PCM_IBIT;
@@ -1876,20 +1904,18 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 				sizeof(struct afe_clk_cfg));
 		aux_dai_data->clk_cfg.clk_val1 = pcm_clk_rate;
 	}
+	if (dai->id & 1) {
+		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
+						   aux_dai_data->rx_pid, true);
+		if (rc < 0) {
+			dev_err(dai->dev,
+				"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
+				__func__);
+			goto fail;
+		}
+		afe_open(aux_dai_data->rx_pid, &dai_data->port_config, dai_data->rate);
 
-	switch (dai->id) {
-	case MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID:
-		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
-						   aux_dai_data->rx_pid, true);
-		if (rc < 0) {
-			dev_err(dai->dev,
-				"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
-				__func__);
-			goto fail;
-		}
-		afe_open(aux_dai_data->rx_pid, &dai_data->port_config, dai_data->rate);
-		break;
-	case MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID:
+	} else {
 		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
 						   aux_dai_data->tx_pid, true);
 		if (rc < 0) {
@@ -1899,30 +1925,8 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 			goto fail;
 		}
 		afe_open(aux_dai_data->tx_pid, &dai_data->port_config, dai_data->rate);
-		break;
-	default:
-		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
-						   aux_dai_data->rx_pid, true);
-		if (rc < 0) {
-			dev_err(dai->dev,
-				"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
-				__func__);
-			goto fail;
-		}
-		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
-						   aux_dai_data->tx_pid, true);
-		if (rc < 0) {
-			dev_err(dai->dev,
-				"%s:afe_set_lpass_clock on TX pcm_src_clk failed\n",
-				__func__);
-			goto fail;
-		}
-		afe_open(aux_dai_data->rx_pid, &dai_data->port_config, dai_data->rate);
-		afe_open(aux_dai_data->tx_pid, &dai_data->port_config, dai_data->rate);
-		dev_err(dai->dev, "%s: DUAL AUXPCM id: %d supported\n",
-			__func__, dai->id);
-		break;
 	}
+
 	goto exit;
 
 fail:
@@ -2302,6 +2306,13 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
+		.id = MSM_DAI_SEC_RX_AUXPCM_DT_DEV_ID,
+		.name = "Sec AUX PCM RX",
+		.ops = &msm_dai_q6_auxpcm_ops,
+		.probe = msm_dai_q6_aux_pcm_probe,
+		.remove = msm_dai_q6_dai_auxpcm_remove,
+	},
+	{
 		.capture = {
 			.stream_name = "Sec AUX PCM Capture",
 			.rates = (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000),
@@ -2311,8 +2322,8 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
-		.id = MSM_DAI_SEC_AUXPCM_DT_DEV_ID,
-		.name = "Sec AUX PCM",
+		.id = MSM_DAI_SEC_TX_AUXPCM_DT_DEV_ID,
+		.name = "Sec AUX PCM TX",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -2327,6 +2338,13 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
+		.id = MSM_DAI_TERT_RX_AUXPCM_DT_DEV_ID,
+		.name = "Tert AUX PCM RX",
+		.ops = &msm_dai_q6_auxpcm_ops,
+		.probe = msm_dai_q6_aux_pcm_probe,
+		.remove = msm_dai_q6_dai_auxpcm_remove,
+	},
+	{
 		.capture = {
 			.stream_name = "Tert AUX PCM Capture",
 			.rates = (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000),
@@ -2336,8 +2354,8 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
-		.id = MSM_DAI_TERT_AUXPCM_DT_DEV_ID,
-		.name = "Tert AUX PCM",
+		.id = MSM_DAI_TERT_TX_AUXPCM_DT_DEV_ID,
+		.name = "Tert AUX PCM TX",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -2352,6 +2370,13 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
+		.id = MSM_DAI_QUAT_RX_AUXPCM_DT_DEV_ID,
+		.name = "Quat AUX PCM RX",
+		.ops = &msm_dai_q6_auxpcm_ops,
+		.probe = msm_dai_q6_aux_pcm_probe,
+		.remove = msm_dai_q6_dai_auxpcm_remove,
+	},
+	{
 		.capture = {
 			.stream_name = "Quat AUX PCM Capture",
 			.rates = (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000),
@@ -2361,8 +2386,8 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
-		.id = MSM_DAI_QUAT_AUXPCM_DT_DEV_ID,
-		.name = "Quat AUX PCM",
+		.id = MSM_DAI_QUAT_TX_AUXPCM_DT_DEV_ID,
+		.name = "Quat AUX PCM TX",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -2377,6 +2402,13 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
+		.id = MSM_DAI_QUIN_RX_AUXPCM_DT_DEV_ID,
+		.name = "Quin AUX PCM RX",
+		.ops = &msm_dai_q6_auxpcm_ops,
+		.probe = msm_dai_q6_aux_pcm_probe,
+		.remove = msm_dai_q6_dai_auxpcm_remove,
+	},
+	{
 		.capture = {
 			.stream_name = "Quin AUX PCM Capture",
 			.rates = (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000),
@@ -2386,8 +2418,8 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
-		.id = MSM_DAI_QUIN_AUXPCM_DT_DEV_ID,
-		.name = "Quin AUX PCM",
+		.id = MSM_DAI_QUIN_TX_AUXPCM_DT_DEV_ID,
+		.name = "Quin AUX PCM TX",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -2402,6 +2434,13 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
+		.id = MSM_DAI_SEN_RX_AUXPCM_DT_DEV_ID,
+		.name = "Sen AUX PCM RX",
+		.ops = &msm_dai_q6_auxpcm_ops,
+		.probe = msm_dai_q6_aux_pcm_probe,
+		.remove = msm_dai_q6_dai_auxpcm_remove,
+	},
+	{
 		.capture = {
 			.stream_name = "Sen AUX PCM Capture",
 			.rates = (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000),
@@ -2411,8 +2450,8 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
-		.id = MSM_DAI_SEN_AUXPCM_DT_DEV_ID,
-		.name = "Sen AUX PCM",
+		.id = MSM_DAI_SEN_TX_AUXPCM_DT_DEV_ID,
+		.name = "Sen AUX PCM  TX",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -5619,32 +5658,46 @@ static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 		dai_data->tx_pid = AFE_PORT_ID_PRIMARY_PCM_TX;
 		pdev->id = MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID;
 		i = 1;
-	}
-	else if (!strcmp(intf_name, "secondary")) {
+	} else if (!strcmp(intf_name, "secondaryRx")) {
 		dai_data->rx_pid = AFE_PORT_ID_SECONDARY_PCM_RX;
-		dai_data->tx_pid = AFE_PORT_ID_SECONDARY_PCM_TX;
-		pdev->id = MSM_DAI_SEC_AUXPCM_DT_DEV_ID;
+		pdev->id = MSM_DAI_SEC_RX_AUXPCM_DT_DEV_ID;
 		i = 2;
-	} else if (!strcmp(intf_name, "tertiary")) {
-		dai_data->rx_pid = AFE_PORT_ID_TERTIARY_PCM_RX;
-		dai_data->tx_pid = AFE_PORT_ID_TERTIARY_PCM_TX;
-		pdev->id = MSM_DAI_TERT_AUXPCM_DT_DEV_ID;
+	} else if (!strcmp(intf_name, "secondaryTx")) {
+		dai_data->tx_pid = AFE_PORT_ID_SECONDARY_PCM_TX;
+		pdev->id = MSM_DAI_SEC_TX_AUXPCM_DT_DEV_ID;
 		i = 3;
-	} else if (!strcmp(intf_name, "quaternary")) {
-		dai_data->rx_pid = AFE_PORT_ID_QUATERNARY_PCM_RX;
-		dai_data->tx_pid = AFE_PORT_ID_QUATERNARY_PCM_TX;
-		pdev->id = MSM_DAI_QUAT_AUXPCM_DT_DEV_ID;
+	} else if (!strcmp(intf_name, "tertiaryRx")) {
+		dai_data->rx_pid = AFE_PORT_ID_TERTIARY_PCM_RX;
+		pdev->id = MSM_DAI_TERT_RX_AUXPCM_DT_DEV_ID;
 		i = 4;
-	} else if (!strcmp(intf_name, "quinary")) {
-		dai_data->rx_pid = AFE_PORT_ID_QUINARY_PCM_RX;
-		dai_data->tx_pid = AFE_PORT_ID_QUINARY_PCM_TX;
-		pdev->id = MSM_DAI_QUIN_AUXPCM_DT_DEV_ID;
+	} else if (!strcmp(intf_name, "tertiaryTx")) {
+		dai_data->tx_pid = AFE_PORT_ID_TERTIARY_PCM_TX;
+		pdev->id = MSM_DAI_TERT_TX_AUXPCM_DT_DEV_ID;
 		i = 5;
-	} else if (!strcmp(intf_name, "senary")) {
-		dai_data->rx_pid = AFE_PORT_ID_SENARY_PCM_RX;
-		dai_data->tx_pid = AFE_PORT_ID_SENARY_PCM_TX;
-		pdev->id = MSM_DAI_SEN_AUXPCM_DT_DEV_ID;
+	} else if (!strcmp(intf_name, "quaternaryRx")) {
+		dai_data->rx_pid = AFE_PORT_ID_QUATERNARY_PCM_RX;
+		pdev->id = MSM_DAI_QUAT_RX_AUXPCM_DT_DEV_ID;
 		i = 6;
+	} else if (!strcmp(intf_name, "quaternaryTx")) {
+		dai_data->tx_pid = AFE_PORT_ID_QUATERNARY_PCM_TX;
+		pdev->id = MSM_DAI_QUAT_TX_AUXPCM_DT_DEV_ID;
+		i = 7;
+	} else if (!strcmp(intf_name, "quinaryRx")) {
+		dai_data->rx_pid = AFE_PORT_ID_QUINARY_PCM_RX;
+		pdev->id = MSM_DAI_QUIN_RX_AUXPCM_DT_DEV_ID;
+		i = 8;
+	} else if (!strcmp(intf_name, "quinaryTx")) {
+		dai_data->tx_pid = AFE_PORT_ID_QUINARY_PCM_TX;
+		pdev->id = MSM_DAI_QUIN_TX_AUXPCM_DT_DEV_ID;
+		i = 9;
+	} else if (!strcmp(intf_name, "senaryRx")) {
+		dai_data->rx_pid = AFE_PORT_ID_SENARY_PCM_RX;
+		pdev->id = MSM_DAI_SEN_RX_AUXPCM_DT_DEV_ID;
+		i = 10;
+	} else if (!strcmp(intf_name, "senaryTx")) {
+		dai_data->tx_pid = AFE_PORT_ID_SENARY_PCM_TX;
+		pdev->id = MSM_DAI_SEN_TX_AUXPCM_DT_DEV_ID;
+		i = 11;
 	} else {
 		dev_err(&pdev->dev, "%s: invalid DT intf name %s\n",
 			__func__, intf_name);
