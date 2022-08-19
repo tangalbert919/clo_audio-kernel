@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QDSP6VOICE_H__
 #define __QDSP6VOICE_H__
@@ -1839,6 +1840,7 @@ struct share_memory_info {
 #define VSS_ISOUNDFOCUS_CMD_GET_SECTORS     0x00013134
 #define VSS_ISOUNDFOCUS_RSP_GET_SECTORS     0x00013135
 #define VSS_ISOURCETRACK_CMD_GET_ACTIVITY   0x00013136
+#define VSS_IFNN_CMD_GET_ACTIVITY   		0x00013137
 
 struct vss_isoundfocus_cmd_set_sectors_t {
 	uint16_t start_angles[8];
@@ -1878,6 +1880,24 @@ struct vss_isourcetrack_activity_data_t {
 	uint16_t talker_doa;
 	uint16_t interferer_doa[3];
 	uint8_t sound_strength[360];
+} __packed;
+
+/* Payload structure for the VSS_IFNN_CMD_GET_ACTIVITY command */
+struct vss_ifnn_cmd_get_activity_t{
+    int32_t speech_probability;
+    int32_t nspp_vad_flag;
+    int32_t asln_vad_flag;
+} __packed;
+
+struct cvp_get_fnn_param_cmd_t {
+	struct apr_hdr hdr;
+	struct vss_ifnn_cmd_get_activity_t cvp_get_fnn_param;
+} __packed;
+
+struct vss_ifnn_cmd_get_activity_data_t{
+    int32_t speech_probability;
+    int32_t nspp_vad_flag;
+    int32_t asln_vad_flag;
 } __packed;
 
 struct shared_mem_info {
@@ -1995,9 +2015,11 @@ struct common_data {
 	bool is_per_vocoder_cal_enabled;
 	bool is_sound_focus_resp_success;
 	bool is_source_tracking_resp_success;
+	bool is_fnn_resp_success;
 	struct vss_isoundfocus_rsp_get_sectors_t soundFocusResponse;
 	struct shared_mem_info source_tracking_sh_mem;
 	struct vss_isourcetrack_activity_data_t sourceTrackingResponse;
+	struct vss_ifnn_cmd_get_activity_data_t fnnResponse;
 	bool sidetone_enable;
 	bool mic_break_enable;
 	struct audio_uevent_data *uevent_data;
@@ -2144,6 +2166,7 @@ int voice_set_topology_specific_info(struct voice_data *v,
 int voc_set_sound_focus(struct sound_focus_param sound_focus_param);
 int voc_get_sound_focus(struct sound_focus_param *soundFocusData);
 int voc_get_source_tracking(struct source_tracking_param *sourceTrackingData);
+int voc_get_fnn(struct fluence_nn_nnvad_monitor_param *fnnData);
 int voc_set_afe_sidetone(uint32_t session_id, bool sidetone_enable);
 bool voc_get_afe_sidetone(void);
 #endif
