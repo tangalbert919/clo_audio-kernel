@@ -22,12 +22,13 @@
 #include "msm-dai-q6-v2.h"
 #include <asoc/core.h>
 
-#define MSM_DAI_PRI_AUXPCM_DT_DEV_ID 1
-#define MSM_DAI_SEC_AUXPCM_DT_DEV_ID 2
-#define MSM_DAI_TERT_AUXPCM_DT_DEV_ID 3
-#define MSM_DAI_QUAT_AUXPCM_DT_DEV_ID 4
-#define MSM_DAI_QUIN_AUXPCM_DT_DEV_ID 5
-#define MSM_DAI_SEN_AUXPCM_DT_DEV_ID 6
+#define MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID 1
+#define MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID 2
+#define MSM_DAI_SEC_AUXPCM_DT_DEV_ID 3
+#define MSM_DAI_TERT_AUXPCM_DT_DEV_ID 4
+#define MSM_DAI_QUAT_AUXPCM_DT_DEV_ID 5
+#define MSM_DAI_QUIN_AUXPCM_DT_DEV_ID 6
+#define MSM_DAI_SEN_AUXPCM_DT_DEV_ID 7
 
 #define MSM_DAI_TWS_CHANNEL_MODE_ONE 1
 #define MSM_DAI_TWS_CHANNEL_MODE_TWO 2
@@ -1701,16 +1702,35 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 	dev_dbg(dai->dev, "%s: dai->id = %d closing PCM AFE ports\n",
 			__func__, dai->id);
 
-	rc = afe_close(aux_dai_data->rx_pid); /* can block */
-	if (rc < 0)
-		dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
+	switch (dai->id) {
+	case MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID:
+		rc = afe_close(aux_dai_data->rx_pid); /* can block */
+		if (rc < 0)
+			dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
 
-	rc = afe_close(aux_dai_data->tx_pid);
-	if (rc < 0)
-		dev_err(dai->dev, "fail to close AUX PCM TX port\n");
+		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
+		break;
+	case MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID:
+		rc = afe_close(aux_dai_data->tx_pid);
+		if (rc < 0)
+			dev_err(dai->dev, "fail to close AUX PCM TX port\n");
 
-	msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
-	msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
+		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
+		break;
+	default:
+		rc = afe_close(aux_dai_data->rx_pid); /* can block */
+		if (rc < 0)
+			dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
+		rc = afe_close(aux_dai_data->tx_pid);
+		if (rc < 0)
+			dev_err(dai->dev, "fail to close AUX PCM TX port\n");
+		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
+		msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
+
+		dev_err(dai->dev, "%s: DUAL AUXPCM id: %d  supported\n",
+			__func__, dai->id);
+		break;
+	}
 exit:
 	mutex_unlock(&aux_dai_data->rlock);
 }
@@ -1790,7 +1810,15 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 		aux_dai_data->clk_set.clk_freq_in_hz = pcm_clk_rate;
 
 		switch (dai->id) {
-		case MSM_DAI_PRI_AUXPCM_DT_DEV_ID:
+		case MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID:
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_PRI_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_PRI_PCM_EBIT;
+			break;
+		case MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID:
 			if (pcm_clk_rate)
 				aux_dai_data->clk_set.clk_id =
 					Q6AFE_LPASS_CLK_ID_PRI_PCM_IBIT;
@@ -1849,26 +1877,52 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 		aux_dai_data->clk_cfg.clk_val1 = pcm_clk_rate;
 	}
 
-	rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
-				       aux_dai_data->rx_pid, true);
-	if (rc < 0) {
-		dev_err(dai->dev,
-			"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
-			__func__);
-		goto fail;
+	switch (dai->id) {
+	case MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID:
+		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
+						   aux_dai_data->rx_pid, true);
+		if (rc < 0) {
+			dev_err(dai->dev,
+				"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
+				__func__);
+			goto fail;
+		}
+		afe_open(aux_dai_data->rx_pid, &dai_data->port_config, dai_data->rate);
+		break;
+	case MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID:
+		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
+						   aux_dai_data->tx_pid, true);
+		if (rc < 0) {
+			dev_err(dai->dev,
+				"%s:afe_set_lpass_clock on TX pcm_src_clk failed\n",
+				__func__);
+			goto fail;
+		}
+		afe_open(aux_dai_data->tx_pid, &dai_data->port_config, dai_data->rate);
+		break;
+	default:
+		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
+						   aux_dai_data->rx_pid, true);
+		if (rc < 0) {
+			dev_err(dai->dev,
+				"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
+				__func__);
+			goto fail;
+		}
+		rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
+						   aux_dai_data->tx_pid, true);
+		if (rc < 0) {
+			dev_err(dai->dev,
+				"%s:afe_set_lpass_clock on TX pcm_src_clk failed\n",
+				__func__);
+			goto fail;
+		}
+		afe_open(aux_dai_data->rx_pid, &dai_data->port_config, dai_data->rate);
+		afe_open(aux_dai_data->tx_pid, &dai_data->port_config, dai_data->rate);
+		dev_err(dai->dev, "%s: DUAL AUXPCM id: %d supported\n",
+			__func__, dai->id);
+		break;
 	}
-
-	rc = msm_dai_q6_auxpcm_set_clk(aux_dai_data,
-				       aux_dai_data->tx_pid, true);
-	if (rc < 0) {
-		dev_err(dai->dev,
-			"%s:afe_set_lpass_clock on TX pcm_src_clk failed\n",
-			__func__);
-		goto fail;
-	}
-
-	afe_open(aux_dai_data->rx_pid, &dai_data->port_config, dai_data->rate);
-	afe_open(aux_dai_data->tx_pid, &dai_data->port_config, dai_data->rate);
 	goto exit;
 
 fail:
@@ -2216,6 +2270,13 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
+		.id = MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID,
+		.name = "Pri AUX PCM RX",
+		.ops = &msm_dai_q6_auxpcm_ops,
+		.probe = msm_dai_q6_aux_pcm_probe,
+		.remove = msm_dai_q6_dai_auxpcm_remove,
+	},
+	{
 		.capture = {
 			.stream_name = "AUX PCM Capture",
 			.rates = (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000),
@@ -2225,8 +2286,8 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_max = 16000,
 			.rate_min = 8000,
 		},
-		.id = MSM_DAI_PRI_AUXPCM_DT_DEV_ID,
-		.name = "Pri AUX PCM",
+		.id = MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID,
+		.name = "Pri AUX PCM TX",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -5550,36 +5611,40 @@ static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 		goto fail_nodev_intf;
 	}
 
-	if (!strcmp(intf_name, "primary")) {
+	if (!strcmp(intf_name, "primaryRx")) {
 		dai_data->rx_pid = AFE_PORT_ID_PRIMARY_PCM_RX;
-		dai_data->tx_pid = AFE_PORT_ID_PRIMARY_PCM_TX;
-		pdev->id = MSM_DAI_PRI_AUXPCM_DT_DEV_ID;
+		pdev->id = MSM_DAI_PRI_RX_AUXPCM_DT_DEV_ID;
 		i = 0;
-	} else if (!strcmp(intf_name, "secondary")) {
+	} else if (!strcmp(intf_name, "primaryTx")) {
+		dai_data->tx_pid = AFE_PORT_ID_PRIMARY_PCM_TX;
+		pdev->id = MSM_DAI_PRI_TX_AUXPCM_DT_DEV_ID;
+		i = 1;
+	}
+	else if (!strcmp(intf_name, "secondary")) {
 		dai_data->rx_pid = AFE_PORT_ID_SECONDARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_SECONDARY_PCM_TX;
 		pdev->id = MSM_DAI_SEC_AUXPCM_DT_DEV_ID;
-		i = 1;
+		i = 2;
 	} else if (!strcmp(intf_name, "tertiary")) {
 		dai_data->rx_pid = AFE_PORT_ID_TERTIARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_TERTIARY_PCM_TX;
 		pdev->id = MSM_DAI_TERT_AUXPCM_DT_DEV_ID;
-		i = 2;
+		i = 3;
 	} else if (!strcmp(intf_name, "quaternary")) {
 		dai_data->rx_pid = AFE_PORT_ID_QUATERNARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_QUATERNARY_PCM_TX;
 		pdev->id = MSM_DAI_QUAT_AUXPCM_DT_DEV_ID;
-		i = 3;
+		i = 4;
 	} else if (!strcmp(intf_name, "quinary")) {
 		dai_data->rx_pid = AFE_PORT_ID_QUINARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_QUINARY_PCM_TX;
 		pdev->id = MSM_DAI_QUIN_AUXPCM_DT_DEV_ID;
-		i = 4;
+		i = 5;
 	} else if (!strcmp(intf_name, "senary")) {
 		dai_data->rx_pid = AFE_PORT_ID_SENARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_SENARY_PCM_TX;
 		pdev->id = MSM_DAI_SEN_AUXPCM_DT_DEV_ID;
-		i = 5;
+		i = 6;
 	} else {
 		dev_err(&pdev->dev, "%s: invalid DT intf name %s\n",
 			__func__, intf_name);

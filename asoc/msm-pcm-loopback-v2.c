@@ -646,7 +646,6 @@ static int msm_pcm_trigger(struct snd_soc_component *component,
 }
 
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
@@ -908,16 +907,6 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 
 	return 0;
 }
-#else
-static int msm_pcm_add_volume_controls(struct snd_soc_pcm_runtime *rtd)
-{
-	return 0;
-}
-static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
-{
-	return 0;
-}
-#endif /* CONFIG_AUDIO_QGKI */
 
 static struct msm_pcm_channel_mixer *msm_pcm_get_chmixer(
 			struct msm_pcm_pdata *pdata,
