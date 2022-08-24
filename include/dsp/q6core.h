@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,14 +15,15 @@
 #define __Q6CORE_H__
 #include <ipc/apr.h>
 #include <dsp/apr_audio-v2.h>
-
-
+#include <linux/device.h>
 
 #define AVCS_CMD_ADSP_EVENT_GET_STATE		0x0001290C
 #define AVCS_CMDRSP_ADSP_EVENT_GET_STATE	0x0001290D
 
 bool q6core_is_adsp_ready(void);
 
+int avcs_core_query_timer_offset(int64_t *av_offset, int32_t clock_id);
+int avtimer_runtime_suspend(struct device *dev);
 int q6core_get_service_version(uint32_t service_id,
 			       struct avcs_fwk_ver_info *ver_info,
 			       size_t size);

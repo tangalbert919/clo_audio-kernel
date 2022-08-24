@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -1842,12 +1843,22 @@ static void q6asm_process_mtmx_get_param_rsp(struct audio_client *ac,
 		switch (cmdrsp->param_info.param_id) {
 		case ASM_SESSION_MTMX_STRTR_PARAM_SESSION_TIME_V3:
 			time = &cmdrsp->param_data.session_time;
-			dev_vdbg(ac->dev, "%s: GET_TIME_V3, time_lsw=%x, time_msw=%x\n",
+			dev_vdbg(ac->dev,
+				"%s: GET_TIME_V3, time_lsw=%x, time_msw=%x,\
+				 abs l %x, m %x\n",
 				 __func__, time->session_time_lsw,
-				 time->session_time_msw);
-			ac->time_stamp = (uint64_t)(((uint64_t)
+				 time->session_time_msw,
+				 time->absolute_time_lsw,
+				 time->absolute_time_msw);
+			ac->dsp_ts.abs_time_stamp = (uint64_t)(((uint64_t)
+					time->absolute_time_msw << 32) |
+					time->absolute_time_lsw);
+			ac->dsp_ts.time_stamp = (uint64_t)(((uint64_t)
 					 time->session_time_msw << 32) |
 					 time->session_time_lsw);
+			ac->dsp_ts.last_time_stamp = (uint64_t)(((uint64_t)
+					 time->time_stamp_msw << 32) |
+					 time->time_stamp_lsw);
 			if (time->flags &
 			    ASM_SESSION_MTMX_STRTR_PARAM_STIME_TSTMP_FLG_BMASK)
 				dev_warn_ratelimited(ac->dev,
@@ -2335,7 +2346,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 			dev_vdbg(ac->dev, "%s: ASM_SESSION_CMDRSP_GET_SESSIONTIME_V3, payload[0] = %d, payload[1] = %d, payload[2] = %d\n",
 					 __func__,
 					 payload[0], payload[1], payload[2]);
-			ac->time_stamp = (uint64_t)(((uint64_t)payload[2] << 32) |
+			ac->dsp_ts.time_stamp = (uint64_t)(((uint64_t)payload[2] << 32) |
 					payload[1]);
 		} else {
 			dev_err(ac->dev, "%s: payload size of %x is less than expected.n",
@@ -9674,15 +9685,17 @@ fail_cmd:
 EXPORT_SYMBOL(q6asm_write_nolock);
 
 /**
- * q6asm_get_session_time -
+ * q6asm_get_session_time_v2 -
  *       command to retrieve timestamp info
  *
  * @ac: Audio client handle
- * @tstamp: pointer to fill with timestamp info
+ * @ses_time: pointer to fill with session timestamp info
+ * @abs_time: pointer to fill with AVS timestamp info
  *
  * Returns 0 on success or error on failure
  */
-int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
+int q6asm_get_session_time_v2(struct audio_client *ac, uint64_t *ses_time,
+			      uint64_t *abs_time)
 {
 	struct asm_mtmx_strtr_get_params mtmx_params;
 	int rc;
@@ -9695,7 +9708,7 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 		pr_err("%s: AC APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	if (tstamp == NULL) {
+	if (ses_time == NULL) {
 		pr_err("%s: tstamp NULL\n", __func__);
 		return -EINVAL;
 	}
@@ -9712,7 +9725,7 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 	mtmx_params.param_info.param_id =
 		ASM_SESSION_MTMX_STRTR_PARAM_SESSION_TIME_V3;
 	mtmx_params.param_info.param_max_size =
-		sizeof(struct param_hdr_v1) +
+		sizeof(struct asm_stream_param_data_v2) +
 		sizeof(struct asm_session_mtmx_strtr_param_session_time_v3_t);
 	atomic_set(&ac->time_flag, 1);
 
@@ -9720,25 +9733,41 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 		 ac->session, mtmx_params.hdr.opcode);
 	rc = apr_send_pkt(ac->apr, (uint32_t *) &mtmx_params);
 	if (rc < 0) {
-		dev_err_ratelimited(ac->dev, "%s: Get Session Time failed %d\n",
-				    __func__, rc);
-		return rc;
+		dev_err_ratelimited(ac->dev, 
+		       "%s: Commmand 0x%x failed %d\n", __func__,
+		       mtmx_params.hdr.opcode, rc);
+		goto fail_cmd;
 	}
-
 	rc = wait_event_timeout(ac->time_wait,
-			(atomic_read(&ac->time_flag) == 0),
-			msecs_to_jiffies(TIMEOUT_MS));
+			(atomic_read(&ac->time_flag) == 0), 5*HZ);
 	if (!rc) {
 		pr_err("%s: timeout in getting session time from DSP\n",
-		       __func__);
+				__func__);
 		goto fail_cmd;
 	}
 
-	*tstamp = ac->time_stamp;
+	*ses_time = ac->dsp_ts.time_stamp;
+	if (abs_time != NULL)
+		*abs_time = ac->dsp_ts.abs_time_stamp;
 	return 0;
 
 fail_cmd:
 	return -EINVAL;
+}
+EXPORT_SYMBOL(q6asm_get_session_time_v2);
+
+/**
+ * q6asm_get_session_time -
+ *       command to retrieve timestamp info
+ *
+ * @ac: Audio client handle
+ * @tstamp: pointer to fill with timestamp info
+ *
+ * Returns 0 on success or error on failure
+ */
+int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
+{
+	return q6asm_get_session_time_v2(ac, tstamp, NULL);
 }
 EXPORT_SYMBOL(q6asm_get_session_time);
 
@@ -9791,7 +9820,7 @@ int q6asm_get_session_time_legacy(struct audio_client *ac, uint64_t *tstamp)
 		goto fail_cmd;
 	}
 
-	*tstamp = ac->time_stamp;
+	*tstamp = ac->dsp_ts.time_stamp;
 	return 0;
 
 fail_cmd:
