@@ -369,10 +369,10 @@ static struct dev_config tdm_rx_cfg[TDM_INTERFACE_MAX][TDM_PORT_MAX] = {
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_7 */
 	},
 	{ /* QUIN TDM */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 4}, /* TX_0 */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2}, /* TX_1 */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2}, /* TX_2 */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2}, /* TX_3 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_0 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_1 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_2 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_3 */
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_4 */
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_5 */
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* RX_6 */
@@ -422,10 +422,10 @@ static struct dev_config tdm_tx_cfg[TDM_INTERFACE_MAX][TDM_PORT_MAX] = {
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_7 */
 	},
 	{ /* QUAT TDM */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_0 */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_1 */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_2 */
-		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_3 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 4}, /* TX_0 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2}, /* TX_1 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2}, /* TX_2 */
+		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2}, /* TX_3 */
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_4 */
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_5 */
 		{SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1}, /* TX_6 */
@@ -748,7 +748,8 @@ static char const *bt_sample_rate_tx_text[] = {"KHZ_8", "KHZ_16",
 					"KHZ_44P1", "KHZ_48",
 					"KHZ_88P2", "KHZ_96"};
 static const char *const afe_loopback_tx_ch_text[] = {"One", "Two"};
-static const char *const tdm_slot_num_text[] = {"One", "Two", "Four","Eight", "Sixteen", "ThirtyTwo"};
+static const char *const tdm_slot_num_text[] = {"One", "Two", "Four",
+     "Eight", "Sixteen", "ThirtyTwo"};
 static const char *const tdm_slot_width_text[] = {"16", "24", "32"};
 
 static SOC_ENUM_SINGLE_EXT_DECL(usb_rx_sample_rate, usb_sample_rate_text);
@@ -2289,7 +2290,6 @@ static int tdm_get_slot_width(int value)
 	}
 	return slot_width;
 }
-	}
 
 static int tdm_slot_width_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
@@ -4529,7 +4529,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_ENUM_EXT("SEN_TDM_TX_0 Channels", tdm_tx_chs,
 			tdm_tx_ch_get,
 			tdm_tx_ch_put),
-	SOC_ENUM_EXT("PRI_TDM SlotNumber", tdm_slot_num,
+    SOC_ENUM_EXT("PRI_TDM SlotNumber", tdm_slot_num,
 			tdm_slot_num_get, tdm_slot_num_put),
 	SOC_ENUM_EXT("PRI_TDM SlotWidth", tdm_slot_width,
 			tdm_slot_width_get, tdm_slot_width_put),
@@ -4775,7 +4775,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_SINGLE_MULTI_EXT("TERT_TDM_TX_3 SlotMapping",
 			SND_SOC_NOPM, 0, 0xFFFF, 0, TDM_SLOT_OFFSET_MAX,
 			tdm_slot_mapping_get, tdm_slot_mapping_put),
-	SOC_ENUM_EXT("QUAT_TDM SlotNumber", tdm_slot_num,
+ 	SOC_ENUM_EXT("QUAT_TDM SlotNumber", tdm_slot_num,
 			tdm_slot_num_get, tdm_slot_num_put),
 	SOC_ENUM_EXT("QUAT_TDM SlotWidth", tdm_slot_width,
 			tdm_slot_width_get, tdm_slot_width_put),
@@ -4857,7 +4857,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_SINGLE_MULTI_EXT("QUAT_TDM_TX_3 SlotMapping",
 			SND_SOC_NOPM, 0, 0xFFFF, 0, TDM_SLOT_OFFSET_MAX,
 			tdm_slot_mapping_get, tdm_slot_mapping_put),
-	SOC_ENUM_EXT("QUIN_TDM SlotNumber", tdm_slot_num,
+  	SOC_ENUM_EXT("QUIN_TDM SlotNumber", tdm_slot_num,
 			tdm_slot_num_get, tdm_slot_num_put),
 	SOC_ENUM_EXT("QUIN_TDM SlotWidth", tdm_slot_width,
 			tdm_slot_width_get, tdm_slot_width_put),
@@ -4939,7 +4939,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_3 SlotMapping",
 			SND_SOC_NOPM, 0, 0xFFFF, 0, TDM_SLOT_OFFSET_MAX,
 			tdm_slot_mapping_get, tdm_slot_mapping_put),
-	SOC_ENUM_EXT("SEN_TDM SlotNumber", tdm_slot_num,
+  	SOC_ENUM_EXT("SEN_TDM SlotNumber", tdm_slot_num,
 			tdm_slot_num_get, tdm_slot_num_put),
 	SOC_ENUM_EXT("SEN_TDM SlotWidth", tdm_slot_width,
 			tdm_slot_width_get, tdm_slot_width_put),
@@ -5000,7 +5000,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 			afe_loopback_tx_ch_get, afe_loopback_tx_ch_put),
 	SOC_ENUM_EXT("VI_FEED_TX Channels", vi_feed_tx_chs,
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
-	//	SOC_SINGLE_MULTI_EXT("TDM Slot Map", SND_SOC_NOPM, 0, 255, 0,
+//	SOC_SINGLE_MULTI_EXT("TDM Slot Map", SND_SOC_NOPM, 0, 255, 0,
 //			TDM_MAX_SLOTS + MAX_PATH, NULL, tdm_slot_map_put),
 };
 
@@ -5151,7 +5151,6 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 		rate->min = rate->max = tdm_tx_cfg[TDM_PRI][TDM_3].sample_rate;
 		break;
 
-
 	case MSM_BACKEND_DAI_SEC_TDM_RX_0:
 		channels->min = channels->max =
 				tdm_rx_cfg[TDM_SEC][TDM_0].channels;
@@ -5191,6 +5190,7 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			       tdm_tx_cfg[TDM_SEC][TDM_0].bit_format);
 		rate->min = rate->max = tdm_tx_cfg[TDM_SEC][TDM_0].sample_rate;
 		break;
+
 	case MSM_BACKEND_DAI_SEC_TDM_TX_1:
 		channels->min = channels->max =
 				tdm_tx_cfg[TDM_SEC][TDM_1].channels;
@@ -7014,7 +7014,7 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.stream_name = "MultiMedia6",
 		.dynamic = 1,
 		.dpcm_playback = 1,
-//		.dpcm_capture = 1,
+		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			    SND_SOC_DPCM_TRIGGER_POST},
 		.ignore_suspend = 1,
@@ -7028,7 +7028,7 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.stream_name = "USB Audio Hostless",
 		.dynamic = 1,
 		.dpcm_playback = 1,
-		.dpcm_capture = 1,
+//		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			    SND_SOC_DPCM_TRIGGER_POST},
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
@@ -7153,6 +7153,16 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_common_be_dai_links[] = {
+	/* Backend AFE DAI Links */
+	{
+		.name = LPASS_BE_AFE_PCM_RX,
+		.stream_name = "AFE Playback",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.id = MSM_BACKEND_DAI_AFE_PCM_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		/* this dainlink has playback support */
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(afe_pcm_rx),
@@ -8519,6 +8529,12 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       sizeof(msm_common_misc_fe_dai_links));
 		total_links += ARRAY_SIZE(msm_common_misc_fe_dai_links);
 
+		memcpy(msm_lahaina_dai_links + total_links,
+		       msm_common_be_dai_links,
+		       sizeof(msm_common_be_dai_links));
+		total_links += ARRAY_SIZE(msm_common_be_dai_links);
+
+		rc = of_property_read_u32(dev->of_node, "qcom,mi2s-audio-intf",
 					  &mi2s_audio_intf);
 		if (rc) {
 			dev_dbg(dev, "%s: No DT match MI2S audio interface\n",
@@ -8923,6 +8939,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 				__func__, ret);
 		goto err;
 	}
+
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
 		if (codec_reg_done)
