@@ -2979,6 +2979,9 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.name = SDX_DAILINK_NAME(Compress1),
 		.stream_name = "COMPR",
 		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_HW_PARAMS,
+#endif /* CONFIG_AUDIO_QGKI */
 		.dpcm_playback = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			    SND_SOC_DPCM_TRIGGER_POST},
@@ -3235,6 +3238,9 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.name = SDX_DAILINK_NAME(Compress2),
 		.stream_name = "COMPR2",
 		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_HW_PARAMS,
+#endif /* CONFIG_AUDIO_QGKI */
 		.dpcm_playback = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST},
@@ -3253,7 +3259,7 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-		SND_SOC_DAILINK_REG(sec_tdm_rx_1),
+		SND_SOC_DAILINK_REG(sec_tdm_rx_1_hostless),
 	},
 	{
 		.name = "Secondary TDM TX 1 Hostless",
@@ -3265,7 +3271,7 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-		SND_SOC_DAILINK_REG(sec_tdm_tx_1),
+		SND_SOC_DAILINK_REG(sec_tdm_tx_1_hostless),
 	},
 };
 
@@ -3604,7 +3610,7 @@ static struct snd_soc_dai_link sdx_tdm_be_dai_links[] = {
 		.be_hw_params_fixup = sdx_tdm_be_hw_params_fixup,
 		.ops = &sdx_sec_tdm_be_ops,
 		.ignore_suspend = 1,
-		SND_SOC_DAILINK_REG(sec_tdm_rx_1),
+		SND_SOC_DAILINK_REG(sec_tdm_tx_1),
 	},
 };
 
