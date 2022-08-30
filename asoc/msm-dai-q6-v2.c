@@ -11687,6 +11687,29 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 	group_ref = &tdm_group_ref[group_idx];
 
 	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+
+		/* PORT START should be set if prepare called
+		 * in active state.
+		 */
+		if (atomic_read(group_ref) == 0) {
+			/*
+			 * if only one port, don't do group enable as there
+			 * is no group need for only one port
+			 */
+			if (dai_data->num_group_ports > 1) {
+				rc = afe_port_group_enable(group_id,
+					&dai_data->group_cfg, true,
+					&dai_data->lane_cfg);
+				if (rc < 0) {
+					dev_err(dai->dev,
+					"%s: fail to enable AFE group 0x%x disable Clk\n",
+					__func__, group_id);
+					 msm_dai_q6_tdm_set_clk(dai_data, dai->id, false);
+					goto rtn;
+				}
+			}
+		}
+
 		if (msm_dai_q6_get_tdm_clk_ref(group_idx) == 0) {
 			/* TX and RX share the same clk. So enable the clk
 			 * per TDM interface. */
@@ -11708,27 +11731,6 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 						dai->id, false);
 				}
 				goto rtn;
-			}
-		}
-		/* PORT START should be set if prepare called
-		 * in active state.
-		 */
-		if (atomic_read(group_ref) == 0) {
-			/*
-			 * if only one port, don't do group enable as there
-			 * is no group need for only one port
-			 */
-			if (dai_data->num_group_ports > 1) {
-				rc = afe_port_group_enable(group_id,
-					&dai_data->group_cfg, true,
-					&dai_data->lane_cfg);
-				if (rc < 0) {
-					dev_err(dai->dev,
-					"%s: fail to enable AFE group 0x%x disable Clk\n",
-					__func__, group_id);
-					 msm_dai_q6_tdm_set_clk(dai_data, dai->id, false);
-					goto rtn;
-				}
 			}
 		}
 
