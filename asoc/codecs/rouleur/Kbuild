@@ -23,6 +23,12 @@ ifeq ($(KERNEL_BUILD), 0)
 	endif
 endif
 
+ifdef CONFIG_ARCH_SA410M
+	include $(AUDIO_ROOT)/config/sa410mauto.conf
+	export
+	INCS    +=  -include $(AUDIO_ROOT)/config/sa410mautoconf.h
+endif
+
 # As per target team, build is done as follows:
 # Defconfig : build with default flags
 # Slub      : defconfig  + CONFIG_SLUB_DEBUG := y +
