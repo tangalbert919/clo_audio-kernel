@@ -14,7 +14,7 @@
 #include "../../../drivers/clk/qcom/common.h"
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
-#include <dt-bindings/clock/qcom,audio-ext-clk.h>
+#include <bindings/qcom,audio-ext-clk.h>
 #include <linux/ratelimit.h>
 #include <dsp/q6afe-v2.h>
 #include "audio-ext-clk-up.h"
