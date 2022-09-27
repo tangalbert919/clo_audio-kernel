@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/fs.h>
@@ -1093,9 +1094,11 @@ int __init cal_utils_init(void)
  *
  * @cal_block: pointer to cal block
  *
+ * @cal_type: pointer to the cal type
+ *
  * Returns true if cal block is stale, false otherwise
  */
-bool cal_utils_is_cal_stale(struct cal_block_data *cal_block)
+bool cal_utils_is_cal_stale(struct cal_block_data *cal_block, struct cal_type_data *cal_type)
 {
 	bool ret = false;
 
@@ -1105,6 +1108,16 @@ bool cal_utils_is_cal_stale(struct cal_block_data *cal_block)
 		goto unlock;
 	}
 
+
+	if (!cal_type) {
+		pr_err("%s: cal_type is Null", __func__);
+		goto unlock;
+	}
+	cal_block = cal_utils_get_only_cal_block(cal_type);
+	if (!cal_block) {
+		pr_err("%s: cal_block is Null", __func__);
+		goto unlock;
+	}
 	if (cal_block->cal_stale)
 	    ret = true;
 
