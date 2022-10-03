@@ -50,6 +50,7 @@
 #include <dsp/audio_notifier.h>
 #include <dsp/q6afe-v2.h>
 #include <dsp/q6core.h>
+#include <soc/qcom/boot_stats.h>
 #include "device_event.h"
 #include "msm-pcm-routing-v2.h"
 #include "msm_dailink.h"
@@ -10724,6 +10725,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	const struct of_device_id *match;
 
 	if (first_probe) {
+		place_marker("M - DRIVER Audio Init");
 		first_probe = 0;
 	}
 
@@ -10829,6 +10831,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	snd_card_set_card_status(SND_CARD_STATUS_ONLINE);
 
+	place_marker("M - DRIVER Audio Ready");
 	return 0;
 err:
 	msm_release_pinctrl(pdev);

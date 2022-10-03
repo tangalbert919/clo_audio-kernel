@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2018, 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _WCD937X_H
 #define _WCD937X_H
 
-#include <dt-bindings/sound/audio-codec-port-types.h>
+#include <bindings/audio-codec-port-types.h>
 
 #define WCD937X_MAX_SLAVE_CH_TYPES 10
 #define ZERO 0

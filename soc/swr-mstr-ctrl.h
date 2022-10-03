@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SWR_WCD_CTRL_H
@@ -8,7 +9,7 @@
 #include <linux/module.h>
 #include <soc/swr-wcd.h>
 #include <linux/pm_qos.h>
-#include <soc/qcom/pm.h>
+#include <linux/pm.h>
 #include <soc/swr-common.h>
 
 #ifdef CONFIG_DEBUG_FS

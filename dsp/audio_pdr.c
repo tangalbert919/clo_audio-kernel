@@ -13,7 +13,8 @@ struct audio_pdr_service {
 	void *pdr_handle;
 	char service_name[SERVREG_NAME_LENGTH + 1];
 	char service_path[SERVREG_NAME_LENGTH + 1];
-}
+};
+
 static struct audio_pdr_service audio_pdr_services[AUDIO_PDR_DOMAIN_MAX] = {
 	{	/* AUDIO_PDR_DOMAIN_ADSP */
 		.service_name = "avs/audio",
@@ -21,84 +22,7 @@ static struct audio_pdr_service audio_pdr_services[AUDIO_PDR_DOMAIN_MAX] = {
 	}
 };
 
-struct srcu_notifier_head audio_pdr_cb_list;
-
-static int audio_pdr_locator_callback(struct notifier_block *this,
-				      unsigned long opcode, void *data)
-{
-	unsigned long pdr_state = AUDIO_PDR_FRAMEWORK_DOWN;
-
-	if (opcode == LOCATOR_DOWN) {
-		pr_debug("%s: Service %s is down!", __func__,
-			audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].
-			service_name);
-		goto done;
-	}
-
-	memcpy(&audio_pdr_services, data,
-		sizeof(audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP]));
-	if (audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].total_domains == 1) {
-		pr_debug("%s: Service %s, returned total domains %d, ",
-			__func__,
-			audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].service_name,
-			audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].
-			total_domains);
-		pdr_state = AUDIO_PDR_FRAMEWORK_UP;
-		goto done;
-	} else
-		pr_err("%s: Service %s returned invalid total domains %d",
-			__func__,
-			audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].service_name,
-			audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].
-			total_domains);
-done:
-	srcu_notifier_call_chain(&audio_pdr_cb_list, pdr_state, NULL);
-	return NOTIFY_OK;
-}
-
-static struct notifier_block audio_pdr_locator_nb = {
-	.notifier_call = audio_pdr_locator_callback,
-	.priority = 0,
-};
-
-/**
- * audio_pdr_register -
- *        register to PDR framework
- *
- * @nb: notifier block
- *
- * Returns 0 on success or error on failure
- */
-int audio_pdr_register(struct notifier_block *nb)
-{
-	if (nb == NULL) {
-		pr_err("%s: Notifier block is NULL\n", __func__);
-		return -EINVAL;
-	}
-	return srcu_notifier_chain_register(&audio_pdr_cb_list, nb);
-}
-EXPORT_SYMBOL(audio_pdr_register);
-
-/**
- * audio_pdr_deregister -
- *        Deregister from PDR framework
- *
- * @nb: notifier block
- *
- * Returns 0 on success or error on failure
- */
-int audio_pdr_deregister(struct notifier_block *nb)
-{
-	if (nb == NULL) {
-		pr_err("%s: Notifier block is NULL\n", __func__);
-		return -EINVAL;
-	}
-	return srcu_notifier_chain_unregister(&audio_pdr_cb_list, nb);
-}
-EXPORT_SYMBOL(audio_pdr_deregister);
-
-void *audio_pdr_service_register(int domain_id,
-				 void (*cb)(int, char *, void *))
+void *audio_pdr_service_register(int domain_id, void (*cb)(int, char *, void *))
 {
 
 	if ((domain_id < 0) ||

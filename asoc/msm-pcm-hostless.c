@@ -89,13 +89,14 @@ static int msm_pcm_close(struct snd_soc_component *component, struct snd_pcm_sub
 static int msm_pcm_hostless_prepare(struct snd_soc_component *component,
 				struct snd_pcm_substream *substream)
 {
-	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_pcm_runtime *runtime = NULL;
 
 	if (!substream) {
 		pr_err("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
 
+	runtime = substream->runtime;
 	runtime->stop_threshold = runtime->boundary;
 	cpu_latency_qos_remove_request(&substream->latency_pm_qos_req);
 	return 0;
