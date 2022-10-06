@@ -1,4 +1,5 @@
 /* Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +30,9 @@
 #include <sound/info.h>
 #include <dsp/audio_notifier.h>
 #include "msm_dailink.h"
+#include <soc/qcom/subsystem_restart.h>
+#include <soc/qcom/subsystem_notif.h>
+#include <soc/qcom/boot_stats.h>
 
 
 #define DRV_NAME "spf-asoc-snd"
@@ -320,7 +324,7 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 	},
 };
 
-static struct snd_soc_dai_link msm_gvm8295_dai_links[] = {
+static struct snd_soc_dai_link msm_gvm_auto_dai_links[] = {
 	/* BackEnd DAI Links */
 	{
 	.name = "PRI_TDM_RX_0_DUMMY",
@@ -463,9 +467,29 @@ static struct snd_soc_dai_link msm_gvm8295_dai_links[] = {
 	SND_SOC_DAILINK_REG(sep_tdm_tx_0_dummy),
 	},
 	{
+	.name = "OCT_TDM_RX_0_DUMMY",
+	.stream_name = "TDM-LPAIF_WSA2-RX-PRIMARY",
+	.dpcm_playback = 1,
+	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+	.ignore_suspend = 1,
+	.ignore_pmdown_time = 1,
+	SND_SOC_DAILINK_REG(oct_tdm_rx_0_dummy),
+	},
+	{
+	.name = "OCT_TDM_TX_0_DUMMY",
+	.stream_name = "TDM-LPAIF_WSA2-TX-PRIMARY",
+	.dpcm_capture = 1,
+	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+	.ignore_suspend = 1,
+	.ignore_pmdown_time = 1,
+	SND_SOC_DAILINK_REG(oct_tdm_tx_0_dummy),
+	},
+	{
 	.name = "HS_IF0_TDM_RX_0_DUMMY",
 	.stream_name = "TDM-LPAIF_SDR-RX-PRIMARY",
-	.dpcm_capture = 1,
+	.dpcm_playback = 1,
 	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 				SND_SOC_DPCM_TRIGGER_POST},
 	.ignore_suspend = 1,
@@ -485,7 +509,7 @@ static struct snd_soc_dai_link msm_gvm8295_dai_links[] = {
 	{
 	.name = "HS_IF1_TDM_RX_0_DUMMY",
 	.stream_name = "TDM-LPAIF_SDR-RX-SECONDARY",
-	.dpcm_capture = 1,
+	.dpcm_playback = 1,
 	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 				SND_SOC_DPCM_TRIGGER_POST},
 	.ignore_suspend = 1,
@@ -505,7 +529,7 @@ static struct snd_soc_dai_link msm_gvm8295_dai_links[] = {
 	{
 	.name = "HS_IF2_TDM_RX_0_DUMMY",
 	.stream_name = "TDM-LPAIF_SDR-RX-TERTIARY",
-	.dpcm_capture = 1,
+	.dpcm_playback = 1,
 	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 				SND_SOC_DPCM_TRIGGER_POST},
 	.ignore_suspend = 1,
@@ -521,6 +545,46 @@ static struct snd_soc_dai_link msm_gvm8295_dai_links[] = {
 	.ignore_suspend = 1,
 	.ignore_pmdown_time = 1,
 	SND_SOC_DAILINK_REG(hs_if2_tdm_tx_0_dummy),
+	},
+	{
+	.name = "HS_IF3_TDM_RX_0",
+	.stream_name = "TDM-LPAIF_SDR-RX-QUATERNARY",
+	.dpcm_playback = 1,
+	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+	.ignore_suspend = 1,
+	.ignore_pmdown_time = 1,
+	SND_SOC_DAILINK_REG(hs_if3_tdm_rx_0_dummy),
+	},
+	{
+	.name = "HS_IF3_TDM_TX_0",
+	.stream_name = "TDM-LPAIF_SDR-TX-QUATERNARY",
+	.dpcm_capture = 1,
+	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+	.ignore_suspend = 1,
+	.ignore_pmdown_time = 1,
+	SND_SOC_DAILINK_REG(hs_if3_tdm_tx_0_dummy),
+	},
+	{
+	.name = "HS_IF4_TDM_RX_0",
+	.stream_name = "TDM-LPAIF_SDR-RX-QUINARY",
+	.dpcm_playback = 1,
+	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+	.ignore_suspend = 1,
+	.ignore_pmdown_time = 1,
+	SND_SOC_DAILINK_REG(hs_if4_tdm_rx_0_dummy),
+	},
+	{
+	.name = "HS_IF4_TDM_TX_0",
+	.stream_name = "TDM-LPAIF_SDR-TX-QUINARY",
+	.dpcm_capture = 1,
+	.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+	.ignore_suspend = 1,
+	.ignore_pmdown_time = 1,
+	SND_SOC_DAILINK_REG(hs_if4_tdm_tx_0_dummy),
 	},
 };
 
@@ -628,17 +692,7 @@ static struct snd_soc_dai_link msm_talos_dai_links[] = {
 	},
 };
 
-struct snd_soc_card snd_soc_card_auto_hana_dummy_msm = {
-	.name = "gvmauto-8155-snd-card",
-};
-
-struct snd_soc_card snd_soc_card_auto_talos_dummy_msm = {
-	.name = "gvmauto-6155-snd-card",
-};
-
-struct snd_soc_card snd_soc_card_auto_makena_dummy_msm = {
-	.name = "gvmauto-8295-snd-card",
-};
+struct snd_soc_card snd_soc_card_gvm_auto_dummy_msm;
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -747,21 +801,11 @@ static const struct of_device_id gvm_asoc_machine_of_match[]  = {
 		.data = "adp_star_codec"},
 	{},
 };
-static struct snd_soc_dai_link msm_auto_dai_links[
-			 ARRAY_SIZE(msm_common_dai_links)];
-
-static struct snd_soc_dai_link msm_auto_talos_dai_links[
-			 ARRAY_SIZE(msm_talos_dai_links)];
-
-static struct snd_soc_dai_link msm_auto_gvm8295_dai_links[
-			 ARRAY_SIZE(msm_gvm8295_dai_links)];
 
 static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 {
 	struct snd_soc_card *card = NULL;
-	struct snd_soc_dai_link *dailink;
-	int total_links;
-	const struct of_device_id *match;
+	const struct of_device_id *match = NULL;
 
 	match = of_match_node(gvm_asoc_machine_of_match, dev->of_node);
 	if (!match) {
@@ -770,34 +814,18 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		return NULL;
 	}
 
+	card = &snd_soc_card_gvm_auto_dummy_msm;
+
 	if (!strcmp(match->compatible, "qcom,8155-spf-asoc-snd-adp-star")) {
-		card = &snd_soc_card_auto_hana_dummy_msm;
-		total_links = ARRAY_SIZE(msm_common_dai_links);
-		memcpy(msm_auto_dai_links,
-			msm_common_dai_links,
-			sizeof(msm_common_dai_links));
-
-		dailink = msm_auto_dai_links;
+		card->dai_link = msm_common_dai_links;
+		card->num_links = ARRAY_SIZE(msm_common_dai_links);
 	} else if (!strcmp(match->compatible, "qcom,6155-spf-asoc-snd-adp-star")) {
-		card = &snd_soc_card_auto_talos_dummy_msm;
-		total_links = ARRAY_SIZE(msm_talos_dai_links);
-		memcpy(msm_auto_talos_dai_links,
-			msm_talos_dai_links,
-			sizeof(msm_talos_dai_links));
-		dailink = msm_auto_talos_dai_links;
+		card->dai_link = msm_talos_dai_links;
+		card->num_links = ARRAY_SIZE(msm_talos_dai_links);
 	} else if (!strcmp(match->compatible, "qcom,gvm-auto-spf-asoc-snd-adp-star")) {
-		card = &snd_soc_card_auto_makena_dummy_msm;
-		total_links = ARRAY_SIZE(msm_gvm8295_dai_links);
-		memcpy(msm_auto_gvm8295_dai_links,
-			msm_gvm8295_dai_links,
-			sizeof(msm_gvm8295_dai_links));
-		dailink = msm_auto_gvm8295_dai_links;
-	}
-
-	if (card) {
-		card->dai_link = dailink;
-		card->num_links = total_links;
-	}
+		card->dai_link = msm_gvm_auto_dai_links;
+		card->num_links = ARRAY_SIZE(msm_gvm_auto_dai_links);
+}
 
 	return card;
 }
@@ -823,13 +851,38 @@ void msm_common_set_pdata(struct snd_soc_card *card,
 	pdata->common_pdata = common_pdata;
 }
 
+static int auto_spf_dummy_ssr_cb(struct notifier_block *this,
+				unsigned long code,
+				void *data)
+{
+	struct snd_soc_card *card = platform_get_drvdata(spdev);
+
+	switch (code) {
+	case SUBSYS_BEFORE_SHUTDOWN:
+		snd_soc_card_change_online_state(card, 0); // change sndcard status to OFFLINE
+		dev_info(&spdev->dev, "ssr restart, mark sndcard offline\n");
+	break;
+	case SUBSYS_AFTER_POWERUP:
+		snd_soc_card_change_online_state(card, 1); // change sndcard status to ONLINE
+		dev_info(&spdev->dev, "ssr complete, mark sndcard online\n");
+	break;
+	default:
+	break;
+	}
+	return 0;
+}
+
+static struct notifier_block auto_spf_dummy_ssr_notifier = {
+	.notifier_call = auto_spf_dummy_ssr_cb,
+};
+
 static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
 	struct msm_asoc_mach_data *pdata;
 	int ret;
 
-
+	place_marker("M - DRIVER Audio Init");
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform supplied from device tree\n");
@@ -881,7 +934,13 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	}
 	dev_info(&pdev->dev, "Sound card %s registered\n", card->name);
 	pr_err("Sound card %s registered\n", card->name);
+
+	place_marker("M - DRIVER Audio Ready");
+
 	spdev = pdev;
+
+	subsys_notif_register_notifier("adsp", &auto_spf_dummy_ssr_notifier);
+	dev_info(&pdev->dev, "Audio driver register for SSR complete\n");
 
 	return 0;
 err:
