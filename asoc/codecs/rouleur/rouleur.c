@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -24,7 +25,7 @@
 #include "rouleur-registers.h"
 #include "pm2250-spmi.h"
 #include <asoc/msm-cdc-pinctrl.h>
-#include <dt-bindings/sound/audio-codec-port-types.h>
+#include <bindings/audio-codec-port-types.h>
 #include <asoc/msm-cdc-supply.h>
 #include <linux/power_supply.h>
 #include "asoc/bolero-slave-internal.h"
@@ -1114,7 +1115,7 @@ static int rouleur_codec_enable_adc(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		/* Enable BCS for Headset mic */
-		if (w->shift == 1 && !(snd_soc_component_read32(component,
+		if (w->shift == 1 && !(snd_soc_component_read(component,
 				ROULEUR_ANA_TX_AMIC2) & 0x10)) {
 			rouleur_tx_connect_port(component, MBHC, true);
 			set_bit(AMIC2_BCS_ENABLE, &rouleur->status_mask);
@@ -1191,12 +1192,12 @@ int rouleur_mbhc_micb_adjust_voltage(struct snd_soc_component *component,
 	micb_reg = ROULEUR_ANA_MICBIAS_MICB_1_2_EN;
 	switch (micb_num) {
 	case MIC_BIAS_1:
-		micb_val = snd_soc_component_read32(component, micb_reg);
+		micb_val = snd_soc_component_read(component, micb_reg);
 		micb_en = (micb_val & 0x40) >> 6;
 		pullup_mask = 0x20;
 		break;
 	case MIC_BIAS_2:
-		micb_val = snd_soc_component_read32(component, micb_reg);
+		micb_val = snd_soc_component_read(component, micb_reg);
 		micb_en = (micb_val & 0x04) >> 2;
 		pullup_mask = 0x02;
 		break;
@@ -1216,7 +1217,7 @@ int rouleur_mbhc_micb_adjust_voltage(struct snd_soc_component *component,
 	 * momentarily, change the micbias value and then re-enable
 	 * micbias.
 	 */
-	cur_vout_ctl = (snd_soc_component_read32(component,
+	cur_vout_ctl = (snd_soc_component_read(component,
 				ROULEUR_ANA_MICBIAS_LDO_1_SETTING)) & 0xF8;
 	cur_vout_ctl = cur_vout_ctl >> 3;
 	req_vout_ctl = rouleur_get_micb_vout_ctl_val(req_volt);
@@ -1436,7 +1437,7 @@ static bool get_usbc_hs_status(struct snd_soc_component *component,
 			       struct wcd_mbhc_config *mbhc_cfg)
 {
 	if (mbhc_cfg->enable_usbc_analog) {
-		if (!(snd_soc_component_read32(component, ROULEUR_ANA_MBHC_MECH)
+		if (!(snd_soc_component_read(component, ROULEUR_ANA_MBHC_MECH)
 			& 0x20))
 			return true;
 	}
