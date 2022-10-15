@@ -693,7 +693,7 @@ int msm_audio_ion_mmap(struct audio_buffer *abuff,
 		pr_debug("%s: page is NOT null\n", __func__);
 		for_each_sg(table->sgl, sg, table->nents, i) {
 			unsigned long remainder = vma->vm_end - addr;
-			unsigned long len = sg->length;
+			unsigned long len = sg->dma_length;
 
 			page = sg_page(sg);
 
