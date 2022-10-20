@@ -27,7 +27,7 @@
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
-#include <soc/internal.h>
+#include <internal.h>
 #include <linux/regmap.h>
 #include <asoc/msm-cdc-pinctrl.h>
 #include "wsa881x-analog.h"
@@ -528,13 +528,13 @@ static int wsa881x_visense_adc_ctrl(struct snd_soc_component *component,
 			snd_soc_component_update_bits(component,
 					WSA881X_ADC_SEL_IBIAS,
 					0x70, 0x40);
-			snd_soc_component_update_bits(component,
-					WSA881X_ADC_EN_SEL_IBIAS,
-					0x07, 0x04);
-			snd_soc_component_update_bits(component,
-					WSA881X_ADC_EN_MODU_V, 0x80, 0x80);
-			snd_soc_component_update_bits(component,
-					WSA881X_ADC_EN_MODU_I, 0x80, 0x80);
+		snd_soc_component_update_bits(component,
+				WSA881X_ADC_EN_SEL_IBIAS,
+				0x07, 0x04);
+		snd_soc_component_update_bits(component,
+				WSA881X_ADC_EN_MODU_V, 0x80, 0x80);
+		snd_soc_component_update_bits(component,
+				WSA881X_ADC_EN_MODU_I, 0x80, 0x80);
 	} else {
 		/* Ensure: Speaker Protection has been stopped */
 		snd_soc_component_update_bits(component,

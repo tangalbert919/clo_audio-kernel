@@ -2311,7 +2311,7 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
 	int port_id = 0;
 	int index = cpu_dai->id;
 

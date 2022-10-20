@@ -15,6 +15,12 @@ ifeq ($(KERNEL_BUILD), 1)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 endif
 
+ifeq ($(TARGET_SUPPORT), sa410m)
+	include $(AUDIO_ROOT)/config/sa410mauto.conf
+	export
+	INCS    +=  -include $(AUDIO_ROOT)/config/sa410mautoconf.h
+endif
+
 ifeq ($(KERNEL_BUILD), 0)
 	ifeq ($(CONFIG_ARCH_BENGAL), y)
 		include $(AUDIO_ROOT)/config/bengalauto.conf
