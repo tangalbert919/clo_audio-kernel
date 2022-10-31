@@ -151,7 +151,7 @@ modules_install:
 
 ifeq ($(QTI_TECHPACK), true)
 %:
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS)
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $@ $(KBUILD_OPTIONS)
 endif
 
 clean:
