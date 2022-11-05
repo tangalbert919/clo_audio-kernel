@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -2311,9 +2312,11 @@ static void send_adm_cal(int port_id, int copp_idx, int path, int perf_mode,
 	if (passthr_mode != LISTEN) {
 		send_adm_cal_type(ADM_AUDPROC_CAL, path, port_id, copp_idx,
 				perf_mode, app_type, acdb_id, sample_rate);
-		send_adm_cal_type(ADM_AUDPROC_PERSISTENT_CAL, path,
-				  port_id, copp_idx, perf_mode, app_type,
-				  acdb_id, sample_rate);
+		/* send persistent cal only in case of record */
+		if (path == TX_DEVICE)
+			send_adm_cal_type(ADM_AUDPROC_PERSISTENT_CAL, path,
+					  port_id, copp_idx, perf_mode, app_type,
+					  acdb_id, sample_rate);
 	} else {
 		send_adm_cal_type(ADM_LSM_AUDPROC_CAL, path, port_id, copp_idx,
 				  perf_mode, app_type, acdb_id, sample_rate);
@@ -3050,7 +3053,10 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	}
 
 	if ((topology == VPM_TX_SM_ECNS_V2_COPP_TOPOLOGY) ||
-	    (topology == VPM_TX_DM_FLUENCE_EF_COPP_TOPOLOGY)) {
+	    (topology == VPM_TX_QMIC_FLUENCE_PRO_VC_COPP_TOPOLOGY) ||
+	    (topology == VPM_TX_DM_FLUENCE_EF_COPP_TOPOLOGY) ||
+	    (topology == VPM_TX_VOICE_FLUENCE_NN_COPP_TOPOLOGY) ||
+            (topology == VPM_TX_VOICE_FLUENCE_PROVC_NN_COPP_TOPOLOGY)) {
 		if ((rate != ADM_CMD_COPP_OPEN_SAMPLE_RATE_8K) &&
 		    (rate != ADM_CMD_COPP_OPEN_SAMPLE_RATE_16K) &&
 		    (rate != ADM_CMD_COPP_OPEN_SAMPLE_RATE_32K) &&
@@ -3072,7 +3078,8 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	}
 
 	if (topology == VPM_TX_VOICE_SMECNS_V2_COPP_TOPOLOGY ||
-	    topology == VPM_TX_VOICE_FLUENCE_SM_COPP_TOPOLOGY)
+	    topology == VPM_TX_VOICE_FLUENCE_SM_COPP_TOPOLOGY ||
+            topology == VPM_TX_VOICE_FLUENCE_NN_COPP_TOPOLOGY)
 		channel_mode = 1;
 
 	/*
@@ -5377,7 +5384,7 @@ int adm_get_source_tracking(int port_id, int copp_idx,
 	source_tracking_params =
 		(struct adm_param_fluence_sourcetracking_t
 			 *) (this_adm.sourceTrackingData.memmap.kvaddr +
-			     sizeof(struct param_hdr_v1));
+			     sizeof(struct param_hdr_v3));
 	for (i = 0; i < MAX_SECTORS; i++) {
 		sourceTrackingData->vad[i] = source_tracking_params->vad[i];
 		pr_debug("%s: vad[%d] = %d\n",
