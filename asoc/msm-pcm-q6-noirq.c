@@ -39,6 +39,7 @@
 #define DRV_NAME "msm-pcm-q6-noirq"
 
 #define PCM_MASTER_VOL_MAX_STEPS	0x2000
+#define SNDRV_HWDEP_IFACE_AUDIO_BE	27   /* for lack of a FE iface */
 static const DECLARE_TLV_DB_LINEAR(msm_pcm_vol_gain, 0,
 			PCM_MASTER_VOL_MAX_STEPS);
 
@@ -461,7 +462,6 @@ static int msm_pcm_trigger(struct snd_soc_component *component,
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_mmap_fd(struct snd_pcm_substream *substream,
 			   struct snd_pcm_mmap_fd *mmap_fd)
 {
@@ -469,6 +469,7 @@ static int msm_pcm_mmap_fd(struct snd_pcm_substream *substream,
 	struct audio_port_data *apd;
 	struct audio_buffer *ab;
 	int dir = -1;
+	struct file *fptr = NULL;
 	struct dma_buf *buf = NULL;
 	int rc = 0;
 
@@ -503,6 +504,13 @@ static int msm_pcm_mmap_fd(struct snd_pcm_substream *substream,
 		rc = -EFAULT;
 		goto buf_fd_fail;
 	}
+
+	/* Add write permission to the file descriptor */
+	fptr = fget(mmap_fd->fd);
+	if (!fptr)
+		return -EBADF;
+	fptr->f_mode = fptr->f_mode | FMODE_WRITE;
+
 	mmap_fd->dir = dir;
 	mmap_fd->actual_size = ab->actual_size;
 	mmap_fd->size = ab->size;
@@ -517,7 +525,6 @@ static int msm_pcm_mmap_fd(struct snd_pcm_substream *substream,
 buf_fd_fail:
         return rc;
 }
-#endif /* CONFIG_AUDIO_QGKI */
 
 static int msm_pcm_ioctl(struct snd_soc_component *component,
 			struct snd_pcm_substream *substream,
@@ -543,15 +550,6 @@ static int msm_pcm_ioctl(struct snd_soc_component *component,
 
 	return snd_pcm_lib_ioctl(substream, cmd, arg);
 }
-
-#if IS_ENABLED(CONFIG_COMPAT) && IS_ENABLED(CONFIG_AUDIO_QGKI)
-static int msm_pcm_compat_ioctl(struct snd_pcm_substream *substream,
-				unsigned int cmd, void *arg)
-{
-	/* we only handle RESET which is common for both modes */
-	return msm_pcm_ioctl(substream, cmd, arg);
-}
-#endif
 
 static snd_pcm_uframes_t msm_pcm_pointer(struct snd_soc_component *component,
 				struct snd_pcm_substream *substream)
@@ -718,7 +716,6 @@ static int msm_pcm_close(struct snd_soc_component *component, struct snd_pcm_sub
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_set_volume(struct msm_audio *prtd, uint32_t volume)
 {
 	int rc = 0;
@@ -860,13 +857,6 @@ static int msm_pcm_add_volume_control(struct snd_soc_pcm_runtime *rtd,
 	kctl->tlv.p = msm_pcm_vol_gain;
 	return 0;
 }
-#else
-static int msm_pcm_add_volume_control(struct snd_soc_pcm_runtime *rtd,
-				      int stream)
-{
-	return 0;
-}
-#endif /* CONFIG_AUDIO_QGKI */
 
 static int msm_pcm_channel_map_put(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
@@ -1092,7 +1082,6 @@ static int msm_pcm_add_fe_topology_control(struct snd_soc_pcm_runtime *rtd)
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_playback_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
@@ -1250,14 +1239,7 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 
 	return 0;
 }
-#else
-static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
-{
-	return 0;
-}
-#endif /* CONFIG_AUDIO_QGKI */
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_pcm_hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
 			       unsigned int cmd, unsigned long arg)
 {
@@ -1310,7 +1292,6 @@ static int msm_pcm_hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
 	return ret;
 }
 
-#ifdef CONFIG_COMPAT
 static int msm_pcm_hwdep_compat_ioctl(struct snd_hwdep *hw,
 				      struct file *file,
 				      unsigned int cmd,
@@ -1319,15 +1300,6 @@ static int msm_pcm_hwdep_compat_ioctl(struct snd_hwdep *hw,
 	/* we only support mmap fd. Handling is common in both modes */
 	return msm_pcm_hwdep_ioctl(hw, file, cmd, arg);
 }
-#else
-static int msm_pcm_hwdep_compat_ioctl(struct snd_hwdep *hw,
-				      struct file *file,
-				      unsigned int cmd,
-				      unsigned long arg)
-{
-	return -EINVAL;
-}
-#endif
 
 static int msm_pcm_add_hwdep_dev(struct snd_soc_pcm_runtime *runtime)
 {
@@ -1353,12 +1325,6 @@ static int msm_pcm_add_hwdep_dev(struct snd_soc_pcm_runtime *runtime)
 	hwdep->ops.ioctl_compat = msm_pcm_hwdep_compat_ioctl;
 	return 0;
 }
-#else
-static int msm_pcm_add_hwdep_dev(struct snd_soc_pcm_runtime *runtime)
-{
-	return 0;
-}
-#endif /* CONFIG_AUDIO_GKI */
 
 static int msm_asoc_pcm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
