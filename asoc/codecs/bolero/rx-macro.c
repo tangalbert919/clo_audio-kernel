@@ -360,6 +360,7 @@ static int rx_macro_hw_params(struct snd_pcm_substream *substream,
 static int rx_macro_get_channel_map(struct snd_soc_dai *dai,
 				unsigned int *tx_num, unsigned int *tx_slot,
 				unsigned int *rx_num, unsigned int *rx_slot);
+static int rx_macro_mute_stream(struct snd_soc_dai *dai, int mute, int stream);
 static int rx_macro_int_dem_inp_mux_put(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol);
 static int rx_macro_mux_get(struct snd_kcontrol *kcontrol,
@@ -657,6 +658,7 @@ static const struct snd_kcontrol_new rx_mix_tx0_mux =
 static struct snd_soc_dai_ops rx_macro_dai_ops = {
 	.hw_params = rx_macro_hw_params,
 	.get_channel_map = rx_macro_get_channel_map,
+	.mute_stream = rx_macro_mute_stream,
 };
 
 static struct snd_soc_dai_driver rx_macro_dai[] = {
@@ -1252,6 +1254,60 @@ static int rx_macro_get_channel_map(struct snd_soc_dai *dai,
 		break;
 	default:
 		dev_err(rx_dev, "%s: Invalid AIF\n", __func__);
+		break;
+	}
+	return 0;
+}
+
+static int rx_macro_mute_stream(struct snd_soc_dai *dai, int mute, int stream)
+{
+	struct snd_soc_component *component = dai->component;
+	struct device *rx_dev = NULL;
+	struct rx_macro_priv *rx_priv = NULL;
+	uint16_t j = 0, reg = 0, mix_reg = 0, dsm_reg = 0;
+	u16 int_mux_cfg0 = 0, int_mux_cfg1 = 0;
+	u8 int_mux_cfg0_val = 0, int_mux_cfg1_val = 0;
+
+	if (mute)
+		return 0;
+
+	if (!rx_macro_get_data(component, &rx_dev, &rx_priv, __func__))
+		return -EINVAL;
+
+	switch (dai->id) {
+	case RX_MACRO_AIF1_PB:
+	case RX_MACRO_AIF2_PB:
+	case RX_MACRO_AIF3_PB:
+	case RX_MACRO_AIF4_PB:
+	for (j = 0; j < INTERP_MAX; j++) {
+		reg = BOLERO_CDC_RX_RX0_RX_PATH_CTL +
+				(j * RX_MACRO_RX_PATH_OFFSET);
+		mix_reg = BOLERO_CDC_RX_RX0_RX_PATH_MIX_CTL +
+				(j * RX_MACRO_RX_PATH_OFFSET);
+		dsm_reg = BOLERO_CDC_RX_RX0_RX_PATH_DSM_CTL +
+				(j * RX_MACRO_RX_PATH_OFFSET);
+		if (j == INTERP_AUX)
+			dsm_reg = BOLERO_CDC_RX_RX2_RX_PATH_DSM_CTL;
+		int_mux_cfg0 = BOLERO_CDC_RX_INP_MUX_RX_INT0_CFG0 + j * 8;
+		int_mux_cfg1 = int_mux_cfg0 + 4;
+		int_mux_cfg0_val = snd_soc_component_read(component,
+							int_mux_cfg0);
+		int_mux_cfg1_val = snd_soc_component_read(component,
+							int_mux_cfg1);
+		if (snd_soc_component_read(component, dsm_reg) & 0x01) {
+			if (int_mux_cfg0_val || (int_mux_cfg1_val & 0xF0))
+				snd_soc_component_update_bits(component,
+							reg, 0x20, 0x20);
+			if (int_mux_cfg1_val & 0x0F) {
+				snd_soc_component_update_bits(component,
+							reg, 0x20, 0x20);
+				snd_soc_component_update_bits(component,
+							mix_reg, 0x20, 0x20);
+			}
+		}
+	}
+		break;
+	default:
 		break;
 	}
 	return 0;

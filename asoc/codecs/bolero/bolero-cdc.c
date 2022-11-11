@@ -1425,7 +1425,7 @@ static int bolero_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "%s: clk get %s failed %d\n",
 			__func__, "lpass_audio_hw_vote", ret);
 		lpass_audio_hw_vote = NULL;
-		ret = 0;
+		return -EPROBE_DEFER;
 	}
 	priv->lpass_audio_hw_vote = lpass_audio_hw_vote;
 
