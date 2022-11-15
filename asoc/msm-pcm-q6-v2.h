@@ -16,6 +16,10 @@
 #define USE_RATE                \
 			(SNDRV_PCM_RATE_8000_48000 | SNDRV_PCM_RATE_KNOT)
 
+/* Max wait time for pcm availability in sec */
+#define MSM_PCM_CAPTURE_MAX_WAIT        4
+#define MSM_PCM_PLAYBACK_MAX_WAIT       4
+
 extern int copy_count;
 
 struct buffer {

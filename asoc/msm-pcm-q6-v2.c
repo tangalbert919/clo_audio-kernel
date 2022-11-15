@@ -1013,12 +1013,31 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 
 	prtd->audio_client->dev = component->dev;
 
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		long wait_time = MSM_PCM_PLAYBACK_MAX_WAIT;
 		runtime->hw = msm_pcm_hardware_playback;
 
+		if (runtime->rate) {
+			long t = runtime->period_size * 2 /
+			runtime->rate;
+			wait_time = max(t, wait_time);
+		}
+
+		substream->wait_time = msecs_to_jiffies(wait_time * 1000);
+	}
 	/* Capture path */
-	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		long wait_time = MSM_PCM_CAPTURE_MAX_WAIT;
 		runtime->hw = msm_pcm_hardware_capture;
+
+		if (runtime->rate) {
+			long t = runtime->period_size * 2 /
+			runtime->rate;
+			wait_time = max(t, wait_time);
+		}
+
+		substream->wait_time = msecs_to_jiffies(wait_time * 1000);
+	}
 	else {
 		pr_err("Invalid Stream type %d\n", substream->stream);
 		return -EINVAL;
