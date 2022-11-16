@@ -3183,7 +3183,8 @@ static struct snd_soc_dai_link sdx_auto_snd_card_dai_links[
 			 ARRAY_SIZE(sdx_common_misc_fe_dai_links) +
 			 ARRAY_SIZE(sdx_common_be_dai_links) +
 			 ARRAY_SIZE(sdx_auto_dai) +
-			 ARRAY_SIZE(sdx_auxpcm_be_dai_links)];
+			 ARRAY_SIZE(sdx_auxpcm_be_dai_links)+
+			 ARRAY_SIZE(sdx_tdm_be_dai_links)];
 
 static int sdx_populate_dai_link_component_of_node(struct snd_soc_card *card)
 {
@@ -3333,7 +3334,8 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		len_2 = len_1 + ARRAY_SIZE(sdx_common_misc_fe_dai_links);
 		len_3 = len_2 + ARRAY_SIZE(sdx_common_be_dai_links);
 		len_4 = len_3 + ARRAY_SIZE(sdx_auto_dai);
-		total_links = len_4 + ARRAY_SIZE(sdx_auxpcm_be_dai_links);
+		len_5 = len_4 + ARRAY_SIZE(sdx_auxpcm_be_dai_links);
+		total_links = len_5 + ARRAY_SIZE(sdx_tdm_be_dai_links);
 		memcpy(sdx_auto_snd_card_dai_links,
 			   sdx_common_dai_links,
 			   sizeof(sdx_common_dai_links));
@@ -3349,6 +3351,9 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		memcpy(sdx_auto_snd_card_dai_links + len_4,
 			   sdx_auxpcm_be_dai_links,
 			   sizeof(sdx_auxpcm_be_dai_links));
+		memcpy(sdx_auto_snd_card_dai_links + len_5,
+			   sdx_tdm_be_dai_links,
+			   sizeof(sdx_tdm_be_dai_links));
 		card = &snd_soc_card_auto_sdx;
 		dailink = sdx_auto_snd_card_dai_links;
 	}
