@@ -2584,6 +2584,22 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		SND_SOC_DAILINK_REG(pri_mi2s_rx_hostless),
 	},
 	{
+	/*hw:x,6*/
+		.name = SDX_DAILINK_NAME(Compress2),
+		.stream_name = "COMPR2",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_HW_PARAMS,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA7,
+		SND_SOC_DAILINK_REG(multimedia7),
+	},
+	{
 	/*hw:x,7*/
 		.name = "MSM AFE-PCM RX",
 		.stream_name = "AFE-PROXY RX",
@@ -2601,7 +2617,22 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(afepcm_tx),
 	},
-
+	{
+	/*hw:x,9*/
+		.name = SDX_DAILINK_NAME(Compress1),
+		.stream_name = "COMPR",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_HW_PARAMS,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA4,
+		SND_SOC_DAILINK_REG(multimedia4),
+	},
 	{
 	/*hw:x,10*/
 		.name = "DTMF RX Hostless",
