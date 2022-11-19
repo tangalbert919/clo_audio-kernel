@@ -1687,7 +1687,7 @@ static struct cal_block_data *msm_routing_find_topology_by_path(int path,
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
 
-		if (cal_utils_is_cal_stale(cal_block, cal_data[cal_index]))
+		if (cal_utils_is_cal_stale(cal_block))
 			continue;
 
 		if (((struct audio_cal_info_adm_top *)cal_block
@@ -1717,7 +1717,7 @@ static struct cal_block_data *msm_routing_find_topology(int path,
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
 
-		if (cal_utils_is_cal_stale(cal_block, cal_data[cal_index]))
+		if (cal_utils_is_cal_stale(cal_block))
 			continue;
 
 		cal_info = (struct audio_cal_info_adm_top *)
@@ -1756,7 +1756,7 @@ static struct cal_block_data *msm_routing_find_topology_by_buf_number(int usecas
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
 
-		if (cal_utils_is_cal_stale(cal_block, cal_data[cal_index]))
+		if (cal_utils_is_cal_stale(cal_block))
 			continue;
 
 		cal_info = (struct audio_cal_info_adm_top *)
@@ -8354,6 +8354,10 @@ static const struct snd_kcontrol_new primary_mi2s_rx_port_mixer_controls[] = {
 	MSM_BACKEND_DAI_PRI_MI2S_RX,
 	MSM_BACKEND_DAI_SEC_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("TERT_AUXPCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_PRI_MI2S_RX,
+	MSM_BACKEND_DAI_TERT_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
 };
 
 static const struct snd_kcontrol_new quat_mi2s_rx_port_mixer_controls[] = {
@@ -8502,6 +8506,14 @@ static const struct snd_kcontrol_new tert_mi2s_rx_port_mixer_controls[] = {
 	MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
 	MSM_BACKEND_DAI_SLIMBUS_8_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("AUX_PCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
+	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("SEC_AUX_PCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
+	MSM_BACKEND_DAI_SEC_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
 };
 
 static const struct snd_kcontrol_new sec_mi2s_rx_port_mixer_controls[] = {
@@ -8544,6 +8556,10 @@ static const struct snd_kcontrol_new sec_mi2s_rx_port_mixer_controls[] = {
 	SOC_DOUBLE_EXT("AUX_PCM_UL_TX", SND_SOC_NOPM,
 	MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
 	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("TERT_AUXPCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
+	MSM_BACKEND_DAI_TERT_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
 };
 

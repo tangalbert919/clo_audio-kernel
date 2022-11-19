@@ -165,9 +165,7 @@ else
 	WCD9XXX_OBJS += wcd-clsh.o
 endif
 	WCD9XXX_OBJS += wcdcal-hwdep.o
-	ifndef CONFIG_ARCH_SA410M
 	WCD9XXX_OBJS += wcd9xxx-soc-init.o
-	endif
 	WCD9XXX_OBJS += audio-ext-clk-up.o
 endif
 
