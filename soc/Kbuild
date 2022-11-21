@@ -108,6 +108,11 @@ else
 			export
 			INCS    +=  -include $(AUDIO_ROOT)/config/bengalautoconf.h
 		endif
+		ifeq ($(CONFIG_ARCH_SA415M), y)
+			include $(AUDIO_ROOT)/config/sdxpoorwillsauto.conf
+			export
+			INCS    +=  -include $(AUDIO_ROOT)/config/sdxpoorwillsautoconf.h
+		endif
 	endif
 endif
 

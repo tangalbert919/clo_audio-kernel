@@ -316,7 +316,7 @@ static int msm_audio_protect_memory_region(struct platform_device *pdev)
 	addr = rmem->base;
 	size = (size_t)rmem->size;
 
-	pr_debug("%s: addr = %p size = %zu rc = %d\n", __func__, (void*)(phys_addr_t)addr, (size_t) size, ret);
+	pr_err("%s: addr = %p size = %zu \n", __func__, (void*)(phys_addr_t)addr, (size_t)size);
 	return hyp_assign_phys(addr, size, srcVM, 1, destVM, destVMperm, 2);
 
 exit:
@@ -892,11 +892,10 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 		scm_mp_enabled = of_property_read_bool(dev->of_node,
 						       mdm_audio_ion_scm);
 		if (scm_mp_enabled){
-			pr_debug("%s: Calling HYP ASSIGN\n", __func__);
+			dev_dbg(dev, "%s: Calling HYP Assign\n", __func__);
 			rc = msm_audio_protect_memory_region(pdev);
 			if (rc) {
-				rc = 0;
-				pr_debug("%s: HYP ASSIGN Failed\n", __func__);
+				dev_err(dev, "%s: HYP ASSIGN Failed\n", __func__);
 			}
 		}
 		else
