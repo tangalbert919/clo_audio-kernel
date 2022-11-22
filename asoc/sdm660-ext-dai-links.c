@@ -1,4 +1,5 @@
 /* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1272,6 +1273,37 @@ static struct snd_soc_dai_link msm_ext_common_fe_dai[] = {
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_pmdown_time = 1,
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA6,
+	},
+	{/* hw:x,37 */
+		.name = MSM_DAILINK_NAME(Transcode Loopback Playback),
+		.stream_name = "Transcode Loopback Playback",
+		.cpu_dai_name = "MultiMedia26",
+		.platform_name = "msm-transcode-loopback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dailink has playback support */
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA26,
+	},
+	{/*hw:x,38*/
+		.name = MSM_DAILINK_NAME(Transcode Loopback Capture),
+		.stream_name = "Transcode Loopback Capture",
+		.cpu_dai_name = "MultiMedia27",
+		.platform_name = "msm-transcode-loopback",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA27,
 	},
 };
 
