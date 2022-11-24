@@ -2301,14 +2301,31 @@ static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 static int msm_asoc_pcm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
+	struct snd_pcm *pcm = rtd->pcm;
 	int ret = 0;
 
 	if (!card->dev->coherent_dma_mask)
 		card->dev->coherent_dma_mask = DMA_BIT_MASK(32);
 
+	if (pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream) {
+		ret = snd_pcm_set_fixed_buffer(pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream,
+				SNDRV_DMA_TYPE_DEV, component->dev,
+				msm_pcm_hardware_playback.buffer_bytes_max);
+		if (ret)
+			dev_err(rtd->dev, "%s, playback pre alloc buffer failed\n", __func__);
+	}
+	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream) {
+		ret = snd_pcm_set_fixed_buffer(pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream,
+				SNDRV_DMA_TYPE_DEV, component->dev,
+				msm_pcm_hardware_capture.buffer_bytes_max);
+		if (ret)
+			dev_err(rtd->dev, "%s, capture pre alloc buffer failed\n", __func__);
+	}
+
 	ret = msm_pcm_add_controls(rtd);
 	if (ret)
 		dev_err(rtd->dev, "%s, kctl add failed\n", __func__);
+
 	return ret;
 }
 
