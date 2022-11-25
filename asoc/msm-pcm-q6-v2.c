@@ -54,6 +54,8 @@ enum stream_state {
 
 static struct audio_locks the_locks;
 
+static int msm_pcm_set_volume(struct msm_audio *prtd, uint32_t volume);
+
 #define PCM_MASTER_VOL_MAX_STEPS	0x2000
 static const DECLARE_TLV_DB_LINEAR(msm_pcm_vol_gain, 0,
 			PCM_MASTER_VOL_MAX_STEPS);
@@ -665,6 +667,9 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			prtd->audio_client = NULL;
 			return -ENOMEM;
 		}
+		ret = msm_pcm_set_volume(prtd, 0);
+		if (ret < 0)
+			pr_err("%s : Set Volume failed : %d", __func__, ret);
 
 		ret = q6asm_send_cal(prtd->audio_client);
 		if (ret < 0)
