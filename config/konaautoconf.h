@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define CONFIG_PINCTRL_LPI 1
@@ -28,7 +29,6 @@
 #define CONFIG_QTI_PP 1
 #define CONFIG_SND_HWDEP_ROUTING 1
 #define CONFIG_SND_SOC_MSM_STUB 1
-#define CONFIG_MSM_AVTIMER 1
 #define CONFIG_SND_SOC_BOLERO 1
 #define CONFIG_WSA_MACRO 1
 #define CONFIG_VA_MACRO 1
@@ -39,5 +39,4 @@
 #define CONFIG_SND_SOC_WCD938X_SLAVE 1
 #define CONFIG_SND_SOC_KONA 1
 #define CONFIG_SND_EVENT 1
-#define CONFIG_VOICE_MHI 1
 #define CONFIG_DIGITAL_CDC_RSC_MGR 1

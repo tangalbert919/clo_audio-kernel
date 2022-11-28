@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _KONA_PORT_CONFIG
 #define _KONA_PORT_CONFIG
 
 #include <soc/swr-common.h>
+#include <soc/soundwire.h>
 
 #define WSA_MSTR_PORT_MASK 0xFF
 /*

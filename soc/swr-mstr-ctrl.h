@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SWR_WCD_CTRL_H
@@ -16,7 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 
-#define SWR_MSTR_MAX_REG_ADDR	0x1740
+#define SWR_MSTR_MAX_REG_ADDR	0x60A8
 #define SWR_MSTR_START_REG_ADDR	0x00
 #define SWR_MSTR_MAX_BUF_LEN     32
 #define BYTES_PER_LINE          12
@@ -33,7 +33,7 @@
 
 #define SWR_WCD_NAME	"swr-wcd"
 
-#define SWR_MSTR_PORT_LEN	8 /* Number of master ports */
+#define SWR_MSTR_PORT_LEN	13 /* Number of master ports */
 
 #define SWRM_VERSION_1_0 0x01010000
 #define SWRM_VERSION_1_2 0x01030000
@@ -41,10 +41,12 @@
 #define SWRM_VERSION_1_5 0x01050000
 #define SWRM_VERSION_1_5_1 0x01050001
 #define SWRM_VERSION_1_6   0x01060000
+#define SWRM_VERSION_1_7   0x01070000
+#define SWRM_VERSION_2_0   0x02000000
 
 #define SWR_MAX_CH_PER_PORT 8
 
-#define SWRM_NUM_AUTO_ENUM_SLAVES    6
+#define SWRM_NUM_AUTO_ENUM_SLAVES    11
 
 enum {
 	SWR_MSTR_PAUSE,
@@ -67,15 +69,9 @@ enum {
 };
 
 enum {
-	SWR_DAC_PORT,
-	SWR_COMP_PORT,
-	SWR_BOOST_PORT,
-	SWR_VISENSE_PORT,
-};
-
-enum {
 	SWR_PDM = 0,
 	SWR_PCM,
+	SWR_PDM_32,
 };
 
 struct usecase {
@@ -135,12 +131,15 @@ struct swr_mstr_ctrl {
 	struct mutex reslock;
 	struct mutex pm_lock;
 	struct mutex irq_lock;
+	struct mutex runtime_lock;
 	u32 swrm_base_reg;
 	char __iomem *swrm_dig_base;
 	char __iomem *swrm_hctl_reg;
 	u8 rcmd_id;
 	u8 wcmd_id;
+	u8 cmd_id;
 	u32 master_id;
+	u32 ee_val;
 	u32 dynamic_port_map_supported;
 	void *handle; /* SWR Master handle from client for read and writes */
 	int (*read)(void *handle, int reg);
@@ -170,7 +169,7 @@ struct swr_mstr_ctrl {
 	struct work_struct dc_presence_work;
 	u8 num_ports;
 	struct swrm_port_type
-			port_mapping[SWR_MSTR_PORT_LEN][SWR_MAX_CH_PER_PORT];
+			port_mapping[SWR_MSTR_PORT_LEN + 1][SWR_MAX_CH_PER_PORT];
 	int swr_irq;
 	u32 clk_stop_mode0_supp;
 	struct work_struct wakeup_work;
@@ -194,12 +193,11 @@ struct swr_mstr_ctrl {
 	u32 disable_div2_clk_switch;
 	u32 rd_fifo_depth;
 	u32 wr_fifo_depth;
+	u32 num_auto_enum;
 	bool enable_slave_irq;
-	u64 logical_dev[SWRM_NUM_AUTO_ENUM_SLAVES + 1];
-	u64 phy_dev[SWRM_NUM_AUTO_ENUM_SLAVES + 1];
-	bool use_custom_phy_addr;
 	u32 is_always_on;
 	bool clk_stop_wakeup;
+	struct swr_port_params pp[SWR_UC_MAX][SWR_MAX_MSTR_PORT_NUM];/*max_devNum * max_ports 11 * 14 */
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_swrm_dent;
 	struct dentry *debugfs_peek;

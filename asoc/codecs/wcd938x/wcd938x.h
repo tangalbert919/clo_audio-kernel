@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _WCD938X_H
 #define _WCD938X_H
 
-#include <dt-bindings/sound/audio-codec-port-types.h>
+#include <bindings/audio-codec-port-types.h>
 
 #define WCD938X_MAX_SLAVE_CH_TYPES 13
 #define ZERO 0
@@ -71,6 +72,7 @@ int wcd938x_codec_force_enable_micbias_v2(struct snd_soc_component *wcd938x,
 int wcd938x_swr_dmic_register_notifier(struct snd_soc_component *wcd938x,
                                         struct notifier_block *nblock,
                                         bool enable);
+int wcd938x_codec_get_dev_num(struct snd_soc_component *component);
 
 static inline int wcd938x_slave_get_master_ch_val(int ch)
 {
@@ -124,6 +126,10 @@ static inline int wcd938x_slave_get_master_ch(int idx)
 	return 0;
 }
 static inline int wcd938x_slave_get_slave_ch_val(int ch)
+{
+	return 0;
+}
+static int wcd938x_codec_get_dev_num(struct snd_soc_component *component)
 {
 	return 0;
 }

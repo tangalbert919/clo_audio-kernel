@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-mapping.h>
@@ -90,7 +91,7 @@ static struct voice_mhi voice_mhi_lcl;
 static int voice_mhi_pcie_up_callback(struct mhi_device *,
 					const struct mhi_device_id *);
 static void voice_mhi_pcie_down_callback(struct mhi_device *);
-static void voice_mhi_pcie_status_callback(struct mhi_device *, enum MHI_CB);
+static void voice_mhi_pcie_status_callback(struct mhi_device *, enum mhi_callback);
 static int32_t voice_mhi_apr_callback(struct apr_client_data *data, void *priv);
 static int voice_mhi_notifier_service_cb(struct notifier_block *nb,
 					 unsigned long opcode, void *ptr);
@@ -228,8 +229,7 @@ int voice_mhi_start(void)
 			goto done;
 		}
 		if (voice_mhi_lcl.vote_count == 0) {
-			ret = mhi_device_get_sync(voice_mhi_lcl.mhi_dev,
-					MHI_VOTE_DEVICE);
+			ret = mhi_device_get_sync(voice_mhi_lcl.mhi_dev);
 			if (ret) {
 				pr_err("%s: mhi_device_get_sync failed\n",
 					   __func__);
@@ -270,7 +270,7 @@ int voice_mhi_end(void)
 		}
 
 		if (voice_mhi_lcl.vote_count == 1)
-			mhi_device_put(voice_mhi_lcl.mhi_dev, MHI_VOTE_DEVICE);
+			mhi_device_put(voice_mhi_lcl.mhi_dev);
 		voice_mhi_lcl.vote_count--;
 	}
 	mutex_unlock(&voice_mhi_lcl.mutex);
@@ -447,7 +447,7 @@ static void voice_mhi_pcie_down_callback(struct mhi_device *voice_mhi_dev)
 }
 
 static void voice_mhi_pcie_status_callback(struct mhi_device *voice_mhi_dev,
-					enum MHI_CB mhi_cb)
+					enum mhi_callback mhi_cb)
 {
 
 }

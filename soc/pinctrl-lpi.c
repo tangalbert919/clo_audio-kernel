@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/gpio.h>
@@ -69,6 +69,7 @@
 
 static bool lpi_dev_up;
 static struct device *lpi_dev;
+static bool initial_boot = false;
 
 /* The index of each function in lpi_gpio_functions[] array */
 enum lpi_gpio_func_index {
@@ -371,8 +372,8 @@ static int lpi_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 				goto set_gpio;
 			}
 			if (arg > LPI_SLEW_RATE_MAX) {
-				dev_err(pctldev->dev, "%s: invalid slew rate %u for pin: %d\n",
-					__func__, arg, pin);
+				dev_err_ratelimited(pctldev->dev, "%s: invalid slew rate %u for \
+					pin: %d\n", __func__, arg, pin);
 				goto set_gpio;
 			}
 			pad->base = pad->slew_base;
@@ -476,9 +477,6 @@ static void lpi_gpio_set(struct gpio_chip *chip, unsigned int pin, int value)
 static int lpi_notifier_service_cb(struct notifier_block *this,
 				   unsigned long opcode, void *ptr)
 {
-	static bool initial_boot = true;
-	struct lpi_gpio_state *state = dev_get_drvdata(lpi_dev);
-
 	pr_debug("%s: Service opcode 0x%lx\n", __func__, opcode);
 
 	switch (opcode) {
@@ -487,24 +485,11 @@ static int lpi_notifier_service_cb(struct notifier_block *this,
 			initial_boot = false;
 			break;
 		}
-		snd_event_notify(lpi_dev, SND_EVENT_DOWN);
 		lpi_dev_up = false;
 		break;
 	case AUDIO_NOTIFIER_SERVICE_UP:
 		if (initial_boot)
 			initial_boot = false;
-
-		/* Reset HW votes after SSR */
-		if (!lpi_dev_up) {
-			/* Add 100ms sleep to ensure AVS is up after SSR */
-			msleep(100);
-			if (state->lpass_core_hw_vote)
-				digital_cdc_rsc_mgr_hw_vote_reset(
-					state->lpass_core_hw_vote);
-			if (state->lpass_audio_hw_vote)
-				digital_cdc_rsc_mgr_hw_vote_reset(
-					state->lpass_audio_hw_vote);
-		}
 
 		lpi_dev_up = true;
 		snd_event_notify(lpi_dev, SND_EVENT_UP);
@@ -561,8 +546,40 @@ static void lpi_pinctrl_ssr_disable(struct device *dev, void *data)
 	lpi_pinctrl_suspend(dev);
 }
 
+static int lpi_pinctrl_ssr_enable(struct device *dev, void *data)
+{
+	struct lpi_gpio_state *state = NULL;
+	dev_dbg(dev, "%s: enter\n", __func__);
+
+	if (!lpi_dev) {
+		dev_err(dev, "%s: lpi_dev is NULL, return\n", __func__);
+		return -EINVAL;
+	}
+
+	state = dev_get_drvdata(lpi_dev);
+
+	if (!initial_boot) {
+		trace_printk("%s: enter\n", __func__);
+		if (!lpi_dev_up) {
+			msleep(100);
+			if (state->lpass_core_hw_vote)
+				digital_cdc_rsc_mgr_hw_vote_reset(
+					state->lpass_core_hw_vote);
+			if (state->lpass_audio_hw_vote)
+				digital_cdc_rsc_mgr_hw_vote_reset(
+					state->lpass_audio_hw_vote);
+		}
+
+		lpi_dev_up = true;
+	}
+
+	dev_dbg(dev, "%s: leave\n", __func__);
+	return 0;
+}
+
 static const struct snd_event_ops lpi_pinctrl_ssr_ops = {
 	.disable = lpi_pinctrl_ssr_disable,
+	.enable = lpi_pinctrl_ssr_enable,
 };
 
 #ifdef CONFIG_DEBUG_FS
@@ -804,19 +821,21 @@ static int lpi_pinctrl_probe(struct platform_device *pdev)
 
 	lpi_dev = &pdev->dev;
 	lpi_dev_up = true;
-	ret = audio_notifier_register("lpi_tlmm", AUDIO_NOTIFIER_ADSP_DOMAIN,
-				      &service_nb);
-	if (ret < 0) {
-		pr_err("%s: Audio notifier register failed ret = %d\n",
-			__func__, ret);
-		goto err_range;
-	}
+	initial_boot = true;
 
 	ret = snd_event_client_register(dev, &lpi_pinctrl_ssr_ops, NULL);
 	if (!ret) {
 		snd_event_notify(dev, SND_EVENT_UP);
 	} else {
 		dev_err(dev, "%s: snd_event registration failed, ret [%d]\n",
+			__func__, ret);
+		goto err_range;
+	}
+
+	ret = audio_notifier_register("lpi_tlmm", AUDIO_NOTIFIER_ADSP_DOMAIN,
+				      &service_nb);
+	if (ret < 0) {
+		pr_err("%s: Audio notifier register failed ret = %d\n",
 			__func__, ret);
 		goto err_snd_evt;
 	}
@@ -890,11 +909,11 @@ int lpi_pinctrl_runtime_resume(struct device *dev)
 	}
 
 	mutex_lock(&state->core_hw_vote_lock);
-	ret = digital_cdc_rsc_mgr_hw_vote_enable(hw_vote);
+	ret = digital_cdc_rsc_mgr_hw_vote_enable(hw_vote, dev);
 	if (ret < 0) {
 		pm_runtime_set_autosuspend_delay(dev,
 						 LPI_AUTO_SUSPEND_DELAY_ERROR);
-		dev_err(dev, "%s:lpass core hw island enable failed\n",
+		dev_err_ratelimited(dev, "%s:lpass core hw island enable failed\n",
 			__func__);
 		goto exit;
 	} else {
@@ -926,7 +945,7 @@ int lpi_pinctrl_runtime_suspend(struct device *dev)
 
 	mutex_lock(&state->core_hw_vote_lock);
 	if (state->core_hw_vote_status) {
-		digital_cdc_rsc_mgr_hw_vote_disable(hw_vote);
+		digital_cdc_rsc_mgr_hw_vote_disable(hw_vote, dev);
 		state->core_hw_vote_status = false;
 	}
 	mutex_unlock(&state->core_hw_vote_lock);

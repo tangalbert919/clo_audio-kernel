@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/init.h>
@@ -201,7 +202,7 @@ static void wcd938x_mbhc_clk_setup(struct snd_soc_component *component,
 
 static int wcd938x_mbhc_btn_to_num(struct snd_soc_component *component)
 {
-	return snd_soc_component_read32(component, WCD938X_ANA_MBHC_RESULT_3) & 0x7;
+	return snd_soc_component_read(component, WCD938X_ANA_MBHC_RESULT_3) & 0x7;
 }
 
 static void wcd938x_mbhc_mbhc_bias_control(struct snd_soc_component *component,
@@ -223,7 +224,7 @@ static void wcd938x_mbhc_program_btn_thr(struct snd_soc_component *component,
 	int vth;
 
 	if (num_btn > WCD_MBHC_DEF_BUTTONS) {
-		dev_err(component->dev, "%s: invalid number of buttons: %d\n",
+		dev_err_ratelimited(component->dev, "%s: invalid number of buttons: %d\n",
 			__func__, num_btn);
 		return;
 	}
@@ -268,7 +269,7 @@ static bool wcd938x_mbhc_micb_en_status(struct wcd_mbhc *mbhc, int micb_num)
 	u8 val = 0;
 
 	if (micb_num == MIC_BIAS_2) {
-		val = ((snd_soc_component_read32(mbhc->component,
+		val = ((snd_soc_component_read(mbhc->component,
 								WCD938X_ANA_MICB2) & 0xC0)
 			>> 6);
 		if (val == 0x01)
@@ -279,7 +280,7 @@ static bool wcd938x_mbhc_micb_en_status(struct wcd_mbhc *mbhc, int micb_num)
 
 static bool wcd938x_mbhc_hph_pa_on_status(struct snd_soc_component *component)
 {
-	return (snd_soc_component_read32(component, WCD938X_ANA_HPH) & 0xC0) ?
+	return (snd_soc_component_read(component, WCD938X_ANA_HPH) & 0xC0) ?
 									true : false;
 }
 
@@ -336,12 +337,12 @@ static struct firmware_cal *wcd938x_get_hwdep_fw_cal(struct wcd_mbhc *mbhc,
 	wcd938x_mbhc = container_of(mbhc, struct wcd938x_mbhc, wcd_mbhc);
 
 	if (!component) {
-		pr_err("%s: NULL component pointer\n", __func__);
+		pr_err_ratelimited("%s: NULL component pointer\n", __func__);
 		return NULL;
 	}
 	hwdep_cal = wcdcal_get_fw_cal(wcd938x_mbhc->fw_data, type);
 	if (!hwdep_cal)
-		dev_err(component->dev, "%s: cal not sent by %d\n",
+		dev_err_ratelimited(component->dev, "%s: cal not sent by %d\n",
 			__func__, type);
 
 	return hwdep_cal;
@@ -487,10 +488,10 @@ static inline void wcd938x_wcd_mbhc_qfuse_cal(
 	int q1_cal;
 
 	if (*z_val < (WCD938X_ZDET_VAL_400/1000))
-		q1 = snd_soc_component_read32(component,
+		q1 = snd_soc_component_read(component,
 			WCD938X_DIGITAL_EFUSE_REG_23 + (2 * flag_l_r));
 	else
-		q1 = snd_soc_component_read32(component,
+		q1 = snd_soc_component_read(component,
 			WCD938X_DIGITAL_EFUSE_REG_24 + (2 * flag_l_r));
 	if (q1 & 0x80)
 		q1_cal = (10000 - ((q1 & 0x7F) * 25));
@@ -526,13 +527,13 @@ static void wcd938x_wcd_mbhc_calc_impedance(struct wcd_mbhc *mbhc, uint32_t *zl,
 
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 
-	reg0 = snd_soc_component_read32(component, WCD938X_ANA_MBHC_BTN5);
-	reg1 = snd_soc_component_read32(component, WCD938X_ANA_MBHC_BTN6);
-	reg2 = snd_soc_component_read32(component, WCD938X_ANA_MBHC_BTN7);
-	reg3 = snd_soc_component_read32(component, WCD938X_MBHC_CTL_CLK);
-	reg4 = snd_soc_component_read32(component, WCD938X_MBHC_NEW_ZDET_ANA_CTL);
+	reg0 = snd_soc_component_read(component, WCD938X_ANA_MBHC_BTN5);
+	reg1 = snd_soc_component_read(component, WCD938X_ANA_MBHC_BTN6);
+	reg2 = snd_soc_component_read(component, WCD938X_ANA_MBHC_BTN7);
+	reg3 = snd_soc_component_read(component, WCD938X_MBHC_CTL_CLK);
+	reg4 = snd_soc_component_read(component, WCD938X_MBHC_NEW_ZDET_ANA_CTL);
 
-	if (snd_soc_component_read32(component, WCD938X_ANA_MBHC_ELECT) & 0x80) {
+	if (snd_soc_component_read(component, WCD938X_ANA_MBHC_ELECT) & 0x80) {
 		is_fsm_disable = true;
 		regmap_update_bits(wcd938x->regmap,
 				   WCD938X_ANA_MBHC_ELECT, 0x80, 0x00);
@@ -780,12 +781,12 @@ static bool wcd938x_mbhc_get_moisture_status(struct wcd_mbhc *mbhc)
 	 * If moisture_en is already enabled, then skip to plug type
 	 * detection.
 	 */
-	if ((snd_soc_component_read32(component, WCD938X_MBHC_NEW_CTL_2) & 0x0C))
+	if ((snd_soc_component_read(component, WCD938X_MBHC_NEW_CTL_2) & 0x0C))
 		goto done;
 
 	wcd938x_mbhc_moisture_detect_en(mbhc, true);
 	/* Read moisture comparator status */
-	ret = ((snd_soc_component_read32(component, WCD938X_MBHC_NEW_FSM_STATUS)
+	ret = ((snd_soc_component_read(component, WCD938X_MBHC_NEW_FSM_STATUS)
 				& 0x20) ? 0 : 1);
 
 done:
@@ -848,7 +849,7 @@ static int wcd938x_get_hph_type(struct snd_kcontrol *kcontrol,
 	struct wcd_mbhc *mbhc;
 
 	if (!wcd938x_mbhc) {
-		dev_err(component->dev, "%s: mbhc not initialized!\n", __func__);
+		dev_err_ratelimited(component->dev, "%s: mbhc not initialized!\n", __func__);
 		return -EINVAL;
 	}
 
@@ -871,7 +872,7 @@ static int wcd938x_hph_impedance_get(struct snd_kcontrol *kcontrol,
 	struct wcd938x_mbhc *wcd938x_mbhc = wcd938x_soc_get_mbhc(component);
 
 	if (!wcd938x_mbhc) {
-		dev_err(component->dev, "%s: mbhc not initialized!\n", __func__);
+		dev_err_ratelimited(component->dev, "%s: mbhc not initialized!\n", __func__);
 		return -EINVAL;
 	}
 
@@ -908,11 +909,11 @@ int wcd938x_mbhc_get_impedance(struct wcd938x_mbhc *wcd938x_mbhc,
 			     uint32_t *zl, uint32_t *zr)
 {
 	if (!wcd938x_mbhc) {
-		pr_err("%s: mbhc not initialized!\n", __func__);
+		pr_err_ratelimited("%s: mbhc not initialized!\n", __func__);
 		return -EINVAL;
 	}
 	if (!zl || !zr) {
-		pr_err("%s: zl or zr null!\n", __func__);
+		pr_err_ratelimited("%s: zl or zr null!\n", __func__);
 		return -EINVAL;
 	}
 
@@ -933,19 +934,19 @@ int wcd938x_mbhc_hs_detect(struct snd_soc_component *component,
 	struct wcd938x_mbhc *wcd938x_mbhc = NULL;
 
 	if (!component) {
-		pr_err("%s: component is NULL\n", __func__);
+		pr_err_ratelimited("%s: component is NULL\n", __func__);
 		return -EINVAL;
 	}
 
 	wcd938x = snd_soc_component_get_drvdata(component);
 	if (!wcd938x) {
-		pr_err("%s: wcd938x is NULL\n", __func__);
+		pr_err_ratelimited("%s: wcd938x is NULL\n", __func__);
 		return -EINVAL;
 	}
 
 	wcd938x_mbhc = wcd938x->mbhc;
 	if (!wcd938x_mbhc) {
-		dev_err(component->dev, "%s: mbhc not initialized!\n", __func__);
+		dev_err_ratelimited(component->dev, "%s: mbhc not initialized!\n", __func__);
 		return -EINVAL;
 	}
 
@@ -963,19 +964,19 @@ void wcd938x_mbhc_hs_detect_exit(struct snd_soc_component *component)
 	struct wcd938x_mbhc *wcd938x_mbhc = NULL;
 
 	if (!component) {
-		pr_err("%s: component is NULL\n", __func__);
+		pr_err_ratelimited("%s: component is NULL\n", __func__);
 		return;
 	}
 
 	wcd938x = snd_soc_component_get_drvdata(component);
 	if (!wcd938x) {
-		pr_err("%s: wcd938x is NULL\n", __func__);
+		pr_err_ratelimited("%s: wcd938x is NULL\n", __func__);
 		return;
 	}
 
 	wcd938x_mbhc = wcd938x->mbhc;
 	if (!wcd938x_mbhc) {
-		dev_err(component->dev, "%s: mbhc not initialized!\n", __func__);
+		dev_err_ratelimited(component->dev, "%s: mbhc not initialized!\n", __func__);
 		return;
 	}
 	wcd_mbhc_stop(&wcd938x_mbhc->wcd_mbhc);
@@ -998,7 +999,7 @@ void wcd938x_mbhc_ssr_down(struct wcd938x_mbhc *mbhc,
 
 	wcd_mbhc = &mbhc->wcd_mbhc;
 	if (!wcd_mbhc) {
-		dev_err(component->dev, "%s: wcd_mbhc is NULL\n", __func__);
+		dev_err_ratelimited(component->dev, "%s: wcd_mbhc is NULL\n", __func__);
 		return;
 	}
 

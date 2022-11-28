@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_platform.h>
@@ -703,7 +703,6 @@ int bolero_register_macro(struct device *dev, u16 macro_id,
 			priv->macro_params[macro_id].reg_wake_irq =
 						ops->reg_wake_irq;
 	}
-	mutex_lock(&priv->macro_lock);
 	priv->num_dais += ops->num_dais;
 	priv->num_macros_registered++;
 	priv->macros_supported[macro_id] = true;
@@ -714,7 +713,6 @@ int bolero_register_macro(struct device *dev, u16 macro_id,
 		ret = bolero_copy_dais_from_macro(priv);
 		if (ret < 0) {
 			dev_err(dev, "%s: copy_dais failed\n", __func__);
-			mutex_unlock(&priv->macro_lock);
 			return ret;
 		}
 		if (priv->macros_supported[TX_MACRO] == false) {
@@ -727,11 +725,9 @@ int bolero_register_macro(struct device *dev, u16 macro_id,
 				priv->bolero_dais, priv->num_dais);
 		if (ret < 0) {
 			dev_err(dev, "%s: register codec failed\n", __func__);
-			mutex_unlock(&priv->macro_lock);
 			return ret;
 		}
 	}
-	mutex_unlock(&priv->macro_lock);
 	return 0;
 }
 EXPORT_SYMBOL(bolero_register_macro);
@@ -1400,7 +1396,6 @@ static int bolero_probe(struct platform_device *pdev)
 	priv->core_audio_vote_count = 0;
 
 	dev_set_drvdata(&pdev->dev, priv);
-	mutex_init(&priv->macro_lock);
 	mutex_init(&priv->io_lock);
 	mutex_init(&priv->clk_lock);
 	mutex_init(&priv->vote_lock);
@@ -1428,7 +1423,6 @@ static int bolero_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 	priv->lpass_audio_hw_vote = lpass_audio_hw_vote;
-
 	schedule_work(&priv->bolero_add_child_devices_work);
 	return 0;
 }
@@ -1441,7 +1435,6 @@ static int bolero_remove(struct platform_device *pdev)
 		return -EINVAL;
 
 	of_platform_depopulate(&pdev->dev);
-	mutex_destroy(&priv->macro_lock);
 	mutex_destroy(&priv->io_lock);
 	mutex_destroy(&priv->clk_lock);
 	mutex_destroy(&priv->vote_lock);
@@ -1462,7 +1455,7 @@ int bolero_runtime_resume(struct device *dev)
 	}
 
 	if (priv->core_hw_vote_count == 0) {
-		ret = digital_cdc_rsc_mgr_hw_vote_enable(priv->lpass_core_hw_vote);
+		ret = digital_cdc_rsc_mgr_hw_vote_enable(priv->lpass_core_hw_vote, dev);
 		if (ret < 0) {
 			dev_err(dev, "%s:lpass core hw enable failed\n",
 				__func__);
@@ -1480,7 +1473,7 @@ audio_vote:
 	}
 
 	if (priv->core_audio_vote_count == 0) {
-		ret = digital_cdc_rsc_mgr_hw_vote_enable(priv->lpass_audio_hw_vote);
+		ret = digital_cdc_rsc_mgr_hw_vote_enable(priv->lpass_audio_hw_vote, dev);
 		if (ret < 0) {
 			if (__ratelimit(&rtl))
 				dev_err(dev, "%s:lpass audio hw enable failed\n",
@@ -1507,7 +1500,7 @@ int bolero_runtime_suspend(struct device *dev)
 	if (priv->lpass_core_hw_vote != NULL) {
 		if (--priv->core_hw_vote_count == 0)
 			digital_cdc_rsc_mgr_hw_vote_disable(
-					priv->lpass_core_hw_vote);
+					priv->lpass_core_hw_vote, dev);
 		if (priv->core_hw_vote_count < 0)
 			priv->core_hw_vote_count = 0;
 	} else {
@@ -1520,7 +1513,7 @@ int bolero_runtime_suspend(struct device *dev)
 	if (priv->lpass_audio_hw_vote != NULL) {
 		if (--priv->core_audio_vote_count == 0)
 			digital_cdc_rsc_mgr_hw_vote_disable(
-					priv->lpass_audio_hw_vote);
+					priv->lpass_audio_hw_vote, dev);
 		if (priv->core_audio_vote_count < 0)
 			priv->core_audio_vote_count = 0;
 	} else {

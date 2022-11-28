@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/kthread.h>
@@ -7116,10 +7116,12 @@ int voc_end_voice_call(uint32_t session_id)
 
 		voice_destroy_mvm_cvs_session(v);
 
+#ifdef CONFIG_VOICE_MHI
 		ret = voice_mhi_end();
 		if (ret < 0)
 			pr_debug("%s: voice_mhi_end failed! %d\n",
 				 __func__, ret);
+#endif
 		v->voc_state = VOC_RELEASE;
 	} else {
 		pr_err("%s: Error: End voice called in state %d\n",
@@ -7510,12 +7512,14 @@ int voc_start_voice_call(uint32_t session_id)
 					 __func__, ret);
 		}
 
+#ifdef CONFIG_VOICE_MHI
 		ret = voice_mhi_start();
 		if (ret < 0) {
 			pr_debug("%s: voice_mhi_start failed! %d\n",
 				 __func__, ret);
 			goto fail;
 		}
+#endif
 
 		ret = voice_create_mvm_cvs_session(v);
 		if (ret < 0) {
