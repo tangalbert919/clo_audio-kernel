@@ -153,10 +153,20 @@ SND_SOC_DAILINK_DEFS(multimedia3,
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-dsp.0")));
 
+SND_SOC_DAILINK_DEFS(multimedia4,
+	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia4")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-compress-dsp")));
+
 SND_SOC_DAILINK_DEFS(multimedia5,
 	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia5")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-dsp.1")));
+
+SND_SOC_DAILINK_DEFS(multimedia7,
+	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia7")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-compress-dsp")));
 
 SND_SOC_DAILINK_DEFS(multimedia6,
 	DAILINK_COMP_ARRAY(COMP_CPU("MultiMedia6")),
