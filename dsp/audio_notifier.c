@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2017, 2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -179,7 +179,7 @@ static int audio_notifier_reg_service(int service, int domain)
 
 	switch (service) {
 	case AUDIO_NOTIFIER_SSR_SERVICE:
-		handle = audio_ssr_register("lpass",
+		handle = audio_ssr_legacy_register("lpass",
 			service_data[service][domain].hook.nb);
 		break;
 	case AUDIO_NOTIFIER_PDR_SERVICE:
@@ -223,7 +223,7 @@ static int audio_notifier_dereg_service(int service, int domain)
 
 	switch (service) {
 	case AUDIO_NOTIFIER_SSR_SERVICE:
-		ret = audio_ssr_deregister(
+		ret = audio_ssr_legacy_deregister(
 			service_data[service][domain].handle,
 			service_data[service][domain].hook.nb);
 		break;
@@ -494,7 +494,7 @@ static int audio_notifier_ssr_modem_cb(struct notifier_block *this,
 					AUDIO_NOTIFIER_MODEM_DOMAIN);
 }
 
-int audio_notifier_deregister(char *client_name)
+int audio_notifier_legacy_deregister(char *client_name)
 {
 	int ret = 0;
 	int ret2;
@@ -526,9 +526,9 @@ int audio_notifier_deregister(char *client_name)
 done:
 	return ret;
 }
-EXPORT_SYMBOL(audio_notifier_deregister);
+EXPORT_SYMBOL(audio_notifier_legacy_deregister);
 
-int audio_notifier_register(char *client_name, int domain,
+int audio_notifier_legacy_register(char *client_name, int domain,
 			    struct notifier_block *nb)
 {
 	int ret;
@@ -571,7 +571,7 @@ int audio_notifier_register(char *client_name, int domain,
 done:
 	return ret;
 }
-EXPORT_SYMBOL(audio_notifier_register);
+EXPORT_SYMBOL(audio_notifier_legacy_register);
 
 static int audio_notifier_subsys_init(void)
 {
