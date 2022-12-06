@@ -325,6 +325,7 @@ static int sdx_auxpcm_mode = I2S_PCM_MASTER_MODE;
 static int sdx_sec_auxpcm_mode = I2S_PCM_MASTER_MODE;
 static int sdx_prim_tdm_mode = I2S_PCM_MASTER_MODE;
 static int sdx_sec_tdm_mode = I2S_PCM_SLAVE_MODE;
+static int sdx_modem_state = MODEM_STATE_OFFLINE;
 
 static int sdx_spk_control = 1;
 static atomic_t mi2s_ref_count;
@@ -344,6 +345,28 @@ static struct snd_soc_card snd_soc_card_tavil_sdx = {
 static struct snd_soc_card snd_soc_card_auto_sdx = {
 	.name = "sdx-auto-i2s-snd-card",
 };
+
+static void sdx_set_modem_state(void *dev)
+{
+	sdx_modem_state = MODEM_STATE_OFFLINE;
+	dev_info(dev, "%s: setting modem state to 0 \n", __func__);
+}
+
+static int sdx_lpass_io_write(struct snd_soc_card * card, u32 val, void __iomem *addr)
+{
+	int ret = -EINVAL;
+
+	mutex_lock(&snd_card_mutex);
+
+	if (sdx_modem_state == MODEM_STATE_ONLINE) {
+		iowrite32(val, addr);
+		ret = 0;
+	}
+
+	mutex_unlock(&snd_card_mutex);
+
+    return ret;
+}
 
 static struct snd_info_entry *msm_snd_info_create_subdir(struct module *mod,
 				const char *name,
@@ -471,8 +494,7 @@ static int sdx_mi2s_startup(struct snd_pcm_substream *substream)
 				ret = -EINVAL;
 				goto done;
 			}
-
-			iowrite32(I2S_SEL << I2S_PCM_SEL_OFFSET,
+			ret = sdx_lpass_io_write(card, I2S_SEL << I2S_PCM_SEL_OFFSET,
 				  pdata->lpaif_pri_muxsel_virt_addr);
 			if (ret < 0) {
 				ret = -EINVAL;
@@ -481,11 +503,15 @@ static int sdx_mi2s_startup(struct snd_pcm_substream *substream)
 
 			if (pdata->lpass_mux_spkr_ctl_virt_addr != NULL) {
 				if (pdata->prim_mi2s_mode == 1)
-					iowrite32(PRI_TLMM_CLKS_EN_MASTER,
+					ret = sdx_lpass_io_write(card, PRI_TLMM_CLKS_EN_MASTER,
 					pdata->lpass_mux_spkr_ctl_virt_addr);
 				else
-					iowrite32(PRI_TLMM_CLKS_EN_SLAVE,
+					ret = sdx_lpass_io_write(card, PRI_TLMM_CLKS_EN_SLAVE,
 					pdata->lpass_mux_spkr_ctl_virt_addr);
+				if (ret < 0) {
+					ret = -EINVAL;
+					goto err;
+				}
 			} else {
 				dev_err(card->dev, "%s: mux spkr ctl virt addr is NULL\n",
 					__func__);
@@ -624,15 +650,24 @@ static int sdx_sec_mi2s_startup(struct snd_pcm_substream *substream)
 				ret = -EINVAL;
 				goto done;
 			}
-			iowrite32(I2S_SEL << I2S_PCM_SEL_OFFSET,
+			ret = sdx_lpass_io_write(card, I2S_SEL << I2S_PCM_SEL_OFFSET,
 				  pdata->lpaif_sec_muxsel_virt_addr);
+			if (ret < 0) {
+				ret = -EINVAL;
+				goto err;
+			}
+
 			if (pdata->lpass_mux_mic_ctl_virt_addr != NULL) {
 				if (pdata->sec_mi2s_mode == 1)
-					iowrite32(SEC_TLMM_CLKS_EN_MASTER,
+					ret = sdx_lpass_io_write(card, SEC_TLMM_CLKS_EN_MASTER,
 					pdata->lpass_mux_mic_ctl_virt_addr);
 				else
-					iowrite32(SEC_TLMM_CLKS_EN_SLAVE,
+					ret = sdx_lpass_io_write(card, SEC_TLMM_CLKS_EN_SLAVE,
 					pdata->lpass_mux_mic_ctl_virt_addr);
+				if (ret < 0) {
+					ret = -EINVAL;
+					goto err;
+				}
 			} else {
 				dev_err(card->dev,
 					"%s: mux spkr ctl virt addr is NULL\n",
@@ -1225,15 +1260,24 @@ static int sdx_auxpcm_startup(struct snd_pcm_substream *substream)
 			ret = -EINVAL;
 			goto done;
 		}
-		iowrite32(PCM_SEL << I2S_PCM_SEL_OFFSET,
+		ret = sdx_lpass_io_write(card, PCM_SEL << I2S_PCM_SEL_OFFSET,
 			  pdata->lpaif_pri_muxsel_virt_addr);
+		if (ret < 0) {
+			ret = -EINVAL;
+			goto err;
+		}
+
 		if (pdata->lpass_mux_spkr_ctl_virt_addr != NULL) {
 			if (pdata->prim_auxpcm_mode == 1)
-				iowrite32(PRI_TLMM_CLKS_EN_MASTER,
+				ret = sdx_lpass_io_write(card, PRI_TLMM_CLKS_EN_MASTER,
 					  pdata->lpass_mux_spkr_ctl_virt_addr);
 			else
-				iowrite32(PRI_TLMM_CLKS_EN_SLAVE,
+				ret = sdx_lpass_io_write(card, PRI_TLMM_CLKS_EN_SLAVE,
 					  pdata->lpass_mux_spkr_ctl_virt_addr);
+			if (ret < 0) {
+				ret = -EINVAL;
+				goto err;
+			}
 		} else {
 			dev_err(card->dev, "%s lpass_mux_spkr_ctl_virt_addr is NULL\n",
 				__func__);
@@ -1256,6 +1300,8 @@ static int sdx_auxpcm_startup(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			pr_err("%s pinctrl set failed\n", __func__);
 	}
+
+err:
 	afe_enable_lpass_core_shared_clock(MI2S_RX, CLOCK_OFF);
 done:
 	return ret;
@@ -1293,15 +1339,25 @@ static int sdx_sec_auxpcm_startup(struct snd_pcm_substream *substream)
 			ret = -EINVAL;
 			goto done;
 		}
-		iowrite32(PCM_SEL << I2S_PCM_SEL_OFFSET,
+		ret = sdx_lpass_io_write(card, PCM_SEL << I2S_PCM_SEL_OFFSET,
 				pdata->lpaif_sec_muxsel_virt_addr);
+		if (ret < 0) {
+			ret = -EINVAL;
+			goto err;
+		}
+
 		if (pdata->lpass_mux_mic_ctl_virt_addr != NULL) {
 			if (pdata->sec_auxpcm_mode == 1)
-				iowrite32(SEC_TLMM_CLKS_EN_MASTER,
+				ret = sdx_lpass_io_write(card, SEC_TLMM_CLKS_EN_MASTER,
 					  pdata->lpass_mux_mic_ctl_virt_addr);
 			else
-				iowrite32(SEC_TLMM_CLKS_EN_SLAVE,
+				ret = sdx_lpass_io_write(card, SEC_TLMM_CLKS_EN_SLAVE,
 					  pdata->lpass_mux_mic_ctl_virt_addr);
+
+			if (ret < 0) {
+				ret = -EINVAL;
+				goto err;
+			}
 		} else {
 			dev_err(card->dev,
 				"%s lpass_mux_mic_ctl_virt_addr is NULL\n",
@@ -1324,7 +1380,7 @@ static int sdx_sec_auxpcm_startup(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			pr_err("%s pinctrl set failed\n", __func__);
 	}
-
+err:
 	afe_enable_lpass_core_shared_clock(MI2S_RX, CLOCK_OFF);
 done:
 	return ret;
@@ -2383,15 +2439,25 @@ static int sdx_pri_tdm_startup(struct snd_pcm_substream *substream)
 			ret = -EINVAL;
 			goto done;
 		}
-		iowrite32(PCM_SEL << I2S_PCM_SEL_OFFSET,
+		ret = sdx_lpass_io_write(card, PCM_SEL << I2S_PCM_SEL_OFFSET,
 			  pdata->lpaif_pri_muxsel_virt_addr);
+
+		if (ret < 0) {
+			ret = -EINVAL;
+			goto err;
+		}
 		if (pdata->lpass_mux_spkr_ctl_virt_addr != NULL) {
 			if (pdata->prim_tdm_mode == 1)
-				iowrite32(PRI_TLMM_CLKS_EN_MASTER,
+				ret = sdx_lpass_io_write(card, PRI_TLMM_CLKS_EN_MASTER,
 					  pdata->lpass_mux_spkr_ctl_virt_addr);
 			else
-				iowrite32(PRI_TLMM_CLKS_EN_SLAVE,
+				ret = sdx_lpass_io_write(card, PRI_TLMM_CLKS_EN_SLAVE,
 					  pdata->lpass_mux_spkr_ctl_virt_addr);
+
+			if (ret < 0) {
+				ret = -EINVAL;
+				goto err;
+			}
 		} else {
 			dev_err(card->dev, "%s lpass_mux_spkr_ctl_virt_addr is NULL\n",
 				__func__);
@@ -2461,15 +2527,24 @@ static int sdx_sec_tdm_startup(struct snd_pcm_substream *substream)
 				ret = -EINVAL;
 				goto done;
 			}
-			iowrite32(PCM_SEL << I2S_PCM_SEL_OFFSET,
+			ret = sdx_lpass_io_write(card, PCM_SEL << I2S_PCM_SEL_OFFSET,
 				  pdata->lpaif_sec_muxsel_virt_addr);
+			if (ret < 0) {
+				ret = -EINVAL;
+				goto err;
+			}
 			if (pdata->lpass_mux_mic_ctl_virt_addr != NULL) {
 				if (pdata->sec_tdm_mode == 1)
-					iowrite32(SEC_TLMM_CLKS_EN_MASTER,
+					ret = sdx_lpass_io_write(card, SEC_TLMM_CLKS_EN_MASTER,
 						  pdata->lpass_mux_mic_ctl_virt_addr);
 				else
-					iowrite32(SEC_TLMM_CLKS_EN_SLAVE,
+					ret = sdx_lpass_io_write(card, SEC_TLMM_CLKS_EN_SLAVE,
 						  pdata->lpass_mux_mic_ctl_virt_addr);
+
+				if (ret < 0) {
+					ret = -EINVAL;
+					goto err;
+				}
 			} else {
 				dev_err(card->dev, "%s lpass_mux_mic_ctl_virt_addr is NULL\n",
 					__func__);
@@ -3935,6 +4010,7 @@ static int sdx_ssr_enable(struct device *dev, void *data)
 #ifdef CONFIG_AUDIO_QGKI
 	snd_soc_card_change_online_state(card, 1);
 #endif
+	sdx_modem_state = MODEM_STATE_ONLINE;
 	mutex_unlock(&snd_card_mutex);
 
 err:
@@ -3956,6 +4032,7 @@ static void sdx_ssr_disable(struct device *dev, void *data)
 #ifdef CONFIG_AUDIO_QGKI
 	snd_soc_card_change_online_state(card, 0);
 #endif
+	sdx_modem_state = MODEM_STATE_OFFLINE;
 	mutex_unlock(&snd_card_mutex);
 
 	afe_clear_config(AFE_CDC_REGISTERS_CONFIG);
@@ -4139,6 +4216,8 @@ static int sdx_asoc_machine_probe(struct platform_device *pdev)
 		pr_err("%s: Registration with SND event FWK failed ret = %d\n",
 			__func__, ret);
 
+	subsys_register_early_notifier("modem", AUDIO_LAYER_NOTIF, sdx_set_modem_state, &pdev->dev);
+
 	place_marker("M - DRIVER Audio Ready");
 
 	return 0;
@@ -4166,6 +4245,7 @@ static int sdx_asoc_machine_remove(struct platform_device *pdev)
 	iounmap(pdata->lpass_mux_spkr_ctl_virt_addr);
 	iounmap(pdata->lpaif_sec_muxsel_virt_addr);
 	iounmap(pdata->lpass_mux_mic_ctl_virt_addr);
+	subsys_unregister_early_notifier("modem", AUDIO_LAYER_NOTIF);
 	snd_soc_unregister_card(card);
 
 	return 0;
