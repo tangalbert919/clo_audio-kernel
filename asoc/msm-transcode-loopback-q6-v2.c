@@ -741,6 +741,59 @@ done:
 	return ret;
 }
 
+static int msm_transcode_capture_app_type_cfg_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_TX;
+	int be_id = ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_BE_ID];
+	struct msm_pcm_stream_app_type_cfg cfg_data = {0, 0, 48000};
+	int ret = 0;
+
+	cfg_data.app_type = ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_APP_TYPE];
+	cfg_data.acdb_dev_id = ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_ACDB_ID];
+	if (ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_SAMPLE_RATE] != 0)
+		cfg_data.sample_rate = ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_SAMPLE_RATE];
+	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d sample_rate- %d\n",
+		__func__, fe_id, session_type, be_id,
+		cfg_data.app_type, cfg_data.acdb_dev_id, cfg_data.sample_rate);
+	ret = msm_pcm_routing_reg_stream_app_type_cfg(fe_id, session_type,
+						      be_id, &cfg_data);
+	if (ret < 0)
+		pr_err("%s: msm_pcm_routing_reg_stream_app_type_cfg failed returned %d\n",
+			__func__, ret);
+
+	return ret;
+}
+
+static int msm_transcode_capture_app_type_cfg_get(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_TX;
+	int be_id = 0;
+	struct msm_pcm_stream_app_type_cfg cfg_data = {0};
+	int ret = 0;
+
+	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, session_type,
+						      &be_id, &cfg_data);
+	if (ret < 0) {
+		pr_err("%s: msm_pcm_routing_get_stream_app_type_cfg failed returned %d\n",
+			__func__, ret);
+		goto done;
+	}
+
+	ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_APP_TYPE] = cfg_data.app_type;
+	ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_ACDB_ID] = cfg_data.acdb_dev_id;
+	ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_SAMPLE_RATE] = cfg_data.sample_rate;
+	ucontrol->value.integer.value[APP_TYPE_CONFIG_IDX_BE_ID] = be_id;
+	pr_debug("%s: fedai_id %llu, session_type %d, be_id %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
+		__func__, fe_id, session_type, be_id,
+		cfg_data.app_type, cfg_data.acdb_dev_id, cfg_data.sample_rate);
+done:
+	return ret;
+}
+
 static int msm_transcode_set_volume(struct snd_compr_stream *cstream,
 				uint32_t master_gain)
 {
@@ -1029,10 +1082,16 @@ static int msm_transcode_app_type_cfg_info(struct snd_kcontrol *kcontrol,
 static int msm_transcode_add_app_type_cfg_control(
 			struct snd_soc_pcm_runtime *rtd)
 {
-	char mixer_str[32];
+	const char *playback_mixer_ctl_name = "Audio Stream";
+	const char *capture_mixer_ctl_name = "Audio Stream Capture";
+	const char *deviceNo = "NN";
+	const char *suffix = "App Type Cfg";
+	char *mixer_str = NULL;
+	int ctl_len;
 	struct snd_kcontrol_new fe_app_type_cfg_control[1] = {
 		{
 		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "?",
 		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
 		.info = msm_transcode_app_type_cfg_info,
 		.put = msm_transcode_playback_app_type_cfg_put,
@@ -1046,24 +1105,47 @@ static int msm_transcode_add_app_type_cfg_control(
 		return -EINVAL;
 	}
 
+	pr_debug("%s: added new transcode loopback FE ctl with name %s, id %d, cpu dai %s, device no %d\n",
+		__func__, rtd->dai_link->name, rtd->dai_link->id,
+		rtd->dai_link->cpu_dai_name, rtd->pcm->device);
+	if (rtd->compr->direction == SND_COMPRESS_PLAYBACK)
+		ctl_len = strlen(playback_mixer_ctl_name) + 1 + strlen(deviceNo)
+			+ 1 + strlen(suffix) + 1;
+	else
+		ctl_len = strlen(capture_mixer_ctl_name) + 1 + strlen(deviceNo)
+			+ 1 + strlen(suffix) + 1;
+
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+
+	if (!mixer_str)
+		return 0;
+
+	if (rtd->compr->direction == SND_COMPRESS_PLAYBACK)
+		snprintf(mixer_str, ctl_len, "%s %d %s",
+			 playback_mixer_ctl_name, rtd->pcm->device, suffix);
+	else
+		snprintf(mixer_str, ctl_len, "%s %d %s",
+			 capture_mixer_ctl_name, rtd->pcm->device, suffix);
+
+	fe_app_type_cfg_control[0].name = mixer_str;
+	fe_app_type_cfg_control[0].private_value = rtd->dai_link->id;
+
 	if (rtd->compr->direction == SND_COMPRESS_PLAYBACK) {
-		snprintf(mixer_str, sizeof(mixer_str),
-			"Audio Stream %d App Type Cfg",
-			 rtd->pcm->device);
-
-		fe_app_type_cfg_control[0].name = mixer_str;
-		fe_app_type_cfg_control[0].private_value = rtd->dai_link->id;
-
 		fe_app_type_cfg_control[0].put =
 				msm_transcode_playback_app_type_cfg_put;
 		fe_app_type_cfg_control[0].get =
 				msm_transcode_playback_app_type_cfg_get;
-
-		pr_debug("Registering new mixer ctl %s", mixer_str);
-		snd_soc_add_platform_controls(rtd->platform,
-					fe_app_type_cfg_control,
-					ARRAY_SIZE(fe_app_type_cfg_control));
+	} else {
+		fe_app_type_cfg_control[0].put =
+				msm_transcode_capture_app_type_cfg_put;
+		fe_app_type_cfg_control[0].get =
+				msm_transcode_capture_app_type_cfg_get;
 	}
+
+	pr_debug("Registering new mixer ctl %s", mixer_str);
+	snd_soc_add_platform_controls(rtd->platform,
+			fe_app_type_cfg_control,
+			ARRAY_SIZE(fe_app_type_cfg_control));
 
 	return 0;
 }
