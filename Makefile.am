@@ -86,6 +86,9 @@ endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), qtiquingvm8295))
 KBUILD_OPTIONS += CONFIG_SND_SOC_GVM_SA8295=m
 endif
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), kona))
+KBUILD_OPTIONS += CONFIG_SND_SOC_GVM_KONA=m
+endif
 endif
 
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa410m))

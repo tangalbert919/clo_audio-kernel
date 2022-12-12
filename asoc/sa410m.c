@@ -179,11 +179,6 @@ enum {
 	EXT_DISP_RX_IDX_MAX,
 };
 
-struct msm_wsa881x_dev_info {
-	struct device_node *of_node;
-	u32 index;
-};
-
 struct dev_config {
 	u32 sample_rate;
 	u32 bit_format;
@@ -557,8 +552,6 @@ static bool codec_reg_done;
 static struct snd_soc_card snd_soc_card_bengal_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
-
-static void *def_rouleur_mbhc_cal(void);
 
 static int msm_int_audrx_init(struct snd_soc_pcm_runtime*);
 
@@ -2311,7 +2304,7 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
 	int port_id = 0;
 	int index = cpu_dai->id;
 
@@ -4646,36 +4639,6 @@ err:
 	return ret;
 }
 
-
-
-static void *def_rouleur_mbhc_cal(void)
-{
-	void *wcd_mbhc_cal;
-	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_high;
-
-	wcd_mbhc_cal = kzalloc(WCD_MBHC_CAL_SIZE(ROULEUR_MBHC_DEF_BUTTONS,
-				WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
-	if (!wcd_mbhc_cal)
-		return NULL;
-
-	WCD_MBHC_CAL_PLUG_TYPE_PTR(wcd_mbhc_cal)->v_hs_max =
-						ROULEUR_MBHC_HS_V_MAX;
-	WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal)->num_btn =
-						ROULEUR_MBHC_DEF_BUTTONS;
-	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal);
-	btn_high = ((void *)&btn_cfg->_v_btn_low) +
-		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
-
-	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
-	btn_high[3] = 500;
-	btn_high[4] = 500;
-
-	return wcd_mbhc_cal;
-}
-
 /* Digital audio interface glue - connects codec <---> CPU */
 static struct snd_soc_dai_link msm_common_dai_links[] = {
 	/* FrontEnd DAI Links */
@@ -5841,50 +5804,6 @@ static const struct of_device_id bengal_asoc_machine_of_match[]  = {
 	{},
 };
 
-static int msm_snd_card_bengal_late_probe(struct snd_soc_card *card)
-{
-	struct snd_soc_component *component = NULL;
-	struct snd_soc_pcm_runtime *rtd;
-	int ret = 0;
-	void *mbhc_calibration;
-
-	rtd = snd_soc_get_pcm_runtime(card, &card->dai_link[0]);
-	if (!rtd) {
-		dev_err(card->dev,
-			"%s: snd_soc_get_pcm_runtime for %s failed!\n",
-			__func__, card->dai_link[0]);
-		return -EINVAL;
-	}
-
-	component = snd_soc_rtdcom_lookup(rtd, ROULEUR_DRV_NAME);
-
-	if (!component) {
-		pr_err("%s component is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!strncmp(component->driver->name, ROULEUR_DRV_NAME,
-						strlen(ROULEUR_DRV_NAME))) {
-		mbhc_calibration = def_rouleur_mbhc_cal();
-		if (!mbhc_calibration)
-			return -ENOMEM;
-		wcd_mbhc_cfg.calibration = mbhc_calibration;
-		ret = rouleur_mbhc_hs_detect(component, &wcd_mbhc_cfg);
-	} else {
-		return 0;
-	}
-	if (ret) {
-		dev_err(component->dev, "%s: mbhc hs detect failed, err:%d\n",
-			__func__, ret);
-		goto err_hs_detect;
-	}
-	return 0;
-
-err_hs_detect:
-	kfree(mbhc_calibration);
-	return ret;
-}
-
 static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 {
 	struct snd_soc_card *card = NULL;
@@ -6013,7 +5932,6 @@ bypass:
 	if (card) {
 		card->dai_link = dailink;
 		card->num_links = total_links;
-		card->late_probe = msm_snd_card_bengal_late_probe;
 	}
 
 	return card;
@@ -6143,10 +6061,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	const char *mbhc_audio_jack_type = NULL;
 	int ret = 0;
 	uint index = 0;
-	struct nvmem_cell *cell;
-	size_t len;
-	u32 *buf;
-	u32 adsp_var_idx = 0;
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev,
@@ -6292,29 +6206,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 
 	is_initial_boot = true;
-	/* get adsp variant idx */
-	cell = nvmem_cell_get(&pdev->dev, "adsp_variant");
-	if (IS_ERR_OR_NULL(cell)) {
-		dev_dbg(&pdev->dev, "%s: FAILED to get nvmem cell \n", __func__);
-		goto ret;
-	}
-	buf = nvmem_cell_read(cell, &len);
-	nvmem_cell_put(cell);
-	if (IS_ERR_OR_NULL(buf)) {
-		dev_dbg(&pdev->dev, "%s: FAILED to read nvmem cell \n", __func__);
-		goto ret;
-	}
-	if (len <= 0 || len > sizeof(u32)) {
-		dev_dbg(&pdev->dev, "%s: nvmem cell length out of range: %zu\n",
-			__func__, len);
-		kfree(buf);
-		goto ret;
-	}
-	memcpy(&adsp_var_idx, buf, len);
-	kfree(buf);
-	va_disable = adsp_var_idx;
 
-ret:
 	return 0;
 err:
 	devm_kfree(&pdev->dev, pdata);

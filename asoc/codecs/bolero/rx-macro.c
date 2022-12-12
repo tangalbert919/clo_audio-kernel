@@ -360,7 +360,7 @@ static int rx_macro_hw_params(struct snd_pcm_substream *substream,
 static int rx_macro_get_channel_map(struct snd_soc_dai *dai,
 				unsigned int *tx_num, unsigned int *tx_slot,
 				unsigned int *rx_num, unsigned int *rx_slot);
-static int rx_macro_digital_mute(struct snd_soc_dai *dai, int mute);
+static int rx_macro_mute_stream(struct snd_soc_dai *dai, int mute, int stream);
 static int rx_macro_int_dem_inp_mux_put(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol);
 static int rx_macro_mux_get(struct snd_kcontrol *kcontrol,
@@ -658,6 +658,7 @@ static const struct snd_kcontrol_new rx_mix_tx0_mux =
 static struct snd_soc_dai_ops rx_macro_dai_ops = {
 	.hw_params = rx_macro_hw_params,
 	.get_channel_map = rx_macro_get_channel_map,
+	.mute_stream = rx_macro_mute_stream,
 };
 
 static struct snd_soc_dai_driver rx_macro_dai[] = {
@@ -1258,7 +1259,7 @@ static int rx_macro_get_channel_map(struct snd_soc_dai *dai,
 	return 0;
 }
 
-static int rx_macro_digital_mute(struct snd_soc_dai *dai, int mute)
+static int rx_macro_mute_stream(struct snd_soc_dai *dai, int mute, int stream)
 {
 	struct snd_soc_component *component = dai->component;
 	struct device *rx_dev = NULL;
