@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/fs.h>
@@ -1996,7 +1996,7 @@ int __init rtac_init(void)
 	mutex_init(&rtac_adm_mutex);
 	mutex_init(&rtac_adm_apr_mutex);
 
-	rtac_adm_buffer = kzalloc(
+	rtac_adm_buffer = kvzalloc(
 		rtac_cal[ADM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_adm_buffer == NULL)
 		goto nomem;
@@ -2009,10 +2009,10 @@ int __init rtac_init(void)
 	}
 	mutex_init(&rtac_asm_apr_mutex);
 
-	rtac_asm_buffer = kzalloc(
+	rtac_asm_buffer = kvzalloc(
 		rtac_cal[ASM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_asm_buffer == NULL) {
-		kfree_sensitive(rtac_adm_buffer);
+		kvfree(rtac_adm_buffer);
 		goto nomem;
 	}
 
@@ -2022,11 +2022,11 @@ int __init rtac_init(void)
 	init_waitqueue_head(&rtac_afe_apr_data.cmd_wait);
 	mutex_init(&rtac_afe_apr_mutex);
 
-	rtac_afe_buffer = kzalloc(
+	rtac_afe_buffer = kvzalloc(
 		rtac_cal[AFE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_afe_buffer == NULL) {
-		kfree_sensitive(rtac_adm_buffer);
-		kfree_sensitive(rtac_asm_buffer);
+		kvfree(rtac_adm_buffer);
+		kvfree(rtac_asm_buffer);
 		goto nomem;
 	}
 
@@ -2040,20 +2040,20 @@ int __init rtac_init(void)
 	mutex_init(&rtac_voice_mutex);
 	mutex_init(&rtac_voice_apr_mutex);
 
-	rtac_voice_buffer = kzalloc(
+	rtac_voice_buffer = kvzalloc(
 		rtac_cal[VOICE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
 	if (rtac_voice_buffer == NULL) {
-		kfree_sensitive(rtac_adm_buffer);
-		kfree_sensitive(rtac_asm_buffer);
-		kfree_sensitive(rtac_afe_buffer);
+		kvfree(rtac_adm_buffer);
+		kvfree(rtac_asm_buffer);
+		kvfree(rtac_afe_buffer);
 		goto nomem;
 	}
 
 	if (misc_register(&rtac_misc) != 0) {
-		kfree_sensitive(rtac_adm_buffer);
-		kfree_sensitive(rtac_asm_buffer);
-		kfree_sensitive(rtac_afe_buffer);
-		kfree_sensitive(rtac_voice_buffer);
+		kvfree(rtac_adm_buffer);
+		kvfree(rtac_asm_buffer);
+		kvfree(rtac_afe_buffer);
+		kvfree(rtac_voice_buffer);
 		goto nomem;
 	}
 
@@ -2065,10 +2065,10 @@ nomem:
 void rtac_exit(void)
 {
 	misc_deregister(&rtac_misc);
-	kfree_sensitive(rtac_adm_buffer);
-	kfree_sensitive(rtac_asm_buffer);
-	kfree_sensitive(rtac_afe_buffer);
-	kfree_sensitive(rtac_voice_buffer);
+	kvfree(rtac_adm_buffer);
+	kvfree(rtac_asm_buffer);
+	kvfree(rtac_afe_buffer);
+	kvfree(rtac_voice_buffer);
 	mutex_destroy(&rtac_voice_apr_mutex);
 	mutex_destroy(&rtac_voice_mutex);
 	mutex_destroy(&rtac_afe_apr_mutex);
