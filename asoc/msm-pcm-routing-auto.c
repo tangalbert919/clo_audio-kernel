@@ -377,7 +377,6 @@ int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 			 struct snd_pcm_usr **info_ret)
 {
 	int err = 0;
-	char *buf = NULL;
 	struct snd_pcm_usr *info;
 	struct snd_kcontrol_new knew = {
 		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
