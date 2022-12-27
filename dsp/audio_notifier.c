@@ -166,6 +166,16 @@ static int audio_notifier_reg_service(int service, int domain)
 	void *handle;
 	int ret = 0;
 	int curr_state = AUDIO_NOTIFIER_SERVICE_DOWN;
+	struct platform_device *pdev = adsp_private;
+	struct adsp_notify_private *priv = NULL;
+	struct rproc *rproc;
+
+	priv = platform_get_drvdata(pdev);
+	if (!priv) {
+		dev_err(&pdev->dev, "%s: Private data get failed\n", __func__);
+		return ret;
+	}
+	rproc = priv->rproc_h;
 
 	switch (service) {
 	case AUDIO_NOTIFIER_SSR_SERVICE:
@@ -626,6 +636,13 @@ static int audio_notify_probe(struct platform_device *pdev)
 
 	adsp_private = pdev;
 
+	audio_notifier_subsys_init();
+
+	audio_notifier_init_service(AUDIO_NOTIFIER_PDR_SERVICE);
+
+	/* Do not return error since PDR enablement is not critical */
+	audio_notifier_late_init();
+
 	return 0;
 }
 
@@ -654,12 +671,6 @@ static struct platform_driver adsp_notify_driver = {
 
 static int __init audio_notifier_init(void)
 {
-	audio_notifier_subsys_init();
-	audio_notifier_init_service(AUDIO_NOTIFIER_PDR_SERVICE);
-
-	/* Do not return error since PDR enablement is not critical */
-	audio_notifier_late_init();
-
 	return platform_driver_register(&adsp_notify_driver);
 }
 module_init(audio_notifier_init);
