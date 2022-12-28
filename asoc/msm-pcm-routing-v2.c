@@ -377,12 +377,11 @@ static void pcm_usr_ctl_private_free(struct snd_kcontrol *kcontrol)
  */
 int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 			 const struct snd_pcm_usr_elem *usr,
-			 int max_length, int max_kctrl_str_len,
+			 int max_length, char *kctl_name,
 			 unsigned long private_value,
 			 struct snd_pcm_usr **info_ret)
 {
 	int err = 0;
-	char *buf = NULL;
 	struct snd_pcm_usr *info;
 	struct snd_kcontrol_new knew = {
 		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -398,26 +397,20 @@ int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 	info->stream = stream;
 	info->usr = usr;
 	info->max_length = max_length;
-	buf = kzalloc(max_kctrl_str_len, GFP_KERNEL);
-	if (!buf) {
-		pr_err("%s: buffer allocation failed\n", __func__);
+	if (kctl_name) {
+		knew.name = kctl_name;
+	} else {
 		kfree(info);
+		pr_err("%s: kctl_name is null\n", __func__);
 		return -ENOMEM;
 	}
-	knew.name = buf;
-	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
-		snprintf(buf, max_kctrl_str_len, "%s %d %s",
-			"Playback", pcm->device, "User kcontrol");
-	else
-		snprintf(buf, max_kctrl_str_len, "%s %d %s",
-			"Capture", pcm->device, "User kcontrol");
+
 	knew.device = pcm->device;
 	knew.count = pcm->streams[stream].substream_count;
 	knew.private_value = private_value;
 	info->kctl = snd_ctl_new1(&knew, info);
 	if (!info->kctl) {
 		kfree(info);
-		kfree(knew.name);
 		pr_err("%s: snd_ctl_new failed\n", __func__);
 		return -ENOMEM;
 	}
@@ -425,14 +418,12 @@ int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 	err = snd_ctl_add(pcm->card, info->kctl);
 	if (err < 0) {
 		kfree(info);
-		kfree(knew.name);
 		pr_err("%s: snd_ctl_add failed:%d\n", __func__,
 			err);
 		return -ENOMEM;
 	}
 	if (info_ret)
 		*info_ret = info;
-	kfree(knew.name);
 	return 0;
 }
 EXPORT_SYMBOL(snd_pcm_add_usr_ctls);
@@ -8354,6 +8345,10 @@ static const struct snd_kcontrol_new primary_mi2s_rx_port_mixer_controls[] = {
 	MSM_BACKEND_DAI_PRI_MI2S_RX,
 	MSM_BACKEND_DAI_SEC_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("TERT_AUXPCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_PRI_MI2S_RX,
+	MSM_BACKEND_DAI_TERT_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
 };
 
 static const struct snd_kcontrol_new quat_mi2s_rx_port_mixer_controls[] = {
@@ -8502,6 +8497,14 @@ static const struct snd_kcontrol_new tert_mi2s_rx_port_mixer_controls[] = {
 	MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
 	MSM_BACKEND_DAI_SLIMBUS_8_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("AUX_PCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
+	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("SEC_AUX_PCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
+	MSM_BACKEND_DAI_SEC_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
 };
 
 static const struct snd_kcontrol_new sec_mi2s_rx_port_mixer_controls[] = {
@@ -8544,6 +8547,10 @@ static const struct snd_kcontrol_new sec_mi2s_rx_port_mixer_controls[] = {
 	SOC_DOUBLE_EXT("AUX_PCM_UL_TX", SND_SOC_NOPM,
 	MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
 	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_DOUBLE_EXT("TERT_AUXPCM_UL_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
+	MSM_BACKEND_DAI_TERT_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
 };
 

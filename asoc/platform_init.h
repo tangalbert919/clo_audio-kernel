@@ -17,7 +17,9 @@ int msm_pcm_dtmf_init(void);
 int msm_pcm_hostless_init(void);
 int msm_voice_host_init(void);
 int msm_pcm_loopback_init(void);
+#ifndef CONFIG_SND_SOC_SA410M
 int msm_pcm_noirq_init(void);
+#endif
 int msm_pcm_dsp_init(void);
 int msm_soc_routing_platform_init(void);
 int msm_pcm_voice_init(void);
@@ -32,7 +34,9 @@ void msm_pcm_voip_exit(void);
 void msm_pcm_voice_exit(void);
 void msm_soc_routing_platform_exit(void);
 void msm_pcm_dsp_exit(void);
+#ifndef CONFIG_SND_SOC_SA410M
 void msm_pcm_noirq_exit(void);
+#endif
 void msm_pcm_loopback_exit(void);
 void msm_voice_host_exit(void);
 void msm_pcm_hostless_exit(void);

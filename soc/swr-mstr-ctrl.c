@@ -55,7 +55,7 @@
 
 #define ERR_AUTO_SUSPEND_TIMER_VAL 0x1
 
-#define SWRM_LINK_STATUS_RETRY_CNT 100
+#define SWRM_LINK_STATUS_RETRY_CNT 200
 
 #define SWRM_ROW_48    48
 #define SWRM_ROW_50    50
@@ -3114,12 +3114,6 @@ static int swrm_runtime_resume(struct device *dev)
 		dev_err(dev, "%s:lpass core hw enable failed\n",
 			__func__);
 		hw_core_err = true;
-		pm_runtime_set_autosuspend_delay(&pdev->dev,
-			ERR_AUTO_SUSPEND_TIMER_VAL);
-		if (swrm->req_clk_switch)
-			swrm->req_clk_switch = false;
-		mutex_unlock(&swrm->reslock);
-		return 0;
 	}
 	if (swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, true)) {
 		dev_err(dev, "%s:lpass audio hw enable failed\n",
