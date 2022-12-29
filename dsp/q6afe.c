@@ -9999,6 +9999,7 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 		return -EINVAL;
 	}
 
+#ifndef CONFIG_SA410M_CLK_FRACT_INTEGRAL
 	if (cfg->clk_freq_in_hz % AFE_SAMPLING_RATE_8KHZ) {
 		if (clk_src_name[CLK_SRC_FRACT] != NULL)
 			ret = afe_set_source_clk(port_id,
@@ -10007,6 +10008,8 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 		ret = afe_set_source_clk(port_id,
 				clk_src_name[CLK_SRC_INTEGRAL]);
 	}
+#endif
+
 	if (ret < 0)
 		pr_err("%s: afe_set_source_clk fail %d\n", __func__, ret);
 
