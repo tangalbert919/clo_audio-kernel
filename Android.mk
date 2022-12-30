@@ -10,8 +10,12 @@ ifeq ($(TARGET_BOARD_AUTO),true)
 KBUILD_OPTIONS += CONFIG_BOARD_AUTO_AUDIO=y
 endif
 
+ifeq ($(call is-board-platform, kona),true)
+AUDIO_SELECT  := CONFIG_SND_SOC_KONA=m
+endif
+
 # Build/Package only in case of supported target
-ifeq ($(call is-board-platform-in-list,msmnile), true)
+ifeq ($(call is-board-platform-in-list,msmnile kona), true)
 
 LOCAL_PATH := $(call my-dir)
 

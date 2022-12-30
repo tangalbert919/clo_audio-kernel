@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/gpio.h>
@@ -790,6 +791,16 @@ static int lpi_pinctrl_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to add pin range\n");
 		goto err_range;
 	}
+	/* Register LPASS audio hw vote */
+	lpass_audio_hw_vote = devm_clk_get(&pdev->dev, "lpass_audio_hw_vote");
+	if (IS_ERR(lpass_audio_hw_vote)) {
+		ret = PTR_ERR(lpass_audio_hw_vote);
+		dev_err(&pdev->dev, "%s: clk get %s failed %d\n",
+			__func__, "lpass_audio_hw_vote", ret);
+		lpass_audio_hw_vote = NULL;
+		return -EPROBE_DEFER;
+	}
+	state->lpass_audio_hw_vote = lpass_audio_hw_vote;
 
 	lpi_dev = &pdev->dev;
 	lpi_dev_up = true;
@@ -820,18 +831,6 @@ static int lpi_pinctrl_probe(struct platform_device *pdev)
 		ret = 0;
 	}
 	state->lpass_core_hw_vote = lpass_core_hw_vote;
-
-	/* Register LPASS audio hw vote */
-	lpass_audio_hw_vote = devm_clk_get(&pdev->dev, "lpass_audio_hw_vote");
-	if (IS_ERR(lpass_audio_hw_vote)) {
-		ret = PTR_ERR(lpass_audio_hw_vote);
-		dev_dbg(&pdev->dev, "%s: clk get %s failed %d\n",
-			__func__, "lpass_audio_hw_vote", ret);
-		lpass_audio_hw_vote = NULL;
-		ret = 0;
-	}
-	state->lpass_audio_hw_vote = lpass_audio_hw_vote;
-
 	state->core_hw_vote_status = false;
 	pm_runtime_set_autosuspend_delay(&pdev->dev, LPI_AUTO_SUSPEND_DELAY);
 	pm_runtime_use_autosuspend(&pdev->dev);

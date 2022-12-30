@@ -1,10 +1,30 @@
+ifeq ($(QTI_TECHPACK), true)
+AUDIO_KERNEL_PATH=$(PWD)/../../../vendor/qcom/opensource/audio-kernel/
+AUDIO_ROOT=$(AUDIO_KERNEL_PATH)
+# Use USERINCLUDE when you must reference the UAPI directories only.
+USERINCLUDE     += \
+                -I$(AUDIO_KERNEL_PATH)/include/uapi/audio
+
+# Use LINUXINCLUDE when you must reference the include/ directory.
+# Needed to be compatible with the O= option
+INCS    += \
+                -I$(AUDIO_KERNEL_PATH)/include/uapi \
+                -I$(AUDIO_KERNEL_PATH)/include/uapi/audio \
+                -I$(AUDIO_KERNEL_PATH)/include/asoc \
+                -I$(AUDIO_KERNEL_PATH)/include
+
+KBUILD_OPTIONS := AUDIO_ROOT=$(AUDIO_KERNEL_PATH)
+else
 AUDIO_ROOT=$(PWD)
 UAPI_OUT=$(PWD)
 KERNEL_BINARY_DIR=$(KERNEL_SRC)/../kernel-build-artifacts
 
 KBUILD_OPTIONS := AUDIO_ROOT=$(PWD)
-KBUILD_OPTIONS += MODNAME=audio
 KBUILD_OPTIONS += UAPI_OUT=$(PWD)
+subdir-ccflags-y += -I$(AUDIO_ROOT)/include/uapi/
+endif
+
+KBUILD_OPTIONS += MODNAME=audio
 
 ifeq ($(TARGET_SUPPORT),qcs40x)
 KBUILD_OPTIONS += CONFIG_ARCH_QCS405=y
@@ -16,7 +36,11 @@ ifeq ($(TARGET_SUPPORT), qrbx210)
 KBUILD_OPTIONS += CONFIG_ARCH_BENGAL=y
 endif
 
-subdir-ccflags-y += -I$(AUDIO_ROOT)/include/uapi/
+ifeq ($(TARGET_SUPPORT), sa410m)
+KBUILD_OPTIONS += CONFIG_ARCH_SA410M=y
+endif
+
+
 
 obj-m := ipc/
 obj-m += dsp/
@@ -43,7 +67,7 @@ obj-m += asoc/codecs/bolero/
 obj-m += asoc/codecs/wcd937x/
 endif
 
-ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa8155 sa8155ivi sa6155 sa8195 qtiquingvm qtiquingvm8295 sa8295 qtigvmi3))
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa8155 sa8155ivi sa6155 sa8195 qtiquingvm qtiquingvm8295 sa8295 qtigvmi3 sa410m))
 KBUILD_OPTIONS += CONFIG_SND_SOC_AUTO=y
 obj-m := ipc/
 obj-m += dsp/
@@ -62,9 +86,19 @@ endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), qtiquingvm8295))
 KBUILD_OPTIONS += CONFIG_SND_SOC_GVM_SA8295=m
 endif
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), kona))
+KBUILD_OPTIONS += CONFIG_SND_SOC_GVM_KONA=m
+endif
+endif
+
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa410m))
+obj-m += asoc/codecs/rouleur/
+obj-m += asoc/codecs/bolero/
+KBUILD_CFLAGS += -Wno-error
 endif
 
 all:
+ifneq ($(QTI_TECHPACK), true)
 	$(shell rm -fr $(shell pwd)/soc/core.h)
 	$(shell ln -s $(KERNEL_SRC)/drivers/pinctrl/core.h $(shell pwd)/soc/core.h)
 	$(shell rm -fr $(shell pwd)/include/soc/internal.h)
@@ -112,10 +146,16 @@ all:
 	$(shell cp $(UAPI_OUT)/linux/*.h $(KERNEL_BINARY_DIR)/usr/include/audio/linux/)
 	$(shell cp $(UAPI_OUT)/linux/mfd/wcd9xxx/*.h $(KERNEL_BINARY_DIR)/usr/include/audio/linux/mfd/wcd9xxx/)
 	$(shell cp $(UAPI_OUT)/sound/*.h $(KERNEL_BINARY_DIR)/usr/include/audio/sound/)
+endif
 	$(MAKE) -C $(KERNEL_SRC) M=$(shell pwd) modules $(KBUILD_OPTIONS)
 
 modules_install:
 	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(shell pwd) modules_install
+
+ifeq ($(QTI_TECHPACK), true)
+%:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS)
+endif
 
 clean:
 	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers

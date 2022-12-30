@@ -1778,10 +1778,10 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 
 	/*tx widgets*/
 	SND_SOC_DAPM_ADC_E("ADC1", NULL, SND_SOC_NOPM, 0, 0,
-				rouleur_codec_enable_adc,
+				rouleur_tx_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 1, 0,
-				rouleur_codec_enable_adc,
+	SND_SOC_DAPM_ADC_E("ADC2", NULL, SND_SOC_NOPM, 0, 0,
+				rouleur_tx_swr_ctrl,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MUX("ADC2 MUX", SND_SOC_NOPM, 0, 0,
@@ -1790,11 +1790,11 @@ static const struct snd_soc_dapm_widget rouleur_dapm_widgets[] = {
 	/*tx mixers*/
 	SND_SOC_DAPM_MIXER_E("ADC1_MIXER", SND_SOC_NOPM, 0, 0,
 				adc1_switch, ARRAY_SIZE(adc1_switch),
-				rouleur_tx_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				rouleur_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_MIXER_E("ADC2_MIXER", SND_SOC_NOPM, 1, 0,
 				adc2_switch, ARRAY_SIZE(adc2_switch),
-				rouleur_tx_swr_ctrl, SND_SOC_DAPM_PRE_PMU |
+				rouleur_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 				SND_SOC_DAPM_POST_PMD),
 
 	/* micbias widgets*/
@@ -2635,14 +2635,14 @@ static int rouleur_bind(struct device *dev)
 	 * soundwire auto enumeration of slave devices as
 	 * as per HW requirement.
 	 */
-	usleep_range(5000, 5010);
+	usleep_range(15000, 15010);
 	rouleur->wakeup = rouleur_wakeup;
 
 	ret = component_bind_all(dev, rouleur);
 	if (ret) {
 		dev_err(dev, "%s: Slave bind failed, ret = %d\n",
 			__func__, ret);
-		goto err_bind_all;
+		goto err_disable;
 	}
 
 	ret = rouleur_parse_port_mapping(dev, "qcom,rx_swr_ch_map", CODEC_RX);
@@ -2731,6 +2731,9 @@ err_irq:
 	mutex_destroy(&rouleur->rx_clk_lock);
 err:
 	component_unbind_all(dev, rouleur);
+err_disable:
+	msm_cdc_disable_static_supplies(dev, rouleur->supplies,
+					pdata->regulator, pdata->num_supplies);
 err_bind_all:
 	dev_set_drvdata(dev, NULL);
 	kfree(pdata);

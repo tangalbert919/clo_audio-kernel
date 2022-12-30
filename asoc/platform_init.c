@@ -21,7 +21,9 @@ static int __init audio_platform_init(void)
 	msm_pcm_dtmf_init();
 	msm_pcm_hostless_init();
 	msm_pcm_loopback_init();
+#ifndef CONFIG_SND_SOC_SA410M
 	msm_pcm_noirq_init();
+#endif
 	msm_pcm_dsp_init();
 	msm_soc_routing_platform_init();
 	msm_pcm_voice_init();
@@ -38,7 +40,9 @@ static void audio_platform_exit(void)
 	msm_pcm_voice_exit();
 	msm_soc_routing_platform_exit();
 	msm_pcm_dsp_exit();
+#ifndef CONFIG_SND_SOC_SA410M
 	msm_pcm_noirq_exit();
+#endif
 	msm_pcm_loopback_exit();
 	msm_pcm_hostless_exit();
 	msm_pcm_dtmf_exit();

@@ -15,12 +15,24 @@ ifeq ($(KERNEL_BUILD), 1)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 endif
 
+ifeq ($(TARGET_SUPPORT), sa410m)
+	include $(AUDIO_ROOT)/config/sa410mauto.conf
+	export
+	INCS    +=  -include $(AUDIO_ROOT)/config/sa410mautoconf.h
+endif
+
 ifeq ($(KERNEL_BUILD), 0)
 	ifeq ($(CONFIG_ARCH_BENGAL), y)
 		include $(AUDIO_ROOT)/config/bengalauto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/bengalautoconf.h
 	endif
+endif
+
+ifdef CONFIG_ARCH_SA410M
+	include $(AUDIO_ROOT)/config/sa410mauto.conf
+	export
+	INCS    +=  -include $(AUDIO_ROOT)/config/sa410mautoconf.h
 endif
 
 # As per target team, build is done as follows:

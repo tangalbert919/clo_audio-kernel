@@ -14,6 +14,12 @@ ifeq ($(KERNEL_BUILD), 1)
 	AUDIO_ROOT := $(KDIR)/techpack/audio
 endif
 
+ifeq ($(TARGET_SUPPORT), sa410m)
+	include $(AUDIO_ROOT)/config/sa410mauto.conf
+	export
+	INCS    +=  -include $(AUDIO_ROOT)/config/sa410mautoconf.h
+endif
+
 ifeq ($(CONFIG_SND_SOC_AUTO), y)
 	ifdef CONFIG_SND_SOC_SA8155
 		include $(AUDIO_ROOT)/config/sa8155auto.conf
@@ -35,6 +41,12 @@ ifeq ($(CONFIG_SND_SOC_AUTO), y)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sa8295gvmautoconf.h
 	endif
+	ifdef CONFIG_ARCH_SA410M
+		include $(AUDIO_ROOT)/config/sa410mauto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sa410mautoconf.h
+	endif
+
 else
 	ifeq ($(KERNEL_BUILD), 0)
 			ifeq ($(CONFIG_ARCH_SM6150), y)
