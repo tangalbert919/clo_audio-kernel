@@ -2,10 +2,6 @@
 
 LOCAL_PATH := $(call my-dir)
 
-ifeq ($(call is-board-platform, msmnile),true)
-AUDIO_SELECT  := CONFIG_SND_SOC_SA8155=m
-endif
-
 ifeq ($(TARGET_BOARD_AUTO),true)
 KBUILD_OPTIONS += CONFIG_BOARD_AUTO_AUDIO=y
 endif
@@ -42,7 +38,13 @@ KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
 KBUILD_OPTIONS += $(AUDIO_SELECT)
 ifeq ($(call is-board-platform-in-list, msmnile),true)
 KBUILD_OPTIONS += CONFIG_SND_SOC_AUTO=y
+ifneq (,$(filter $(TARGET_BOARD_PLATFORM)$(TARGET_BOARD_SUFFIX), msmnile_gvmq))
+KBUILD_OPTIONS += CONFIG_SND_SOC_GVM=m
+else
+KBUILD_OPTIONS += CONFIG_SND_SOC_SA8155=m
 endif
+endif
+
 AUDIO_SRC_FILES := \
 	$(wildcard $(LOCAL_PATH)/*) \
 	$(wildcard $(LOCAL_PATH)/*/*) \

@@ -4,7 +4,7 @@ AUDIO_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/native_dlkm.ko \
 	$(KERNEL_MODULES_OUT)/platform_dlkm.ko \
 	$(KERNEL_MODULES_OUT)/hdmi_dlkm.ko
 
-ifeq ($(call is-board-platform-in-list,msmnile), true)
+ifneq (,$(filter $(TARGET_BOARD_PLATFORM), msmnile))
 AUDIO_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/q6_notifier_dlkm_legacy.ko\
 	$(KERNEL_MODULES_OUT)/q6_dlkm_legacy.ko \
 	$(KERNEL_MODULES_OUT)/adsp_loader_dlkm_legacy.ko \
