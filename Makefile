@@ -1,6 +1,6 @@
 # auto-detect subdirs
 ifeq ($(QTI_TECHPACK), true)
-LEGACY_PATH=$(PWD)/../../../vendor/qcom/opensource/audio-kernel
+LEGACY_PATH=$(PWD)/../vendor/qcom/opensource/audio-kernel
 else
 LEGACY_PATH=$(PWD)/../vendor/qcom/opensource/audio-kernel/legacy
 endif
