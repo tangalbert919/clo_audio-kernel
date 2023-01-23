@@ -5503,7 +5503,7 @@ static int msm_pinctrl_mclk_enable(struct platform_device *pdev)
 
 		np = of_parse_phandle(pdev->dev.of_node, mclk_gpio_phandle[i], 0);
 		if (!np) {
-			pr_err("%s: device node %s is null\n", __func__, mclk_gpio_phandle[i]);
+			pr_debug("%s: device node %s is null\n", __func__, mclk_gpio_phandle[i]);
 			continue;
 		}
 		pdev_np = of_find_device_by_node(np);
@@ -8628,6 +8628,42 @@ static struct snd_soc_dai_link msm_auto_fe_dai_links[] = {
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA34,
 		SND_SOC_DAILINK_REG(multimedia34),
 	},
+	{
+		.name = MSM_DAILINK_NAME(Media35),
+		.stream_name = "MultiMedia35",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA35,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia35),
+	},
+	{
+		.name = MSM_DAILINK_NAME(Media36),
+		.stream_name = "MultiMedia36",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA36,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia37),
+	},
 };
 
 static struct snd_soc_dai_link msm_custom_fe_dai_links[] = {
@@ -8800,6 +8836,42 @@ static struct snd_soc_dai_link msm_custom_fe_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA20,
 		SND_SOC_DAILINK_REG(multimedia20),
+	},
+	{
+		.name = MSM_DAILINK_NAME(Media35),
+		.stream_name = "MultiMedia35",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA35,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia35),
+	},
+	{
+		.name = MSM_DAILINK_NAME(Media36),
+		.stream_name = "MultiMedia36",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA36,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia37),
 	},
 };
 
