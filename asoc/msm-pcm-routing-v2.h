@@ -865,9 +865,9 @@ struct snd_pcm_usr {
 };
 
 int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
-    const struct snd_pcm_usr_elem *usr,
-    int max_length, int max_control_str_len,
-    unsigned long private_value,
-    struct snd_pcm_usr **info_ret);
+	const struct snd_pcm_usr_elem *usr,
+	int max_length, char *kctl_name,
+	unsigned long private_value,
+	struct snd_pcm_usr **info_ret);
 #endif
 #endif /*_MSM_PCM_H*/

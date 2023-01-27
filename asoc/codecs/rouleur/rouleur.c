@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1476,8 +1476,12 @@ static int rouleur_event_notify(struct notifier_block *block,
 		rouleur->dev_up = false;
 		rouleur->mbhc->wcd_mbhc.deinit_in_progress = true;
 		mbhc = &rouleur->mbhc->wcd_mbhc;
-		rouleur->usbc_hs_status = get_usbc_hs_status(component,
+		if(!mbhc->mbhc_cfg) {
+			rouleur->usbc_hs_status = false;
+		} else {
+			rouleur->usbc_hs_status = get_usbc_hs_status(component,
 						mbhc->mbhc_cfg);
+		}
 		rouleur_mbhc_ssr_down(rouleur->mbhc, component);
 		rouleur_reset(rouleur->dev, 0x01);
 		break;

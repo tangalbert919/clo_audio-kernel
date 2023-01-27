@@ -1197,14 +1197,17 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	const char *deviceNo = "NN";
 	const char *suffix = "App Type Cfg";
 	int ctl_len, ret = 0;
+	char kctl_name[SNDRV_CTL_ELEM_ID_NAME_MAXLEN] = {0};
 
 	if (pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream) {
 		ctl_len = strlen(playback_mixer_ctl_name) + 1 +
 				strlen(deviceNo) + 1 +
 				strlen(suffix) + 1;
 		pr_debug("%s: Playback app type cntrl add\n", __func__);
+		snprintf(kctl_name, ctl_len, "%s %d %s",
+			     playback_mixer_ctl_name, rtd->pcm->device, suffix);
 		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_PLAYBACK,
-				NULL, 1, ctl_len, rtd->dai_link->id,
+				NULL, 1, kctl_name, rtd->dai_link->id,
 				&app_type_info);
 		if (ret < 0) {
 			pr_err("%s: playback app type cntrl add failed, err: %d\n",
@@ -1212,8 +1215,6 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 			return ret;
 		}
 		kctl = app_type_info->kctl;
-		snprintf(kctl->id.name, ctl_len, "%s %d %s",
-			     playback_mixer_ctl_name, rtd->pcm->device, suffix);
 		kctl->put = msm_pcm_playback_app_type_cfg_ctl_put;
 		kctl->get = msm_pcm_playback_app_type_cfg_ctl_get;
 	}
@@ -1221,9 +1222,11 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream) {
 		ctl_len = strlen(capture_mixer_ctl_name) + 1 +
 				strlen(deviceNo) + 1 + strlen(suffix) + 1;
+		snprintf(kctl_name, ctl_len, "%s %d %s",
+				capture_mixer_ctl_name, rtd->pcm->device, suffix);
 		pr_debug("%s: Capture app type cntrl add\n", __func__);
 		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_CAPTURE,
-				NULL, 1, ctl_len, rtd->dai_link->id,
+				NULL, 1, kctl_name, rtd->dai_link->id,
 				&app_type_info);
 		if (ret < 0) {
 			pr_err("%s: capture app type cntrl add failed, err: %d\n",
@@ -1231,8 +1234,6 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 			return ret;
 		}
 		kctl = app_type_info->kctl;
-		snprintf(kctl->id.name, ctl_len, "%s %d %s",
-		 capture_mixer_ctl_name, rtd->pcm->device, suffix);
 		kctl->put = msm_pcm_capture_app_type_cfg_ctl_put;
 		kctl->get = msm_pcm_capture_app_type_cfg_ctl_get;
 	}
