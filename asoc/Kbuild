@@ -197,6 +197,10 @@ ifdef CONFIG_SND_SOC_SA8155
 	MACHINE_OBJS += sa8155.o
 endif
 
+ifdef CONFIG_SND_SOC_GVM
+	MACHINE_OBJS += sa8155.o
+endif
+
 # for gvmgh sound card driver
 ifdef CONFIG_SND_SOC_GVM_AUTO_SPF
     SPF_MACHINE_OBJS += gvm_auto_spf_dummy.o
@@ -340,6 +344,9 @@ obj-$(CONFIG_SND_SOC_SA8155) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_SA8295) += machine_dlkm.o
+machine_dlkm-y := $(MACHINE_OBJS)
+
+obj-$(CONFIG_SND_SOC_GVM) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_CPE) += cpe_lsm_dlkm.o
