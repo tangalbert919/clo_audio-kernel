@@ -8,6 +8,8 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/kthread.h>
@@ -7847,6 +7849,7 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 				__func__);
 
 		apr_reset(c->apr_q6_cvs);
+		rtac_reset_voice();
 		c->apr_q6_cvs = NULL;
 
 		/* Sub-system restart is applicable to all sessions. */
