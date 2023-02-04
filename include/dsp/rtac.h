@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2011, 2013-2015, 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __RTAC_H__
@@ -72,6 +73,8 @@ void rtac_remove_popp_from_adm_devices(u32 popp_id);
 void rtac_add_voice(u32 cvs_handle, u32 cvp_handle, u32 rx_afe_port,
 	u32 tx_afe_port, u32 rx_acdb_id, u32 tx_acdb_id, u32 session_id);
 void rtac_remove_voice(u32 cvs_handle);
+void rtac_reset_voice(void);
+void rtac_reset_adm(void);
 void rtac_set_adm_handle(void *handle);
 bool rtac_make_adm_callback(uint32_t *payload, u32 payload_size);
 void rtac_copy_adm_payload_to_user(void *payload, u32 payload_size);
