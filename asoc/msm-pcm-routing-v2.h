@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef _MSM_PCM_ROUTING_H
 #define _MSM_PCM_ROUTING_H
@@ -845,6 +845,18 @@ int snd_pcm_add_volume_ctls(struct snd_pcm *pcm, int stream,
 
 #endif
 
+struct snd_pcm_va_info
+{
+	struct snd_pcm *pcm;
+	struct snd_kcontrol *kctl;
+	int stream;
+};
+
+int snd_pcm_add_va_ctls(struct snd_pcm *pcm, int stream,
+			   unsigned long private_value,
+			   struct snd_pcm_va_info **info_ret,
+			   struct snd_kcontrol_new *knew);
+
 #ifndef SND_PCM_ADD_USR_CTL
 /*
  * PCM User control API	1450
@@ -865,9 +877,9 @@ struct snd_pcm_usr {
 };
 
 int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
-    const struct snd_pcm_usr_elem *usr,
-    int max_length, int max_control_str_len,
-    unsigned long private_value,
-    struct snd_pcm_usr **info_ret);
+	const struct snd_pcm_usr_elem *usr,
+	int max_length, char *kctl_name,
+	unsigned long private_value,
+	struct snd_pcm_usr **info_ret);
 #endif
 #endif /*_MSM_PCM_H*/

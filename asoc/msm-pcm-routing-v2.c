@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -346,6 +346,51 @@ int snd_pcm_add_volume_ctls(struct snd_pcm *pcm, int stream,
 EXPORT_SYMBOL(snd_pcm_add_volume_ctls);
 #endif
 
+static void pcm_va_ctl_private_free(struct snd_kcontrol *kcontrol)
+{
+	struct snd_pcm_va_info *info = snd_kcontrol_chip(kcontrol);
+
+	kfree(info);
+}
+
+int snd_pcm_add_va_ctls(struct snd_pcm *pcm, int stream,
+			   unsigned long private_value,
+			   struct snd_pcm_va_info **info_ret,
+			   struct snd_kcontrol_new *knew)
+{
+	int err = 0;
+	struct snd_pcm_va_info *info = NULL;
+
+	if (!pcm || !knew)
+		return -EINVAL;
+
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->pcm = pcm;
+	info->stream = stream;
+	knew->device = pcm->device;
+	knew->count = pcm->streams[stream].substream_count;
+	knew->private_value = private_value;
+	info->kctl = snd_ctl_new1(knew, info);
+	if (!info->kctl) {
+		pr_err("%s: snd_ctl_new1 failed");
+		kfree(info);
+		return -ENOMEM;
+	}
+	info->kctl->private_free = pcm_va_ctl_private_free;
+	err = snd_ctl_add(pcm->card, info->kctl);
+	if (err < 0) {
+		kfree(info);
+		return -ENOMEM;
+	}
+	if (info_ret)
+		*info_ret = info;
+	return 0;
+}
+EXPORT_SYMBOL(snd_pcm_add_va_ctls);
+
 #ifndef SND_PCM_ADD_USR_CTL
 static int pcm_usr_ctl_info(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_info *uinfo)
@@ -377,12 +422,11 @@ static void pcm_usr_ctl_private_free(struct snd_kcontrol *kcontrol)
  */
 int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 			 const struct snd_pcm_usr_elem *usr,
-			 int max_length, int max_kctrl_str_len,
+			 int max_length, char *kctl_name,
 			 unsigned long private_value,
 			 struct snd_pcm_usr **info_ret)
 {
 	int err = 0;
-	char *buf = NULL;
 	struct snd_pcm_usr *info;
 	struct snd_kcontrol_new knew = {
 		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -398,26 +442,20 @@ int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 	info->stream = stream;
 	info->usr = usr;
 	info->max_length = max_length;
-	buf = kzalloc(max_kctrl_str_len, GFP_KERNEL);
-	if (!buf) {
-		pr_err("%s: buffer allocation failed\n", __func__);
+	if (kctl_name) {
+		knew.name = kctl_name;
+	} else {
 		kfree(info);
+		pr_err("%s: kctl_name is null\n", __func__);
 		return -ENOMEM;
 	}
-	knew.name = buf;
-	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
-		snprintf(buf, max_kctrl_str_len, "%s %d %s",
-			"Playback", pcm->device, "User kcontrol");
-	else
-		snprintf(buf, max_kctrl_str_len, "%s %d %s",
-			"Capture", pcm->device, "User kcontrol");
+
 	knew.device = pcm->device;
 	knew.count = pcm->streams[stream].substream_count;
 	knew.private_value = private_value;
 	info->kctl = snd_ctl_new1(&knew, info);
 	if (!info->kctl) {
 		kfree(info);
-		kfree(knew.name);
 		pr_err("%s: snd_ctl_new failed\n", __func__);
 		return -ENOMEM;
 	}
@@ -425,14 +463,12 @@ int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
 	err = snd_ctl_add(pcm->card, info->kctl);
 	if (err < 0) {
 		kfree(info);
-		kfree(knew.name);
 		pr_err("%s: snd_ctl_add failed:%d\n", __func__,
 			err);
 		return -ENOMEM;
 	}
 	if (info_ret)
 		*info_ret = info;
-	kfree(knew.name);
 	return 0;
 }
 EXPORT_SYMBOL(snd_pcm_add_usr_ctls);
