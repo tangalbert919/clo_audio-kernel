@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -751,9 +751,11 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 		else if (params_format(params) == SNDRV_PCM_FORMAT_S32_LE)
 			bits_per_sample = 32;
 
-		/* ULL mode is not supported in capture path */
+		/* ULL mode is not supported in capture path so using LLNP insted of ULL */
 		if (pdata->perf_mode == LEGACY_PCM_MODE)
 			prtd->audio_client->perf_mode = LEGACY_PCM_MODE;
+		else if (pdata->perf_mode == ULTRA_LOW_LATENCY_PCM_MODE)
+			prtd->audio_client->perf_mode = LOW_LATENCY_PCM_NOPROC_MODE;
 		else
 			prtd->audio_client->perf_mode = LOW_LATENCY_PCM_MODE;
 
@@ -1251,6 +1253,13 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			xfer = size;
 		offset = prtd->in_frame_info[idx].offset;
 		pr_debug("Offset value = %d\n", offset);
+		if (offset >= size) {
+			pr_err("%s: Invalid dsp buf offset\n", __func__);
+			ret = -EFAULT;
+			q6asm_cpu_buf_release(OUT, prtd->audio_client);
+			goto fail;
+		}
+
 		if (size == 0 || size < prtd->pcm_count) {
 			memset(bufptr + offset + size, 0, prtd->pcm_count - size);
 			if (fbytes > prtd->pcm_count)
@@ -3755,6 +3764,9 @@ static int msm_pcm_probe(struct platform_device *pdev)
 			else if (!strcmp(latency_level, "ull-pp"))
 				pdata->perf_mode =
 					ULL_POST_PROCESSING_PCM_MODE;
+			else if (!strcmp(latency_level, "llnp"))
+				pdata->perf_mode =
+					LOW_LATENCY_PCM_NOPROC_MODE;
 		}
 	} else {
 		pdata->perf_mode = LEGACY_PCM_MODE;

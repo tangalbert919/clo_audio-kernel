@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -345,6 +345,51 @@ int snd_pcm_add_volume_ctls(struct snd_pcm *pcm, int stream,
 }
 EXPORT_SYMBOL(snd_pcm_add_volume_ctls);
 #endif
+
+static void pcm_va_ctl_private_free(struct snd_kcontrol *kcontrol)
+{
+	struct snd_pcm_va_info *info = snd_kcontrol_chip(kcontrol);
+
+	kfree(info);
+}
+
+int snd_pcm_add_va_ctls(struct snd_pcm *pcm, int stream,
+			   unsigned long private_value,
+			   struct snd_pcm_va_info **info_ret,
+			   struct snd_kcontrol_new *knew)
+{
+	int err = 0;
+	struct snd_pcm_va_info *info = NULL;
+
+	if (!pcm || !knew)
+		return -EINVAL;
+
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->pcm = pcm;
+	info->stream = stream;
+	knew->device = pcm->device;
+	knew->count = pcm->streams[stream].substream_count;
+	knew->private_value = private_value;
+	info->kctl = snd_ctl_new1(knew, info);
+	if (!info->kctl) {
+		pr_err("%s: snd_ctl_new1 failed");
+		kfree(info);
+		return -ENOMEM;
+	}
+	info->kctl->private_free = pcm_va_ctl_private_free;
+	err = snd_ctl_add(pcm->card, info->kctl);
+	if (err < 0) {
+		kfree(info);
+		return -ENOMEM;
+	}
+	if (info_ret)
+		*info_ret = info;
+	return 0;
+}
+EXPORT_SYMBOL(snd_pcm_add_va_ctls);
 
 #ifndef SND_PCM_ADD_USR_CTL
 static int pcm_usr_ctl_info(struct snd_kcontrol *kcontrol,
