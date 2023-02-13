@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/init.h>
 #include <linux/err.h>
@@ -26,6 +26,12 @@
 #include <dsp/q6lsm.h>
 #include "msm-pcm-routing-v2.h"
 
+#include <linux/cdev.h>
+#include <linux/file.h>
+
+/*Defines number of minor numbers supported*/
+#define MINOR_NUMBER_COUNT  1
+
 #define DRV_NAME "msm-lsm-client"
 
 #define CAPTURE_MIN_NUM_PERIODS     2
@@ -41,6 +47,60 @@
 
 #define LSM_IS_LAST_STAGE(client, stage_idx) \
 	(client->num_stages == (stage_idx + 1))
+
+#define LSM_ALIGN_4BYTE(x) (((x) + 3) & (~3))
+#define LSM_POINTER_SIZE_32B 4
+#define LSM_32B_ADDR_TRANSLATE(X) (X & 0xffffffff)
+#define LSM_MAX_SESSION_COUNT 8
+
+#define ENABLE_SVA_MIXER_CTL
+#ifdef ENABLE_SVA_MIXER_CTL
+
+/*The below one should be always aligned with that in ST HAL*/
+#define LSM_LUT_CLEAR_INFO  _IOW('U', 0xF0, int)
+
+/*Commands to control LSM module from HAL*/
+enum lsm_ape_control {
+	LSM_START = 1,
+	LSM_STOP_LAB,
+	LSM_ABORT_EVENT,
+	LSM_STOP
+};
+
+/*
+ * lsm cdev:
+ * This is introduced to handle the communcation between
+ * HAL and Kernel layer through IOCTL.
+ * Older implementation was under QGKI flag,
+ * which is removed from Android 13.
+ */
+
+struct lsm_cdev_info
+{
+	int dev_num;
+	int det_status;
+};
+
+struct lsm_char_dev {
+	struct class *cls;
+	struct device *dev;
+	struct cdev cdev;
+	dev_t dev_num;
+};
+
+/*Commands for lookup table*/
+enum
+{
+	SET_INFO = 1,
+	GET_INFO,
+	CLEAR_INFO
+};
+
+#endif
+
+#ifdef ENABLE_SVA_MIXER_CTL
+static struct snd_pcm_substream sub_str_info[LSM_MAX_SESSION_COUNT] = {0};
+#endif
 
 static struct snd_pcm_hardware msm_pcm_hardware_capture = {
 	.info =                 (SNDRV_PCM_INFO_MMAP |
@@ -2860,6 +2920,72 @@ done:
 	return err;
 }
 
+#ifdef ENABLE_SVA_MIXER_CTL
+
+static int msm_lsm_cdev_session_lut(struct snd_pcm_substream *substream, uint8_t operation)
+{
+
+	uint8_t i = 0;
+	int ret = 0;
+
+	if (!substream)
+		return -EINVAL;
+
+	switch (operation)
+	{
+		case SET_INFO:
+			for (i = 0; i < LSM_MAX_SESSION_COUNT; i++)
+				if (sub_str_info[i].pcm == NULL)
+					memcpy(&sub_str_info[i], substream,
+							sizeof(struct snd_pcm_substream));
+				else
+					ret = -ENODEV;
+			break;
+		case GET_INFO:
+			for (i = 0; i < LSM_MAX_SESSION_COUNT; i++)
+			{
+				if (sub_str_info[i].pcm == NULL)
+					continue;
+
+				if (substream->number == sub_str_info[i].pcm->device)
+				{
+					memcpy(substream, &sub_str_info[i],
+							sizeof(struct snd_pcm_substream));
+					ret = 0;
+					break;
+				}
+				else
+				{
+					ret = -ENODEV;
+				}
+			}
+			break;
+		case CLEAR_INFO:
+			for (i = 0; i < LSM_MAX_SESSION_COUNT; i++)
+			{
+				if (sub_str_info[i].pcm == NULL)
+					continue;
+
+				if (substream->number == sub_str_info[i].pcm->device)
+				{
+					memset(&sub_str_info[i], 0,
+							sizeof(struct snd_pcm_substream));
+					ret = 0;
+					break;
+				}
+				else
+				{
+					ret = -ENODEV;
+				}
+			}
+			break;
+		default:
+			ret = -EINVAL;
+	}
+	return ret;
+}
+#endif
+
 static int msm_lsm_open(struct snd_soc_component *component, struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -2939,6 +3065,10 @@ static int msm_lsm_open(struct snd_soc_component *component, struct snd_pcm_subs
 		INIT_LIST_HEAD(&prtd->lsm_client->stage_cfg[i].sound_models);
 
 	prtd->ws = wakeup_source_register(rtd->dev, "lsm-client");
+
+#ifdef ENABLE_SVA_MIXER_CTL
+	msm_lsm_cdev_session_lut(substream, SET_INFO);
+#endif
 
 	return 0;
 }
@@ -3376,7 +3506,6 @@ static int msm_lsm_pcm_copy(struct snd_soc_component *component,
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_lsm_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
@@ -3459,14 +3588,7 @@ static int msm_lsm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	kctl->get = msm_lsm_app_type_cfg_ctl_get;
 	return 0;
 }
-#else
-static int msm_lsm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
-{
-	return 0;
-}
-#endif /* CONFIG_AUDIO_QGKI */
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
 static int msm_lsm_afe_data_ctl_put(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
@@ -3531,12 +3653,924 @@ static int msm_lsm_add_afe_data_controls(struct snd_soc_pcm_runtime *rtd)
 
 	return 0;
 }
-#else
-static int msm_lsm_add_afe_data_controls(struct snd_soc_pcm_runtime *rtd)
+
+#ifdef ENABLE_SVA_MIXER_CTL
+static int get_substream_info(struct snd_kcontrol *kcontrol,
+		struct snd_pcm_substream **substream)
+{
+	struct snd_pcm_va_info *pdata;
+	struct snd_soc_pcm_runtime *soc_prtd;
+
+	pdata = snd_kcontrol_chip(kcontrol);
+	if (!pdata)
+	{
+		pr_err("%s: pdata is NULL", __func__);
+		return -ENODEV;
+	}
+
+	if (!pdata->pcm)
+	{
+		pr_err("%s: pdata->pcm is NULL\n", __func__);
+		return -ENODEV;
+	}
+
+	*substream = pdata->pcm->streams[pdata->stream].substream;
+	if (!(*substream)) {
+		pr_err("%s substream not found\n", __func__);
+		return -ENODEV;
+	}
+
+	soc_prtd = (*substream)->private_data;
+	if (!(*substream)->runtime || !soc_prtd) {
+		pr_err("%s substream runtime or private_data not found\n",
+				__func__);
+		return -ENODEV;
+	}
+
+	return 0;
+
+}
+
+static int msm_lsm_va_ctl_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	int ret;
+	u32 enable = 0;
+	struct lsm_priv *prtd = NULL;
+	struct snd_pcm_runtime *runtime = NULL;
+	struct snd_soc_pcm_runtime *rtd = NULL;
+	struct lsm_params_info_v2 p_info = {0};
+	struct snd_pcm_substream *substream = NULL;
+
+	get_substream_info(kcontrol, &substream);
+
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+	enable = ucontrol->value.integer.value[0];
+	p_info.param_type = LSM_LAB_CONTROL;
+	p_info.module_id = LSM_MODULE_ID_LAB;
+	p_info.instance_id = INSTANCE_ID_0;
+	p_info.stage_idx = LSM_STAGE_INDEX_FIRST;
+	p_info.param_size = 0;
+	ret = msm_lsm_check_and_set_lab_controls(substream, enable, &p_info);
+
+	return ret;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_va_ctl_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
 {
 	return 0;
 }
-#endif /* CONFIG_AUDIO_QGKI */
+
+/*place holder for control get function*/
+static int msm_lsm_va_sess_data_ctl_get(struct snd_kcontrol *kcontrol,
+		unsigned int __user *bytes, unsigned int size)
+{
+	return 0;
+}
+
+static int msm_lsm_va_sess_data_ctl_put(struct snd_kcontrol *kcontrol,
+		const unsigned int __user *bytes, unsigned int size)
+{
+	int ret;
+	int stage_idx;
+	struct lsm_priv *prtd;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_lsm_session_data_v2 ses_data;
+	struct snd_pcm_substream *substream = NULL;
+	uint32_t max_detection_stages_supported = LSM_MAX_STAGES_PER_SESSION;
+
+	get_substream_info(kcontrol, &substream);
+
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+	if (size != sizeof(struct snd_lsm_session_data_v2))
+	{
+		return -EFAULT;
+	}
+
+	if (copy_from_user(&ses_data, bytes, size))
+		pr_err("%s: Error copying from user", __func__);
+
+	if (ses_data.app_id != LSM_VOICE_WAKEUP_APP_ID_V2) {
+		dev_err(rtd->dev,
+				"%s:Invalid App id %d for Listen client\n",
+				__func__, ses_data.app_id);
+		return -EINVAL;
+	}
+
+	/*
+	 * Before validating num_stages from user argument.
+	 * Check ADSP support for multi-stage session,
+	 * and reset max_detection_stages_supported to "1" if required.
+	 */
+	if (!q6lsm_adsp_supports_multi_stage_detection()) {
+		dev_dbg(rtd->dev,
+			"%s: multi-stage session not supported by adsp\n",
+			__func__);
+		max_detection_stages_supported = 1;
+	}
+
+	if (ses_data.num_stages <= 0 ||
+			ses_data.num_stages > max_detection_stages_supported) {
+		dev_err(rtd->dev,
+			"%s: Unsupported number of stages req(%d)/max(%d)\n",
+				__func__, ses_data.num_stages,
+				max_detection_stages_supported);
+		return -EINVAL;
+	}
+
+
+	prtd->lsm_client->app_id = ses_data.app_id;
+	prtd->lsm_client->num_stages = ses_data.num_stages;
+
+	for (stage_idx = LSM_STAGE_INDEX_FIRST;
+			stage_idx < ses_data.num_stages; stage_idx++) {
+		prtd->lsm_client->stage_cfg[stage_idx].app_type =
+			ses_data.stage_info[stage_idx].app_type;
+		prtd->lsm_client->stage_cfg[stage_idx].lpi_enable =
+			ses_data.stage_info[stage_idx].lpi_enable;
+	}
+
+	ret = q6lsm_open(prtd->lsm_client, ses_data.app_id);
+	if (ret < 0) {
+		dev_err(rtd->dev, "%s: lsm open failed, %d\n", __func__, ret);
+		__pm_relax(prtd->ws);
+		return ret;
+	}
+	prtd->lsm_client->opened = true;
+	dev_dbg(rtd->dev, "%s: Session_ID = %d, APP ID = %d, Num stages %d\n",
+		__func__, prtd->lsm_client->session, prtd->lsm_client->app_id,
+			prtd->lsm_client->num_stages);
+
+	return 0;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_module_params_get(struct snd_kcontrol *kcontrol,
+		unsigned int __user *bytes, unsigned int size)
+{
+	return 0;
+}
+
+int pack_lsm_params_info(struct lsm_params_info *temp_ptr_info, void * ptr)
+{
+	int size = 0;
+	uintptr_t ptr_32;
+	temp_ptr_info->module_id = *((__u32 *)ptr);
+	size += LSM_ALIGN_4BYTE(sizeof(__u32));
+	temp_ptr_info->param_id = *((__u32 *)(ptr + size ));
+	size += LSM_ALIGN_4BYTE(sizeof(__u32));
+	temp_ptr_info->param_size = *((__u32 *)(ptr + size ));
+	size += LSM_ALIGN_4BYTE(sizeof(__u32));
+	ptr_32 = (uintptr_t)(*((__u8 **) (ptr + size)));
+	temp_ptr_info->param_data = (__u8 *)LSM_32B_ADDR_TRANSLATE(ptr_32);
+	size += LSM_POINTER_SIZE_32B;
+	temp_ptr_info->param_type = *((__u32 *)(ptr + size));
+	size += LSM_ALIGN_4BYTE(sizeof(__u32));
+
+	/* add size for v2 version members,
+	 * sthal is sending v2 version structure. lsm_params_info_v2
+	 */
+	size += LSM_ALIGN_4BYTE(sizeof(__u32));
+	size += LSM_ALIGN_4BYTE(sizeof(__u32));
+	return size;
+}
+
+static int msm_lsm_module_params_put(struct snd_kcontrol *kcontrol,
+		const unsigned int __user *bytes, unsigned int size)
+{
+	int err;
+	u8 *params;
+	int param_size;
+	u8 *params_temp;
+	uintptr_t ptr_32;
+	void *temp_ptr = NULL;
+	struct lsm_priv *prtd;
+	size_t p_size = 0, count;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct lsm_params_info_v2 info_v2;
+	struct snd_lsm_module_params *p_data = NULL;
+	struct snd_lsm_module_params lsm_params;
+	struct snd_pcm_substream *substream = NULL;
+	struct lsm_params_info temp_ptr_info;
+	struct lsm_params_info_v2 *ptr_info_v2 = NULL;
+
+	get_substream_info(kcontrol, &substream);
+
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+	if (size > sizeof(struct snd_lsm_module_params))
+		return -EFAULT;
+
+	p_data = kzalloc(sizeof(*p_data), GFP_KERNEL);
+	if (!p_data)
+		return -ENOMEM;
+
+	if (copy_from_user(p_data, bytes, size))
+		pr_err("%s: Error copying from user", __func__);
+
+	/*pack lsm_params to handle 32/64 bit issue*/
+	temp_ptr = (void *)p_data;
+	ptr_32 = (uintptr_t)(*((__u8 **) temp_ptr));
+	lsm_params.params = (__u8 *)LSM_32B_ADDR_TRANSLATE(ptr_32);
+	temp_ptr = temp_ptr + LSM_ALIGN_4BYTE(sizeof(__u8));
+	lsm_params.num_params = *((__u32 *) temp_ptr);
+	temp_ptr = temp_ptr + LSM_ALIGN_4BYTE(sizeof(__u32));
+	lsm_params.data_size = *((__u32 *) temp_ptr);
+
+
+	if (lsm_params.num_params > LSM_PARAMS_MAX) {
+		dev_err(rtd->dev, "%s: %s: Invalid num_params %d\n",
+				__func__, "SET_MODULE_PARAMS(_V2)",
+				lsm_params.num_params);
+		return -EINVAL;
+	}
+
+	p_size = lsm_params.num_params *
+			(sizeof(struct lsm_params_info) - LSM_POINTER_SIZE_32B);
+
+	if (lsm_params.data_size != p_size) {
+		dev_err(rtd->dev,
+			"%s: %s: Invalid data_size(%u) against expected(%zd)\n",
+				__func__, "SET_MODULE_PARAMS(_V2)",
+				lsm_params.data_size, p_size);
+		return -EFAULT;
+	}
+
+	params = kzalloc(p_size, GFP_KERNEL);
+	if (!params)
+		return -ENOMEM;
+
+	if (copy_from_user(params, lsm_params.params,
+				lsm_params.data_size)) {
+		dev_err(rtd->dev,
+				"%s: %s: copy_from_user failed, size = %d\n",
+				__func__, "set module params", lsm_params.data_size);
+		kfree(params);
+		return -EFAULT;
+	}
+
+	memset(&info_v2, 0, sizeof(info_v2));
+
+	params_temp = params;
+
+	for (count = 0; count < lsm_params.num_params; count++) {
+		/* convert to V2 param info struct from legacy param info */
+		param_size = pack_lsm_params_info(&temp_ptr_info, params);
+		info_v2.module_id = temp_ptr_info.module_id;
+		info_v2.param_id = temp_ptr_info.param_id;
+		info_v2.param_size = temp_ptr_info.param_size;
+		info_v2.param_data = temp_ptr_info.param_data;
+		info_v2.param_type = temp_ptr_info.param_type;
+
+		info_v2.instance_id = INSTANCE_ID_0;
+		info_v2.stage_idx = LSM_STAGE_INDEX_FIRST;
+		info_v2.model_id = 0;
+
+		ptr_info_v2 = &info_v2;
+		params = params + param_size;
+
+		err = msm_lsm_process_params(substream, ptr_info_v2);
+		if (err)
+			dev_err(rtd->dev,
+				"%s: Failed to process param, type=%d stage=%d err=%d\n",
+					__func__, ptr_info_v2->param_type,
+					ptr_info_v2->stage_idx, err);
+	}
+	kfree(params_temp);
+	kfree(p_data);
+	return 0;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_fwk_mode_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+static int msm_lsm_fwk_mode_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	u32 mode;
+	int ret = 0;
+	struct lsm_priv *prtd;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_pcm_substream *substream;
+
+
+	get_substream_info(kcontrol, &substream);
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+	mode = ucontrol->value.integer.value[0];
+
+	if (prtd->lsm_client->event_mode == mode) {
+		dev_dbg(rtd->dev,
+			"%s: mode for %d already set to %d\n",
+			__func__, prtd->lsm_client->session, mode);
+		ret = 0;
+	}
+	else {
+		dev_dbg(rtd->dev, "%s: Event mode = %d\n",
+				__func__, mode);
+		ret = q6lsm_set_fwk_mode_cfg(prtd->lsm_client, mode);
+		if (!ret)
+			prtd->lsm_client->event_mode = mode;
+		else
+			dev_err(rtd->dev,
+				"%s: set event mode failed %d\n",
+				__func__, ret);
+	}
+
+	return ret;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_port_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+static int msm_lsm_port_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	struct lsm_priv *prtd;
+	struct snd_pcm_runtime *runtime;
+	struct snd_pcm_substream *substream;
+
+	get_substream_info(kcontrol, &substream);
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	ret = q6lsm_set_port_connected(prtd->lsm_client);
+	return 0;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_ape_control_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+static int msm_lsm_ape_control_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	struct lsm_priv *prtd;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_pcm_substream *substream;
+	int operation = ucontrol->value.integer.value[0];
+
+	get_substream_info(kcontrol, &substream);
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+	switch (operation) {
+	case LSM_START:
+		dev_dbg(rtd->dev, "%s: Starting LSM client session\n",
+				__func__);
+		if (!prtd->lsm_client->started) {
+			ret = q6lsm_start(prtd->lsm_client, true);
+			if (!ret) {
+				prtd->lsm_client->started = true;
+				dev_dbg(rtd->dev, "%s: LSM client session started\n",
+						__func__);
+			}
+		}
+		break;
+	case LSM_STOP:
+		dev_dbg(rtd->dev,
+				"%s: Stopping LSM client session\n",
+				__func__);
+		if (prtd->lsm_client->started) {
+			if (prtd->lsm_client->lab_enable) {
+				atomic_set(&prtd->read_abort, 1);
+				if (prtd->lsm_client->lab_started) {
+					ret = q6lsm_stop_lab(prtd->lsm_client);
+					if (ret)
+						dev_err(rtd->dev,
+						"%s: stop lab failed rc %d\n",
+								__func__, ret);
+					prtd->lsm_client->lab_started = false;
+				}
+			}
+
+			if (!atomic_read(&prtd->read_abort)) {
+				dev_dbg(rtd->dev,
+					"%s: set read_abort to stop buffering\n",
+					__func__);
+				atomic_set(&prtd->read_abort, 1);
+			}
+			ret = q6lsm_stop(prtd->lsm_client, true);
+			if (!ret)
+				dev_dbg(rtd->dev,
+					"%s: LSM client session stopped %d\n",
+						__func__, ret);
+			prtd->lsm_client->started = false;
+		}
+		break;
+	case LSM_STOP_LAB:
+		dev_dbg(rtd->dev, "%s: stopping LAB\n", __func__);
+		if (prtd->lsm_client->lab_enable &&
+				prtd->lsm_client->lab_started) {
+			atomic_set(&prtd->read_abort, 1);
+			ret = q6lsm_stop_lab(prtd->lsm_client);
+			if (ret)
+				dev_err(rtd->dev,
+				"%s: Lab stop failed for session %d rc %d\n",
+						__func__,
+					prtd->lsm_client->session, ret);
+			prtd->lsm_client->lab_started = false;
+		}
+		break;
+	case LSM_ABORT_EVENT:
+		dev_dbg(rtd->dev, "%s: Aborting event status wait\n",
+				__func__);
+		atomic_set(&prtd->event_wait_stop, 1);
+		wake_up(&prtd->event_wait);
+		break;
+	}
+	return 0;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_reg_snd_model_get(struct snd_kcontrol *kcontrol,
+		unsigned int __user *bytes, unsigned int size)
+{
+	return 0;
+}
+
+static int msm_lsm_reg_snd_model_put(struct snd_kcontrol *kcontrol,
+		const unsigned int __user *bytes, unsigned int size)
+{
+	/*
+	 * With multi-stage support sm buff allocation/free usage param info
+	 * to check stage index for which this sound model is being set, and
+	 * to check whether sm data is sent using set param command or not.
+	 * Hence, set param ids to '0' to indicate allocation is for legacy
+	 * reg_sm cmd, where buffer for param header need not be allocated,
+	 * also set stage index to LSM_STAGE_INDEX_FIRST.
+	 */
+	int rc = 0;
+	struct lsm_priv *prtd;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct lsm_sound_model *sm = NULL;
+	struct snd_pcm_substream *substream;
+	struct lsm_params_info_v2 p_info = {0};
+	struct snd_lsm_sound_model_v2 snd_model_v2;
+
+	get_substream_info(kcontrol, &substream);
+
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+	p_info.stage_idx = LSM_STAGE_INDEX_FIRST;
+	p_info.param_type = LSM_DEREG_SND_MODEL;
+	sm = &prtd->lsm_client->stage_cfg[p_info.stage_idx].sound_model;
+
+	dev_dbg(rtd->dev, "%s: Registering sound model V2\n",
+			__func__);
+	if (copy_from_user(&snd_model_v2, bytes,
+			sizeof(struct snd_lsm_sound_model_v2))) {
+		dev_err(rtd->dev, "%s: copy_from_user failed\n",
+				__func__);
+		return -EFAULT;
+	}
+	if (snd_model_v2.num_confidence_levels >
+			MAX_NUM_CONFIDENCE) {
+		dev_err(rtd->dev,
+				"%s: Invalid conf_levels = %d, maximum allowed = %d\n",
+				__func__, snd_model_v2.num_confidence_levels,
+				MAX_NUM_CONFIDENCE);
+		return -EINVAL;
+	}
+	rc = q6lsm_snd_model_buf_alloc(prtd->lsm_client,
+			snd_model_v2.data_size, &p_info, sm);
+	if (rc) {
+		dev_err(rtd->dev,
+				"%s: q6lsm buffer alloc failed V2, size %d\n",
+				__func__, snd_model_v2.data_size);
+		return rc;
+	}
+	if (memcpy(sm->data, snd_model_v2.data,
+				snd_model_v2.data_size)) {
+		dev_err(rtd->dev,
+				"%s: copy from user data failed\n"
+				"data %pK size %d\n", __func__,
+				snd_model_v2.data, snd_model_v2.data_size);
+		q6lsm_snd_model_buf_free(prtd->lsm_client, &p_info, sm);
+		return -EFAULT;
+	}
+
+	dev_dbg(rtd->dev, "SND Model Magic no byte[0] %x,\n"
+			"byte[1] %x, byte[2] %x byte[3] %x\n",
+			snd_model_v2.data[0], snd_model_v2.data[1],
+			snd_model_v2.data[2], snd_model_v2.data[3]);
+	prtd->lsm_client->num_confidence_levels =
+		snd_model_v2.num_confidence_levels;
+
+	rc = msm_lsm_get_conf_levels(prtd->lsm_client,
+			snd_model_v2.confidence_level);
+	if (rc) {
+		dev_err(rtd->dev,
+				"%s: get_conf_levels failed, err = %d\n",
+				__func__, rc);
+		return rc;
+	}
+
+	rc = q6lsm_register_sound_model(prtd->lsm_client,
+			snd_model_v2.detection_mode,
+			snd_model_v2.detect_failure);
+	if (rc < 0) {
+		dev_err(rtd->dev,
+				"%s: Register snd Model v2 failed =%d\n",
+				__func__, rc);
+		q6lsm_snd_model_buf_free(prtd->lsm_client, &p_info, sm);
+	}
+	if (prtd->lsm_client->confidence_levels) {
+		kfree(prtd->lsm_client->confidence_levels);
+		prtd->lsm_client->confidence_levels = NULL;
+	}
+	return 0;
+}
+
+/*place holder for control get function*/
+static int msm_lsm_input_hw_params_get(struct snd_kcontrol *kcontrol,
+		unsigned int __user *bytes, unsigned int size)
+{
+	return 0;
+}
+
+static int msm_lsm_input_hw_params_put(struct snd_kcontrol *kcontrol,
+		const unsigned int __user *bytes, unsigned int size)
+{
+	struct lsm_priv *prtd;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct lsm_hw_params *in_params;
+	struct snd_pcm_substream *substream;
+	struct snd_lsm_input_hw_params params;
+
+	get_substream_info(kcontrol, &substream);
+
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+	if (copy_from_user(&params, bytes, size)) {
+		dev_err(rtd->dev, "%s: %s: copy_from_user failed\n",
+				__func__, "LSM_SET_INPUT_HW_PARAMS");
+		__pm_relax(prtd->ws);
+		return -EFAULT;
+	}
+
+	in_params = &prtd->lsm_client->in_hw_params;
+	in_params->sample_rate = params.sample_rate;
+	in_params->sample_size = params.bit_width;
+	in_params->num_chs = params.num_channels;
+
+	return 0;
+}
+
+/*place holder for control put function*/
+static int msm_lsm_det_event_info_put(struct snd_kcontrol *kcontrol,
+		const unsigned int __user *bytes, unsigned int size)
+{
+	return 0;
+}
+
+static int msm_lsm_det_event_info_get(struct snd_kcontrol *kcontrol,
+		unsigned int __user *bytes, unsigned int size)
+{
+	int err = 0;
+	struct lsm_priv *prtd;
+	unsigned long flags = 0;
+	int user_payload_size = 0;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_lsm_event_status *user;
+	struct snd_pcm_substream *substream;
+	uint16_t status = 0, payload_size = 0;
+
+	if (get_substream_info(kcontrol, &substream))
+		return 0;
+
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+	rtd = substream->private_data;
+
+
+	user_payload_size = size - sizeof(struct snd_lsm_event_status);
+
+	if (user_payload_size > LISTEN_MAX_STATUS_PAYLOAD_SIZE) {
+		dev_err(rtd->dev,
+			"%s: payload_size %d is invalid, max allowed = %d\n",
+				__func__, user_payload_size,
+				LISTEN_MAX_STATUS_PAYLOAD_SIZE);
+		return -EFAULT;
+	}
+
+	user = kzalloc(size, GFP_KERNEL);
+	if (!user)
+		return -ENOMEM;
+
+	user->payload_size = user_payload_size;
+
+	mutex_lock(&prtd->lsm_api_lock);
+
+	{
+		dev_dbg(rtd->dev, "%s: %s: New event available %ld\n",
+				__func__, "SNDRV_LSM_GENERIC_DET_EVENT",
+				prtd->event_avail);
+
+		spin_lock_irqsave(&prtd->event_lock, flags);
+
+		if (prtd->det_event) {
+			payload_size = prtd->det_event->payload_size;
+			status = prtd->det_event->status;
+			spin_unlock_irqrestore(&prtd->event_lock,
+					flags);
+		}
+		else {
+			spin_unlock_irqrestore(&prtd->event_lock,
+					flags);
+			dev_err(rtd->dev,
+					"%s: %s: prtd->event_status is NULL\n",
+					__func__,
+					"SNDRV_LSM_GENERIC_DET_EVENT");
+			return -EINVAL;
+		}
+
+		if (user->payload_size < payload_size) {
+			dev_err(rtd->dev,
+				"%s: provided %d bytes isn't enough, needs %d bytes\n",
+					__func__, user->payload_size,
+					payload_size);
+			spin_unlock_irqrestore(&prtd->event_lock,
+					flags);
+			return -ENOMEM;
+		}
+
+		user->status = status;
+		user->payload_size = payload_size;
+		memcpy(user->payload, prtd->det_event->payload,
+				payload_size);
+		spin_unlock_irqrestore(&prtd->event_lock,
+					flags);
+
+		err =  msm_lsm_start_lab_buffer(prtd, status);
+	}
+
+	mutex_unlock(&prtd->lsm_api_lock);
+
+	if (!access_ok(bytes, size)) {
+		dev_err(rtd->dev,
+				"%s: Failed to verify write, size = %d\n",
+				__func__, size);
+		kfree(user);
+		return -EFAULT;
+	}
+
+	if (copy_to_user(bytes, user, size)) {
+		dev_err(rtd->dev,
+				"%s: Failed to copy payload to user, size = %d",
+				__func__, size);
+		return -EFAULT;
+	}
+	kfree(user);
+	return 0;
+}
+
+static int msm_lsm_fwk_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = INT_MAX;
+	return 0;
+}
+
+static int msm_lsm_port_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = INT_MAX;
+	return 0;
+}
+
+static int msm_lsm_ape_control_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = INT_MAX;
+	return 0;
+}
+
+static int msm_lsm_va_ctl_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = INT_MAX;
+	return 0;
+}
+
+static int msm_va_sess_data_ctl_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count = sizeof(struct snd_lsm_session_data_v2);
+	params->get = msm_lsm_va_sess_data_ctl_get;
+	params->put = msm_lsm_va_sess_data_ctl_put;
+	params->max = uinfo->count;
+	return 0;
+}
+
+static int msm_va_module_params_ctl_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count = sizeof(struct snd_lsm_module_params);
+	params->get = msm_lsm_module_params_get;
+	params->put = msm_lsm_module_params_put;
+	params->max = uinfo->count;
+	return 0;
+}
+
+static int msm_va_reg_snd_model_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count = sizeof(struct snd_lsm_sound_model_v2);
+	params->get = msm_lsm_reg_snd_model_get;
+	params->put = msm_lsm_reg_snd_model_put;
+	params->max = uinfo->count;
+	return 0;
+}
+
+static int msm_va_input_hw_params_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count = sizeof(struct snd_lsm_input_hw_params);
+	params->get = msm_lsm_input_hw_params_get;
+	params->put = msm_lsm_input_hw_params_put;
+	params->max = uinfo->count;
+	return 0;
+}
+
+static int msm_va_get_det_event_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count = 512;
+	params->get = msm_lsm_det_event_info_get;
+	params->put = msm_lsm_det_event_info_put;
+	params->max = uinfo->count;
+	return 0;
+}
+
+struct snd_kcontrol_new va_mixer_ctl[] = {
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+			SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.name	= "LSM LAB_CONTROL SET",
+		.info = msm_lsm_va_ctl_info,
+		.get = msm_lsm_va_ctl_get,
+		.put = msm_lsm_va_ctl_put
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+			SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.name	= "LSM FWK_MODE SET",
+		.info = msm_lsm_fwk_info,
+		.get = msm_lsm_fwk_mode_get,
+		.put = msm_lsm_fwk_mode_put
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+			SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.name = "LSM PORT SET",
+		.info = msm_lsm_port_info,
+		.get = msm_lsm_port_get,
+		.put = msm_lsm_port_put
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+			SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.name	= "LSM APE_CONTROL CMD",
+		.info = msm_lsm_ape_control_info,
+		.get = msm_lsm_ape_control_get,
+		.put = msm_lsm_ape_control_put
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK,
+		.name	= "LSM SESSION_DATA SET",
+		.tlv.c	= snd_soc_bytes_tlv_callback,
+		.info = msm_va_sess_data_ctl_info,
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK,
+		.name	= "LSM MODULE_PARAMS SET",
+		.tlv.c	= snd_soc_bytes_tlv_callback,
+		.info = msm_va_module_params_ctl_info,
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK,
+		.name	= "LSM SND_MODEL REG",
+		.tlv.c	= snd_soc_bytes_tlv_callback,
+		.info = msm_va_reg_snd_model_info,
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK,
+		.name	= "LSM DET_EVENT_INFO GET",
+		.tlv.c	= snd_soc_bytes_tlv_callback,
+		.info = msm_va_get_det_event_info,
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK,
+		.name	= "LSM INPUT_HW_PARAMS SET",
+		.tlv.c	= snd_soc_bytes_tlv_callback,
+		.info = msm_va_input_hw_params_info,
+	}
+};
+
+static int msm_lsm_add_va_controls(struct snd_soc_pcm_runtime *rtd)
+{
+	int i = 0;
+	int ret = 0;
+	struct soc_bytes_ext *sbe;
+	unsigned long pvt_value = 0;
+	struct snd_pcm *pcm = rtd->pcm;
+	struct snd_pcm_va_info *va_dev_info = NULL;
+
+
+	for (i = 0; i < ARRAY_SIZE(va_mixer_ctl); i++)
+	{
+		if (va_mixer_ctl[i].tlv.c &&
+				(va_mixer_ctl[i].access &
+				 SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK))
+		{
+			sbe = kzalloc(sizeof(*sbe), GFP_KERNEL);
+			if (sbe == NULL)
+				return -ENOMEM;
+			pvt_value = (long)sbe;
+		}
+		pvt_value = (pvt_value == 0) ? rtd->dai_link->id : pvt_value;
+		ret = snd_pcm_add_va_ctls(pcm, SNDRV_PCM_STREAM_CAPTURE,
+				pvt_value, &va_dev_info, &va_mixer_ctl[i]);
+		if (ret < 0) {
+			pr_err("%s adding va control failed ret %d\n", __func__, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 static int msm_lsm_add_controls(struct snd_soc_pcm_runtime *rtd)
 {
@@ -3550,6 +4584,11 @@ static int msm_lsm_add_controls(struct snd_soc_pcm_runtime *rtd)
 	if (ret)
 		pr_err("%s, add afe data controls failed:%d\n", __func__, ret);
 
+#ifdef ENABLE_SVA_MIXER_CTL
+	ret = msm_lsm_add_va_controls(rtd);
+	if (ret)
+		pr_err("%s, add va controls failed: %d\n", __func__, ret);
+#endif
 	return ret;
 }
 
@@ -3589,15 +4628,203 @@ static struct snd_soc_component_driver msm_soc_component = {
 	.probe		= msm_asoc_lsm_probe,
 };
 
+#ifdef ENABLE_SVA_MIXER_CTL
+static int msm_lsm_cdev_open(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static int msm_lsm_cdev_close(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static long msm_lsm_cdev_ioctl(struct file *file,
+			unsigned int ioctl, unsigned long arg)
+{
+	int rc = 0;
+	int xchg = 0;
+	unsigned long flags = 0;
+	struct lsm_priv *prtd = NULL;
+	struct lsm_cdev_info lsm_info;
+	struct snd_pcm_runtime *runtime;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_pcm_substream substream;
+
+	switch (ioctl) {
+	case SNDRV_LSM_GENERIC_DET_EVENT:
+		if (copy_from_user(&lsm_info, (void *)arg,sizeof(lsm_info)))
+			goto done;
+		/*Using substream.number to pass the device number*/
+		substream.number = lsm_info.dev_num;
+		if (msm_lsm_cdev_session_lut(&substream, GET_INFO))
+		{
+			pr_err(" %s Failed to get the required data", __func__);
+			return -EFAULT;
+		}
+		runtime = substream.runtime;
+		prtd = runtime->private_data;
+		rtd = substream.private_data;
+
+		atomic_set(&prtd->event_wait_stop, 0);
+
+		rc = wait_event_freezable(prtd->event_wait,
+				(cmpxchg(&prtd->event_avail, 1, 0) ||
+				 (xchg = atomic_cmpxchg(&prtd->event_wait_stop,
+							1, 0))));
+		mutex_lock(&prtd->lsm_api_lock);
+
+		dev_dbg(rtd->dev, "%s: wait_event_freezable %d event_wait_stop %d\n",
+				__func__, rc, xchg);
+
+		if (!rc && !xchg) {
+			dev_dbg(rtd->dev, "%s: %s: New event available %ld\n",
+					__func__, "SNDRV_LSM_GENERIC_DET_EVENT",
+					prtd->event_avail);
+
+			spin_lock_irqsave(&prtd->event_lock, flags);
+
+
+			if (prtd->det_event) {
+				lsm_info.det_status = prtd->det_event->status;
+				spin_unlock_irqrestore(&prtd->event_lock,
+						flags);
+			} else {
+				spin_unlock_irqrestore(&prtd->event_lock,
+						flags);
+				dev_dbg(rtd->dev,
+					"%s: %s: prtd->event_status is NULL\n",
+						__func__,
+						"SNDRV_LSM_GENERIC_DET_EVENT");
+				rc = -EINVAL;
+				break;
+			}
+
+		} else if (xchg) {
+			lsm_info.det_status = 0;
+			dev_dbg(rtd->dev, "%s: %s: Wait aborted\n",
+					__func__, "SNDRV_LSM_GENERIC_DET_EVENT");
+			rc = 0;
+		}
+		mutex_unlock(&prtd->lsm_api_lock);
+
+		if (copy_to_user((void *)arg, &lsm_info, sizeof(lsm_info)))
+		{
+			pr_err("%s: copy to user failed", __func__);
+		}
+		__pm_relax(prtd->ws);
+		break;
+		case LSM_LUT_CLEAR_INFO:
+		{
+			struct snd_pcm_substream substream;
+			substream.number = (int)arg;
+			if (msm_lsm_cdev_session_lut(&substream, CLEAR_INFO))
+				pr_err("%s: LUT clear info failed", __func__);
+		}
+		break;
+		default:
+		pr_err("Received cmd : 0x%x", ioctl);
+	}
+	return 0;
+done:
+	return -EFAULT;
+}
+
+static const struct file_operations lsm_cdev_fops = {
+	.owner          =       THIS_MODULE,
+	.unlocked_ioctl =       msm_lsm_cdev_ioctl,
+	.compat_ioctl   =       msm_lsm_cdev_ioctl,
+	.open           =       msm_lsm_cdev_open,
+	.release        =       msm_lsm_cdev_close,
+};
+
+static int msm_lsm_create_char_dev(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct lsm_char_dev *lsm_dev;
+	char *cdev_name = "msm_lsm_cdev";
+
+
+	lsm_dev = devm_kzalloc(&pdev->dev, sizeof(*lsm_dev), GFP_KERNEL);
+	if (!lsm_dev) {
+		ret = -ENOMEM;
+		return ret;
+	}
+
+	ret = alloc_chrdev_region(&lsm_dev->dev_num, 0, MINOR_NUMBER_COUNT,
+			cdev_name);
+	if (ret < 0) {
+		pr_err("%s: Failed to alloc char dev %s, err %d\n",
+				__func__, cdev_name, ret);
+		return ret;
+	}
+
+	lsm_dev->cls = class_create(THIS_MODULE, cdev_name);
+	if (IS_ERR(lsm_dev->cls)) {
+		ret = PTR_ERR(lsm_dev->cls);
+		pr_err("%s: Failed to create class, dev %s, err %d\n",
+				__func__, cdev_name, ret);
+		goto unregister_chrdev;
+	}
+
+	lsm_dev->dev = device_create(lsm_dev->cls,
+				NULL, lsm_dev->dev_num, NULL, cdev_name);
+	if (IS_ERR(lsm_dev->dev)) {
+		ret = PTR_ERR(lsm_dev->dev);
+		pr_err("%s: Failed to create device, dev %s, err %d\n",
+				__func__, cdev_name, ret);
+		goto destroy_class;
+	}
+
+	cdev_init(&lsm_dev->cdev, &lsm_cdev_fops);
+	ret = cdev_add(&lsm_dev->cdev, lsm_dev->dev_num, MINOR_NUMBER_COUNT);
+	if (ret < 0) {
+		pr_err("%s: Failed to register char dev %s, err %d\n",
+				__func__, cdev_name, ret);
+		goto destroy_device;
+	}
+
+	dev_set_drvdata(&pdev->dev, lsm_dev);
+
+	return 0;
+
+destroy_device:
+	device_destroy(lsm_dev->cls, lsm_dev->dev_num);
+destroy_class:
+	class_destroy(lsm_dev->cls);
+unregister_chrdev:
+	unregister_chrdev_region(0, 1);
+	return ret;
+}
+
+static int msm_lsm_destroy_char_dev(struct lsm_char_dev *lsm_dev)
+{
+	cdev_del(&lsm_dev->cdev);
+	device_destroy(lsm_dev->cls, lsm_dev->dev_num);
+	class_destroy(lsm_dev->cls);
+	unregister_chrdev_region(0, 1);
+
+	return 0;
+}
+#endif
+
 static int msm_lsm_probe(struct platform_device *pdev)
 {
-
+#ifdef ENABLE_SVA_MIXER_CTL
+	msm_lsm_create_char_dev(pdev);
+#endif
 	return snd_soc_register_component(&pdev->dev, &msm_soc_component,
 					  NULL, 0);
 }
 
 static int msm_lsm_remove(struct platform_device *pdev)
 {
+#ifdef ENABLE_SVA_MIXER_CTL
+	struct lsm_char_dev *lsm_dev;
+	lsm_dev = dev_get_drvdata(&pdev->dev);
+
+	msm_lsm_destroy_char_dev(lsm_dev);
+#endif
 	snd_soc_unregister_component(&pdev->dev);
 
 	return 0;
