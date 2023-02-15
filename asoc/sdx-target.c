@@ -27,7 +27,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
  * DAMAGE.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -3081,7 +3081,7 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 	},
 	{
 		.name = "Primary MI2S TX Hostless",
-		.stream_name = "Primary MI2S_TX Hostless Playback",
+		.stream_name = "Primary MI2S_TX Hostless Capture",
 		.dynamic = 1,
 		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
@@ -3207,7 +3207,7 @@ static struct snd_soc_dai_link sdx_common_dai_links[] = {
 	},
 	{
 		.name = "Secondary MI2S TX Hostless",
-		.stream_name = "Secondary MI2S_TX Hostless Playback",
+		.stream_name = "Secondary MI2S_TX Hostless Capture",
 		.dynamic = 1,
 		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,

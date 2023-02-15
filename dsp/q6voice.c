@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/kthread.h>
@@ -8018,6 +8018,7 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 				__func__);
 
 		apr_reset(c->apr_q6_cvs);
+		rtac_reset_voice();
 		c->apr_q6_cvs = NULL;
 
 		/* Sub-system restart is applicable to all sessions. */
@@ -8047,7 +8048,7 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 	}
 
 	if (data->opcode == APR_BASIC_RSP_RESULT) {
-		if (data->payload_size) {
+		if (data->payload_size >= (2 * sizeof(uint32_t))) {
 			ptr = data->payload;
 
 			pr_debug("%x %x\n", ptr[0], ptr[1]);

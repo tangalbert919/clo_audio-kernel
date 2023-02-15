@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -1584,6 +1585,7 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			data->reset_event, data->reset_proc, this_adm.apr);
 		if (this_adm.apr)
 			adm_reset_data();
+		rtac_reset_adm();
 		return 0;
 	}
 

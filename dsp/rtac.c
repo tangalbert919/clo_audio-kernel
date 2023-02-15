@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/fs.h>
@@ -555,6 +556,12 @@ void rtac_remove_popp_from_adm_devices(u32 popp_id)
 	mutex_unlock(&rtac_adm_mutex);
 }
 
+void rtac_reset_adm(void)
+{
+	mutex_lock(&rtac_adm_mutex);
+	memset(&rtac_adm_data, 0, sizeof(rtac_adm_data));
+	mutex_unlock(&rtac_adm_mutex);
+}
 
 /* Voice Info */
 static void set_rtac_voice_data(int idx, u32 cvs_handle, u32 cvp_handle,
@@ -658,6 +665,13 @@ void rtac_remove_voice(u32 cvs_handle)
 			break;
 		}
 	}
+	mutex_unlock(&rtac_voice_mutex);
+}
+
+void rtac_reset_voice(void)
+{
+	mutex_lock(&rtac_voice_mutex);
+	memset(&rtac_voice_data, 0, sizeof(rtac_voice_data));
 	mutex_unlock(&rtac_voice_mutex);
 }
 
