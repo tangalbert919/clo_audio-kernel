@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /*
  * Add support for 24 and 32bit format for ASM loopback and playback session.
@@ -320,11 +320,30 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 
 	pcm->volume = 0x2000;
 
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		long wait_time = MSM_PCM_PLAYBACK_MAX_WAIT;
 		pcm->playback_substream = substream;
-	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+
+		if (runtime->rate) {
+			long t = runtime->period_size * 2 /
+				runtime->rate;
+			wait_time = max(t, wait_time);
+		}
+
+		substream->wait_time = msecs_to_jiffies(wait_time * 1000);
+
+	} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		long wait_time = MSM_PCM_CAPTURE_MAX_WAIT;
 		pcm->capture_substream = substream;
 
+		if (runtime->rate) {
+			long t = runtime->period_size * 2 /
+				runtime->rate;
+			wait_time = max(t, wait_time);
+		}
+
+		substream->wait_time = msecs_to_jiffies(wait_time * 1000);
+	}
 	pcm->instance++;
 	dev_dbg(component->dev, "%s: pcm out open: %d,%d\n", __func__,
 			pcm->instance, substream->stream);
