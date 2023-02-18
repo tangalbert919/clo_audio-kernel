@@ -9,8 +9,12 @@ endif
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(shell pwd)/kernel/msm-5.4
-	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
+	ifeq ($(TARGET_SUPPORT), sa525m)
+		AUDIO_ROOT := $(shell pwd)/../../../../vendor/qcom/opensource/audio-kernel
+	else
+		AUDIO_BLD_DIR := $(shell pwd)/kernel/msm-5.4
+		AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
+	endif
 endif
 
 ifeq ($(TARGET_SUPPORT), sa525m)
@@ -29,6 +33,16 @@ ifeq ($(CONFIG_SND_SOC_AUTO), y)
 		include $(AUDIO_ROOT)/config/sa6155auto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sa6155autoconf.h
+	endif
+	ifdef CONFIG_SND_SOC_GVM
+		include $(AUDIO_ROOT)/config/gvmauto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/gvmautoconf.h
+	endif
+	ifdef CONFIG_SND_SOC_SA8255
+		include $(AUDIO_ROOT)/config/sa8255auto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/sa8255autoconf.h
 	endif
 else
 ifeq ($(KERNEL_BUILD), 0)
@@ -64,6 +78,10 @@ ifeq ($(KERNEL_BUILD), 0)
 		include $(AUDIO_ROOT)/config/bengalauto.conf
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/bengalautoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_MONACO), y)
+		include $(AUDIO_ROOT)/config/monacoauto.conf
+		INCS    +=  -include $(AUDIO_ROOT)/config/monacoautoconf.h
 	endif
 	ifeq ($(CONFIG_ARCH_SM6150), y)
 		ifdef CONFIG_SND_SOC_SA6155

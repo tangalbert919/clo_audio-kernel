@@ -1,5 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +9,16 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
-#define CONFIG_SND_SOC_GVM_AUTO_SPF 1
+#define CONFIG_MSM_QDSP6_SSR 1
+#define CONFIG_MSM_ADSP_LOADER 1
+#define CONFIG_MSM_QDSP6_NOTIFIER 1
+#define CONFIG_SND_SOC_MSM_QDSP6V2_INTF 1
+#define CONFIG_SND_SOC_QDSP6V2 1
+#define CONFIG_MSM_QDSP6_GPR_RPMSG 1
+#define CONFIG_AUDIO_PKT 1
+#define CONFIG_AUDIO_PKT_ION 1
+#define CONFIG_AUDIO_PRM 1
+#define CONFIG_SPF_CORE 1
+#define CONFIG_SND_EVENT 1
 #define CONFIG_SND_SOC_MSM_STUB 1
+#define CONFIG_SND_SOC_SA8255_AUTO_SPF 1

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -20,6 +20,7 @@
 #include <linux/of_device.h>
 #include <linux/export.h>
 #include <linux/ioctl.h>
+#include <linux/compat.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/device.h>
@@ -80,7 +81,7 @@ struct msm_audio_fd_data {
 	int fd;
 	size_t plen;
 	void *handle;
-	dma_addr_t paddr;
+	u64 paddr;
 	struct device *dev;
 	struct list_head list;
 	bool hyp_assign;
@@ -101,6 +102,7 @@ static void msm_audio_ion_add_allocation(
 	mutex_unlock(&(msm_audio_ion_data->list_mutex));
 }
 
+/* This function is called with ion_data list mutex lock */
 static int msm_audio_ion_map_kernel(struct dma_buf *dma_buf,
 	struct msm_audio_ion_private *ion_data, struct dma_buf_map *dma_vmap)
 {
@@ -138,6 +140,7 @@ exit:
 	return rc;
 }
 
+/* This function is called with ion_data list mutex lock */
 static int msm_audio_dma_buf_map(struct dma_buf *dma_buf,
 				 dma_addr_t *addr, size_t *len, bool is_iova,
 				 struct msm_audio_ion_private *ion_data)
@@ -230,7 +233,6 @@ static int msm_audio_dma_buf_unmap(struct dma_buf *dma_buf, struct msm_audio_ion
 	 * should be explicitly acquired to avoid race condition
 	 * on adding elements to the list.
 	 */
-	mutex_lock(&(ion_data->list_mutex));
 	list_for_each_safe(ptr, next,
 			    &(ion_data->alloc_list)) {
 
@@ -255,7 +257,6 @@ static int msm_audio_dma_buf_unmap(struct dma_buf *dma_buf, struct msm_audio_ion
 			break;
 		}
 	}
-	mutex_unlock(&(ion_data->list_mutex));
 
 	if (!found) {
 		dev_err(cb_dev,
@@ -268,17 +269,19 @@ static int msm_audio_dma_buf_unmap(struct dma_buf *dma_buf, struct msm_audio_ion
 }
 
 static int msm_audio_ion_get_phys(struct dma_buf *dma_buf,
-				  dma_addr_t *addr, size_t *len, bool is_iova,
+				  u64 *addr, size_t *len, bool is_iova,
 				  struct msm_audio_ion_private *ion_data)
 {
 	int rc = 0;
+	dma_addr_t paddr;
 
-	rc = msm_audio_dma_buf_map(dma_buf, addr, len, is_iova, ion_data);
+	rc = msm_audio_dma_buf_map(dma_buf, &paddr, len, is_iova, ion_data);
 	if (rc) {
 		pr_err("%s: failed to map DMA buf, err = %d\n",
 			__func__, rc);
 		goto err;
 	}
+	*addr = paddr;
 	if (ion_data->smmu_enabled && is_iova) {
 		/* Append the SMMU SID information to the IOVA address */
 		*addr |= ion_data->smmu_sid_bits;
@@ -300,7 +303,6 @@ static int msm_audio_ion_unmap_kernel(struct dma_buf *dma_buf, struct msm_audio_
 	 * TBD: remove the below section once new API
 	 * for unmapping kernel virtual address is available.
 	 */
-	mutex_lock(&(ion_data->list_mutex));
 	list_for_each_entry(alloc_data, &(ion_data->alloc_list),
 			    list) {
 		if (alloc_data->dma_buf == dma_buf) {
@@ -308,7 +310,6 @@ static int msm_audio_ion_unmap_kernel(struct dma_buf *dma_buf, struct msm_audio_
 			break;
 		}
 	}
-	mutex_unlock(&(ion_data->list_mutex));
 
 	if (!dma_vmap) {
 		dev_err(cb_dev,
@@ -331,7 +332,8 @@ err:
 	return rc;
 }
 
-static int msm_audio_ion_map_buf(struct dma_buf *dma_buf, dma_addr_t *paddr,
+/* This function is called with ion_data list mutex lock */
+static int msm_audio_ion_buf_map(struct dma_buf *dma_buf, dma_addr_t *paddr,
 				 size_t *plen, struct dma_buf_map *dma_vmap,
 				 struct msm_audio_ion_private *ion_data)
 {
@@ -356,7 +358,9 @@ static int msm_audio_ion_map_buf(struct dma_buf *dma_buf, dma_addr_t *paddr,
 		pr_err("%s: ION memory mapping for AUDIO failed, err:%d\n",
 			__func__, rc);
 		rc = -ENOMEM;
+		mutex_lock(&(ion_data->list_mutex));
 		msm_audio_dma_buf_unmap(dma_buf, ion_data);
+		mutex_unlock(&(ion_data->list_mutex));
 		goto err;
 	}
 
@@ -399,6 +403,11 @@ void msm_audio_delete_fd_entry(void *handle)
 	struct msm_audio_fd_data *msm_audio_fd_data = NULL;
 	struct list_head *ptr, *next;
 
+	if (!handle) {
+		pr_err("%s Invalid handle\n", __func__);
+		return;
+	}
+
 	mutex_lock(&(msm_audio_ion_fd_list.list_mutex));
 	list_for_each_safe(ptr, next,
 			&msm_audio_ion_fd_list.fd_list) {
@@ -415,7 +424,7 @@ void msm_audio_delete_fd_entry(void *handle)
 	mutex_unlock(&(msm_audio_ion_fd_list.list_mutex));
 }
 
-int msm_audio_get_phy_addr(int fd, dma_addr_t *paddr, size_t *pa_len)
+int msm_audio_get_phy_addr(int fd, u64 *paddr, size_t *pa_len)
 {
 	struct msm_audio_fd_data *msm_audio_fd_data = NULL;
 	int status = -EINVAL;
@@ -469,6 +478,7 @@ void msm_audio_get_handle(int fd, void **handle)
 
 	pr_debug("%s fd %d\n", __func__, fd);
 	mutex_lock(&(msm_audio_ion_fd_list.list_mutex));
+	*handle = NULL;
 	list_for_each_entry(msm_audio_fd_data,
 			&msm_audio_ion_fd_list.fd_list, list) {
 		if (msm_audio_fd_data->fd == fd) {
@@ -496,10 +506,11 @@ void msm_audio_get_handle(int fd, void **handle)
  */
 static int msm_audio_ion_import(struct dma_buf **dma_buf, int fd,
 			unsigned long *ionflag, size_t bufsz,
-			dma_addr_t *paddr, size_t *plen, struct dma_buf_map *dma_vmap,
+			u64 *paddr, size_t *plen, struct dma_buf_map *dma_vmap,
 			struct msm_audio_ion_private *ion_data)
 {
 	int rc = 0;
+	dma_addr_t addr;
 
 	if (!(ion_data->device_status & MSM_AUDIO_ION_PROBED)) {
 		pr_debug("%s: probe is not done, deferred\n", __func__);
@@ -529,7 +540,7 @@ static int msm_audio_ion_import(struct dma_buf **dma_buf, int fd,
 		}
 	}
 	if (ion_data->smmu_enabled) {
-		rc = msm_audio_ion_map_buf(*dma_buf, paddr, plen, dma_vmap, ion_data);
+		rc = msm_audio_ion_buf_map(*dma_buf, paddr, plen, dma_vmap, ion_data);
 		if (rc) {
 			pr_err("%s: failed to map ION buf, rc = %d\n", __func__, rc);
 			goto err;
@@ -537,7 +548,8 @@ static int msm_audio_ion_import(struct dma_buf **dma_buf, int fd,
 		pr_debug("%s: mapped address = %pK, size=%zd\n", __func__,
 				dma_vmap->vaddr, bufsz);
 	} else {
-		msm_audio_dma_buf_map(*dma_buf, paddr, plen, true, ion_data);
+		msm_audio_dma_buf_map(*dma_buf, &addr, plen, true, ion_data);
+		*paddr = addr;
 	}
 	return 0;
 
@@ -556,6 +568,7 @@ err:
  *
  * Returns 0 on success or error on failure
  */
+/* This funtion is called with ion_data list mutex lock */
 static int msm_audio_ion_free(struct dma_buf *dma_buf, struct msm_audio_ion_private *ion_data)
 {
 	int ret = 0;
@@ -565,14 +578,18 @@ static int msm_audio_ion_free(struct dma_buf *dma_buf, struct msm_audio_ion_priv
 		return -EINVAL;
 	}
 
+	mutex_lock(&(ion_data->list_mutex));
 	if (ion_data->smmu_enabled) {
 		ret = msm_audio_ion_unmap_kernel(dma_buf, ion_data);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&(ion_data->list_mutex));
 			return ret;
+		}
 	}
 
 	msm_audio_dma_buf_unmap(dma_buf, ion_data);
 
+	mutex_unlock(&(ion_data->list_mutex));
 	return 0;
 }
 
@@ -660,7 +677,7 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 				unsigned long __user ioctl_param)
 {
 	void *mem_handle;
-	dma_addr_t paddr;
+	u64 paddr;
 	size_t pa_len = 0;
 	struct dma_buf_map *dma_vmap = NULL;
 	int ret = 0;
@@ -679,6 +696,7 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 	pr_debug("%s ioctl num %u ioctl_param %d\n", __func__, ioctl_num, ioctl_param);
 	switch (ioctl_num) {
 	case IOCTL_MAP_PHYS_ADDR:
+	case COMPAT_IOCTL_MAP_PHYS_ADDR:
 		dma_vmap = kzalloc(sizeof(struct msm_audio_fd_data), GFP_KERNEL);
 		if (!dma_vmap)
 			return -ENOMEM;
@@ -704,6 +722,7 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 		msm_audio_update_fd_list(msm_audio_fd_data);
 		break;
 	case IOCTL_UNMAP_PHYS_ADDR:
+	case COMPAT_IOCTL_UNMAP_PHYS_ADDR:
 		msm_audio_get_handle((int)ioctl_param, &mem_handle);
 		ret = msm_audio_ion_free(mem_handle, ion_data);
 		if (ret < 0) {
@@ -755,6 +774,14 @@ static long msm_audio_ion_ioctl(struct file *file, unsigned int ioctl_num,
 		break;
 	}
 	return ret;
+}
+
+static long msm_audio_ion_compat_ioctl(struct file *file, unsigned int ioctl_num,
+                                 unsigned long __user ioctl_param)
+{
+	unsigned int ioctl_nr = _IOC_NR(ioctl_num);
+
+	return (long)msm_audio_ion_ioctl(file, ioctl_nr, ioctl_param);
 }
 
 static int __audio_mem_hyp_assign(struct device *dev, int *source_vms,
@@ -834,6 +861,7 @@ static const struct file_operations msm_audio_ion_fops = {
 	.open = msm_audio_ion_open,
 	.release = msm_audio_ion_release,
 	.unlocked_ioctl = msm_audio_ion_ioctl,
+	.compat_ioctl = msm_audio_ion_compat_ioctl,
 };
 
 static int msm_audio_ion_reg_chrdev(struct msm_audio_ion_private *ion_data)

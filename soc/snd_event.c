@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018, 2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2018, 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/platform_device.h>
@@ -9,6 +9,13 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <soc/snd_event.h>
+#include <dsp/audio_notifier.h>
+
+#define BROADCAST_MASTER_EVENT 1
+#define BROADCAST_SUBSYSTEM_EVENT 0
+
+#define SND_EVENT_MASTER_OPS_V1 1
+#define SND_EVENT_MASTER_OPS_V2 2
 
 struct snd_event_client {
 	struct list_head node;
@@ -19,6 +26,7 @@ struct snd_event_client {
 
 	bool attached;
 	bool state;
+	int domain;
 };
 
 struct snd_event_client_array {
@@ -36,6 +44,7 @@ struct snd_event_clients {
 struct snd_master {
 	struct device *dev;
 	const struct snd_event_ops *ops;
+	const struct snd_event_ops_v2 *ops_v2;
 	void *data;
 
 	bool state;
@@ -59,7 +68,7 @@ static struct snd_event_client *find_snd_event_client(struct device *dev)
 	return NULL;
 }
 
-static int check_and_update_fwk_state(void)
+static int check_and_update_fwk_state(int domain, bool event)
 {
 	bool new_fwk_state = true;
 	struct snd_event_client *c;
@@ -76,7 +85,7 @@ static int check_and_update_fwk_state(void)
 		if (new_fwk_state) {
 			for (i = 0; i < master->clients->num_clients; i++) {
 				c = master->clients->cl_arr[i].clnt;
-				if (c->ops->enable) {
+				if (c->ops->enable && (c->domain == domain || event)) {
 					ret = c->ops->enable(c->dev, c->data);
 					if (ret) {
 						dev_err_ratelimited(c->dev,
@@ -86,28 +95,34 @@ static int check_and_update_fwk_state(void)
 					}
 				}
 			}
-			if (master->ops->enable) {
+			if (master->ops && master->ops->enable) {
 				ret = master->ops->enable(master->dev,
 							  master->data);
-				if (ret) {
-					dev_err_ratelimited(master->dev,
-						"%s: enable failed\n",
-						__func__);
-					goto mstr_en_failed;
-				}
+			} else if (master->ops_v2 && master->ops_v2->enable) {
+				ret = master->ops_v2->enable(master->dev,
+							  master->data, domain);
+			}
+			if (ret) {
+				dev_err_ratelimited(master->dev, "%s: enable failed\n", __func__);
+				goto mstr_en_failed;
 			}
 		} else {
-			if (master->ops->disable)
+			if (master->ops && master->ops->disable) {
 				master->ops->disable(master->dev,
 						     master->data);
+			} else if (master->ops_v2 && master->ops_v2->disable) {
+				master->ops_v2->disable(master->dev,
+						     master->data, domain);
+			}
 			for (i = 0; i < master->clients->num_clients; i++) {
 				c = master->clients->cl_arr[i].clnt;
-				if (c->ops->disable)
+				if (c->ops->disable && (c->domain == domain || event))
 					c->ops->disable(c->dev, c->data);
 			}
 		}
 		master->fwk_state = new_fwk_state;
 	}
+
 	goto exit;
 
 mstr_en_failed:
@@ -164,20 +179,82 @@ static int snd_event_find_clients(struct snd_master *master)
 	return ret;
 }
 
+static int snd_event_master_register_internal(struct device *dev,
+			      const void *ops, int ops_version,
+			      struct snd_event_clients *clients,
+			      void *data)
+{
+	struct snd_master *new_master;
+	int ret = 0;
+
+	if (!dev) {
+		pr_err_ratelimited("%s: dev is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&snd_event_mutex);
+	if (master) {
+		dev_err(dev, "%s: master already allocated with %pK\n",
+			__func__, master->dev);
+		ret = -EALREADY;
+		goto exit;
+	}
+	mutex_unlock(&snd_event_mutex);
+
+	if (!clients || IS_ERR(clients)) {
+		dev_err(dev, "%s: Invalid clients ptr\n", __func__);
+		return -EINVAL;
+	}
+
+	new_master = kzalloc(sizeof(*new_master), GFP_KERNEL);
+	if (!new_master)
+		return -ENOMEM;
+
+	new_master->dev = dev;
+	if (ops_version == SND_EVENT_MASTER_OPS_V2) {
+		new_master->ops_v2 = (struct snd_event_ops_v2 *)ops;
+		new_master->ops = NULL;
+	} else {
+		new_master->ops = (struct snd_event_ops *)ops;
+		new_master->ops_v2 = NULL;
+	}
+	new_master->data = data;
+	new_master->clients = clients;
+
+	dev_dbg(dev, "adding master to SND event FW (ops %pK)\n", ops);
+
+	mutex_lock(&snd_event_mutex);
+
+	master = new_master;
+
+	ret = snd_event_find_clients(master);
+	if (ret) {
+		dev_dbg(dev, "%s: Failed to find all clients\n", __func__);
+		ret = 0;
+		goto exit;
+	}
+	master->clients_found = true;
+
+exit:
+	mutex_unlock(&snd_event_mutex);
+	return ret;
+}
+
 /*
- * snd_event_client_register - Register a client with the SND event FW
+ * snd_event_client_register_v2 - Register a client with the SND event FW
  *
  * @dev: Pointer to the "struct device" associated with the client
  * @snd_ev_ops: Pointer to the snd_event_ops struct for the client containing
  *              callback functions
  * @data: Pointer to any additional data that the caller wants to get back
  *        with callback functions
+ * @domain: Domain ID to register
  *
  * Returns 0 on success or error on failure.
  */
-int snd_event_client_register(struct device *dev,
+int snd_event_client_register_v2(struct device *dev,
 			      const struct snd_event_ops *snd_ev_ops,
-			      void *data)
+			      void *data, int domain)
 {
 	struct snd_event_client *c;
 
@@ -193,6 +270,7 @@ int snd_event_client_register(struct device *dev,
 	c->dev = dev;
 	c->ops = snd_ev_ops;
 	c->data = data;
+	c->domain = domain;
 
 	dev_dbg(dev, "%s: adding client to SND event FW (ops %pK)\n",
 		__func__, snd_ev_ops);
@@ -212,6 +290,26 @@ int snd_event_client_register(struct device *dev,
 exit:
 	mutex_unlock(&snd_event_mutex);
 	return 0;
+}
+EXPORT_SYMBOL(snd_event_client_register_v2);
+
+/*
+ * snd_event_client_register - Register a client with the SND event FW
+ *
+ * @dev: Pointer to the "struct device" associated with the client
+ * @snd_ev_ops: Pointer to the snd_event_ops struct for the client containing
+ *              callback functions
+ * @data: Pointer to any additional data that the caller wants to get back
+ *        with callback functions
+ *
+ * Returns 0 on success or error on failure.
+ */
+int snd_event_client_register(struct device *dev,
+			      const struct snd_event_ops *snd_ev_ops,
+			      void *data)
+{
+	return snd_event_client_register_v2(dev, snd_ev_ops, data,
+				AUDIO_NOTIFIER_ADSP_DOMAIN);
 }
 EXPORT_SYMBOL(snd_event_client_register);
 
@@ -263,9 +361,10 @@ int snd_event_client_deregister(struct device *dev)
 				break;
 			}
 		}
-		if (dev_found ) {
+		if (dev_found) {
 			if(master->clients_found) {
-				ret = check_and_update_fwk_state();
+				ret = check_and_update_fwk_state(c->domain,
+						BROADCAST_SUBSYSTEM_EVENT);
 				master->clients_found = false;
 			}
 			master->clients->cl_arr[i].dev = NULL;
@@ -356,56 +455,38 @@ int snd_event_master_register(struct device *dev,
 			      struct snd_event_clients *clients,
 			      void *data)
 {
-	struct snd_master *new_master;
-	int ret = 0;
-
-	if (!dev) {
-		pr_err_ratelimited("%s: dev is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	mutex_lock(&snd_event_mutex);
-	if (master) {
-		dev_err(dev, "%s: master already allocated with %pK\n",
-			__func__, master->dev);
-		ret = -EALREADY;
-		goto exit;
-	}
-	mutex_unlock(&snd_event_mutex);
-
-	if (!clients || IS_ERR(clients)) {
-		dev_err(dev, "%s: Invalid clients ptr\n", __func__);
-		return -EINVAL;
-	}
-
-	new_master = kzalloc(sizeof(*new_master), GFP_KERNEL);
-	if (!new_master)
-		return -ENOMEM;
-
-	new_master->dev = dev;
-	new_master->ops = ops;
-	new_master->data = data;
-	new_master->clients = clients;
-
-	dev_dbg(dev, "adding master to SND event FW (ops %pK)\n", ops);
-
-	mutex_lock(&snd_event_mutex);
-
-	master = new_master;
-
-	ret = snd_event_find_clients(master);
-	if (ret) {
-		dev_dbg(dev, "%s: Failed to find all clients\n", __func__);
-		ret = 0;
-		goto exit;
-	}
-	master->clients_found = true;
-
-exit:
-	mutex_unlock(&snd_event_mutex);
-	return ret;
+	return snd_event_master_register_internal(dev, ops,
+				SND_EVENT_MASTER_OPS_V1, clients, data);
 }
 EXPORT_SYMBOL(snd_event_master_register);
+
+/*
+ * snd_event_master_register_v2 - Register a master with the SND event FW
+ *
+ * @dev: Pointer to the "struct device" associated with the master
+ * @ops_v2: Pointer to the snd_event_ops_v2 struct for the master containing
+ *       callback functions which triggers for specific subsystem domain.
+ * @clients: List of clients for the master
+ * @data: Pointer to any additional data that the caller wants to get back
+ *        with callback functions
+ *
+ * Returns 0 on success or error on failure.
+ *
+ * Prerequisite:
+ *  clients list must not be empty.
+ *  All clients for the master must have to be registered by calling
+ *  snd_event_mstr_add_client() before calling this API to register a
+ *  master with SND event fwk.
+ */
+int snd_event_master_register_v2(struct device *dev,
+			      const struct snd_event_ops_v2 *ops_v2,
+			      struct snd_event_clients *clients,
+			      void *data)
+{
+	return snd_event_master_register_internal(dev, ops_v2,
+					SND_EVENT_MASTER_OPS_V2, clients, data);
+}
+EXPORT_SYMBOL(snd_event_master_register_v2);
 
 /*
  * snd_event_master_deregister - Remove a master from the SND event FW
@@ -417,6 +498,7 @@ EXPORT_SYMBOL(snd_event_master_register);
 int snd_event_master_deregister(struct device *dev)
 {
 	int ret = 0;
+	int domain = -EINVAL;
 
 	if (!dev) {
 		pr_err_ratelimited("%s: dev is NULL\n", __func__);
@@ -439,7 +521,7 @@ int snd_event_master_deregister(struct device *dev)
 	master->state = false;
 
 	if (master && master->clients_found)
-		ret = check_and_update_fwk_state();
+		ret = check_and_update_fwk_state(domain, BROADCAST_MASTER_EVENT);
 
 	kfree(master->clients->cl_arr);
 	kfree(master->clients);
@@ -452,14 +534,15 @@ exit:
 EXPORT_SYMBOL(snd_event_master_deregister);
 
 /*
- * snd_event_notify - Update the state of the Master/client in the SND event FW
+ * snd_event_notify_v2 - Update the state of the Master/client in the SND event FW
  *
  * @dev: Pointer to the "struct device" associated with the master/client
  * @state: UP/DOWN state of the caller (master/client)
+ * @domain: Domain ID to register
  *
  * Returns 0 on success or error on failure.
  */
-int snd_event_notify(struct device *dev, unsigned int state)
+int snd_event_notify_v2(struct device *dev, unsigned int state, int domain)
 {
 	struct snd_event_client *c;
 	int ret = 0;
@@ -492,11 +575,25 @@ int snd_event_notify(struct device *dev, unsigned int state)
 		master->state = !!state;
 
 	if (master && master->clients_found)
-		ret = check_and_update_fwk_state();
+		ret = check_and_update_fwk_state(domain, BROADCAST_SUBSYSTEM_EVENT);
 
 exit:
 	mutex_unlock(&snd_event_mutex);
 	return ret;
+}
+EXPORT_SYMBOL(snd_event_notify_v2);
+
+/*
+ * snd_event_notify - Update the state of the Master/client in the SND event FW
+ *
+ * @dev: Pointer to the "struct device" associated with the master/client
+ * @state: UP/DOWN state of the caller (master/client)
+ *
+ * Returns 0 on success or error on failure.
+ */
+int snd_event_notify(struct device *dev, unsigned int state)
+{
+	return snd_event_notify_v2(dev, state, AUDIO_NOTIFIER_ADSP_DOMAIN);
 }
 EXPORT_SYMBOL(snd_event_notify);
 

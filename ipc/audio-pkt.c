@@ -1,5 +1,5 @@
 /* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -307,7 +307,7 @@ int audpkt_chk_and_update_physical_addr(struct audio_gpr_pkt *gpr_pkt)
 {
 	int ret = 0;
         size_t pa_len = 0;
-	dma_addr_t paddr;
+	u64 paddr;
 
 	if (gpr_pkt->audpkt_mem_map.mmap_header.property_flag &
 				APM_MEMORY_MAP_BIT_MASK_IS_OFFSET_MODE) {
@@ -321,8 +321,9 @@ int audpkt_chk_and_update_physical_addr(struct audio_gpr_pkt *gpr_pkt)
 		}
 		AUDIO_PKT_INFO("%s physical address %pK", __func__,
 				(void *) paddr);
-		gpr_pkt->audpkt_mem_map.mmap_payload.shm_addr_lsw = (uint32_t) paddr;
-		gpr_pkt->audpkt_mem_map.mmap_payload.shm_addr_msw = (uint64_t) paddr >> 32;
+		gpr_pkt->audpkt_mem_map.mmap_payload.shm_addr_lsw = (u32) paddr;
+		gpr_pkt->audpkt_mem_map.mmap_payload.shm_addr_msw = (u32) (paddr >> 32);
+
 	}
 	return ret;
 }
@@ -411,6 +412,8 @@ ssize_t audio_pkt_write(struct file *file, const char __user *buf,
 	ret = gpr_send_pkt(ap_priv->adev,(struct gpr_pkt *) kbuf);
 	if (ret < 0) {
 		AUDIO_PKT_ERR("APR Send Packet Failed ret -%d\n", ret);
+		if (ret == -ECONNRESET)
+			ret = -ENETRESET;
 	}
 	mutex_unlock(&audpkt_dev->lock);
 

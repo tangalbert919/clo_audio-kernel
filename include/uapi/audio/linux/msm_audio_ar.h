@@ -1,8 +1,15 @@
-/* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
- *
+ * Copyright (c) 2012, 2014, 2017, 2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2012, 2014, 2017, 2020, 2021 The Linux Foundation. All rights reserved.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _UAPI_LINUX_MSM_AUDIO_H
@@ -64,7 +71,7 @@
 
 #define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned int)
 
-/* Qualcomm technologies inc extensions */
+/* Qualcomm Technologies, Inc. extensions */
 #define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
 				struct msm_audio_stream_config)
 #define AUDIO_GET_STREAM_CONFIG   _IOR(AUDIO_IOCTL_MAGIC, 81, \
@@ -90,8 +97,6 @@
 					struct msm_acdb_cmd_device)
 #define AUDIO_GET_ACDB_BLK _IOW(AUDIO_IOCTL_MAGIC, 96,  \
 					struct msm_acdb_cmd_device)
-#define COMPAT_IOCTL_MAP_PHYS_ADDR 97
-#define COMPAT_IOCTL_UNMAP_PHYS_ADDR 98
 #define IOCTL_MAP_PHYS_ADDR _IOW(AUDIO_IOCTL_MAGIC, 97, int)
 #define IOCTL_UNMAP_PHYS_ADDR _IOW(AUDIO_IOCTL_MAGIC, 98, int)
 #define AUDIO_SET_EFFECTS_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 99, \
@@ -108,9 +113,8 @@
 #define AUDIO_PM_RELAX      _IOW(AUDIO_IOCTL_MAGIC, 106, unsigned int)
 #define AUDIO_REGISTER_ION   _IOW(AUDIO_IOCTL_MAGIC, 107, struct msm_audio_ion_info)
 #define AUDIO_DEREGISTER_ION _IOW(AUDIO_IOCTL_MAGIC, 108, struct msm_audio_ion_info)
-#define IOCTL_MAP_HYP_ASSIGN _IOW(AUDIO_IOCTL_MAGIC, 109, int)
-#define IOCTL_UNMAP_HYP_ASSIGN _IOW(AUDIO_IOCTL_MAGIC, 110, int)
-#define	AUDIO_MAX_COMMON_IOCTL_NUM	111
+#define	AUDIO_MAX_COMMON_IOCTL_NUM	109
+
 
 #define HANDSET_MIC			0x01
 #define HANDSET_SPKR			0x02
