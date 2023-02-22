@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -94,9 +95,9 @@ static int regmap_bus_read(void *context, const void *reg, size_t reg_size,
 			__func__, reg_size);
 		return -EINVAL;
 	}
-	if (!msm_sdw->dev_up) {
+	if (!atomic_read(&msm_sdw->dev_up)) {
 		dev_dbg_ratelimited(dev, "%s: No read allowed. dev_up = %d\n",
-				    __func__, msm_sdw->dev_up);
+				    __func__, atomic_read(&msm_sdw->dev_up));
 		return 0;
 	}
 
@@ -142,9 +143,9 @@ static int regmap_bus_gather_write(void *context,
 			__func__, reg_size);
 		return -EINVAL;
 	}
-	if (!msm_sdw->dev_up) {
+	if (!atomic_read(&msm_sdw->dev_up)) {
 		dev_dbg_ratelimited(dev, "%s: No write allowed. dev_up = %d\n",
-				    __func__, msm_sdw->dev_up);
+				    __func__, atomic_read(&msm_sdw->dev_up));
 		return 0;
 	}
 

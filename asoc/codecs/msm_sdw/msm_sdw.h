@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -136,7 +137,7 @@ struct msm_sdw_priv {
 	struct afe_clk_set sdw_npl_clk;
 	struct notifier_block service_nb;
 	int (*sdw_cdc_gpio_fn)(bool enable, struct snd_soc_codec *codec);
-	bool dev_up;
+	atomic_t dev_up;
 
 	int spkr_gain_offset;
 	int spkr_mode;
