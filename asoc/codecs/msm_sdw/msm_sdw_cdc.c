@@ -324,7 +324,7 @@ static int msm_sdw_ahb_write_device(struct msm_sdw_priv *msm_sdw,
 {
 	u32 temp = (u32)(*value) & 0x000000FF;
 
-	if (!msm_sdw->dev_up) {
+	if (!atomic_read(&msm_sdw->dev_up)) {
 		dev_err_ratelimited(msm_sdw->dev, "%s: q6 not ready\n",
 				    __func__);
 		return 0;
@@ -339,7 +339,7 @@ static int msm_sdw_ahb_read_device(struct msm_sdw_priv *msm_sdw,
 {
 	u32 temp;
 
-	if (!msm_sdw->dev_up) {
+	if (!atomic_read(&msm_sdw->dev_up)) {
 		dev_err_ratelimited(msm_sdw->dev, "%s: q6 not ready\n",
 				    __func__);
 		return 0;
@@ -1757,9 +1757,9 @@ static int msm_sdw_notifier_service_cb(struct notifier_block *nb,
 			initial_boot = false;
 			break;
 		}
+		atomic_set(&msm_sdw->dev_up, false);
 		mutex_lock(&msm_sdw->cdc_int_mclk1_mutex);
 		msm_sdw->int_mclk1_enabled = false;
-		msm_sdw->dev_up = false;
 		mutex_unlock(&msm_sdw->cdc_int_mclk1_mutex);
 		snd_soc_card_change_online_state(
 			msm_sdw->codec->component.card, 0);
@@ -1791,9 +1791,7 @@ static int msm_sdw_notifier_service_cb(struct notifier_block *nb,
 		}
 powerup:
 		if (adsp_ready) {
-			mutex_lock(&msm_sdw->cdc_int_mclk1_mutex);
-			msm_sdw->dev_up = true;
-			mutex_unlock(&msm_sdw->cdc_int_mclk1_mutex);
+			atomic_set(&msm_sdw->dev_up, true);
 			msm_sdw_init_reg(msm_sdw->codec);
 			regcache_mark_dirty(msm_sdw->regmap);
 			regcache_sync(msm_sdw->regmap);
@@ -1978,7 +1976,7 @@ static int msm_sdw_probe(struct platform_device *pdev)
 	if (!msm_sdw)
 		return -ENOMEM;
 	dev_set_drvdata(&pdev->dev, msm_sdw);
-	msm_sdw->dev_up = true;
+	atomic_set(&msm_sdw->dev_up, true);
 
 	msm_sdw->dev = &pdev->dev;
 	INIT_WORK(&msm_sdw->msm_sdw_add_child_devices_work,
