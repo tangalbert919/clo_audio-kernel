@@ -823,7 +823,7 @@ static int lpi_pinctrl_probe(struct platform_device *pdev)
 
 	lpi_dev = &pdev->dev;
 	lpi_dev_up = true;
-	ret = audio_notifier_register("lpi_tlmm", AUDIO_NOTIFIER_ADSP_DOMAIN,
+	ret = audio_notifier_legacy_register("lpi_tlmm", AUDIO_NOTIFIER_ADSP_DOMAIN,
 				      &service_nb);
 	if (ret < 0) {
 		pr_err("%s: Audio notifier register failed ret = %d\n",
