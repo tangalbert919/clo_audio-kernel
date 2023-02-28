@@ -7,37 +7,24 @@
 #ifndef DIGITAL_CDC_RSC_MGR_H
 #define DIGITAL_CDC_RSC_MGR_H
 
-#include <linux/clk.h>
-
 #ifdef CONFIG_DIGITAL_CDC_RSC_MGR
 
-int digital_cdc_rsc_mgr_hw_vote_enable(struct clk *vote_handle, struct device *dev);
-void digital_cdc_rsc_mgr_hw_vote_disable(struct clk *vote_handle, struct device *dev);
-void digital_cdc_rsc_mgr_hw_vote_reset(struct clk *vote_handle);
-
-void digital_cdc_rsc_mgr_init(void);
-void digital_cdc_rsc_mgr_exit(void);
+int digital_cdc_rsc_mgr_hw_vote_enable(struct clk* vote_handle);
+void digital_cdc_rsc_mgr_hw_vote_disable(struct clk* vote_handle);
+void digital_cdc_rsc_mgr_hw_vote_reset(struct clk* vote_handle);
 
 #else
 
-static inline int digital_cdc_rsc_mgr_hw_vote_enable(struct clk *vote_handle, struct device *dev)
+static inline int digital_cdc_rsc_mgr_hw_vote_enable(struct clk* vote_handle)
 {
 	return 0;
 }
 
-static inline void digital_cdc_rsc_mgr_hw_vote_disable(struct clk *vote_handle, struct device *dev)
+static inline void digital_cdc_rsc_mgr_hw_vote_disable(struct clk* vote_handle)
 {
 }
 
-static inline void digital_cdc_rsc_mgr_hw_vote_reset(struct clk *vote_handle)
-{
-}
-
-static inline void digital_cdc_rsc_mgr_init(void)
-{
-}
-
-static inline void digital_cdc_rsc_mgr_exit(void)
+static inline void digital_cdc_rsc_mgr_hw_vote_reset(struct clk* vote_handle)
 {
 }
 

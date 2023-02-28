@@ -11,6 +11,13 @@
 #include <linux/device.h>
 #include <linux/bitops.h>
 
+enum {
+	SWR_UC0 = 0,
+	SWR_UC1,
+	SWR_UC2,
+	SWR_UC_MAX,
+};
+
 struct port_params {
 	u16 si;
 	u8 off1;
@@ -37,6 +44,6 @@ struct swr_mstr_port_map {
 	struct port_params *swr_port_params;
 };
 
-#define SWR_MSTR_PORT_LEN      13 /* Number of master ports */
+#define SWR_MSTR_PORT_LEN      8 /* Number of master ports */
 
 #endif /* _LINUX_SWR_COMMON_H */
