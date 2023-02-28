@@ -194,17 +194,8 @@ include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###########################################################
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
-LOCAL_MODULE              := wcd_core_dlkm.ko
-LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd_core_dlkm.ko
-LOCAL_MODULE_TAGS         := optional
-LOCAL_MODULE_DEBUG_ENABLE := true
-LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-include $(DLKM_DIR)/Build_external_kernelmodule.mk
-########################### WCD938x CODEC  ################################
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
-LOCAL_MODULE              := wcd938x_dlkm.ko
-LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd938x/wcd938x_dlkm.ko
+LOCAL_MODULE              := swr_ctrl_dlkm.ko
+LOCAL_MODULE_KBUILD_NAME  := soc/swr_ctrl_dlkm.ko
 LOCAL_MODULE_TAGS         := optional
 LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
@@ -212,13 +203,39 @@ include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###########################################################
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
-LOCAL_MODULE              := wcd938x_slave_dlkm.ko
-LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd938x/wcd938x_slave_dlkm.ko
+LOCAL_MODULE              := wcd_core_dlkm.ko
+LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd_core_dlkm.ko
 LOCAL_MODULE_TAGS         := optional
 LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
-
+###########################################################
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
+LOCAL_MODULE              := wcd9xxx_dlkm.ko
+LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd9xxx_dlkm.ko
+LOCAL_MODULE_TAGS         := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
+########################### WCD938x CODEC  ################################
+#include $(CLEAR_VARS)
+#LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
+#LOCAL_MODULE              := wcd938x_dlkm.ko
+#LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd938x/wcd938x_dlkm.ko
+#LOCAL_MODULE_TAGS         := optional
+#LOCAL_MODULE_DEBUG_ENABLE := true
+#LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+#include $(DLKM_DIR)/Build_external_kernelmodule.mk
+###########################################################
+#include $(CLEAR_VARS)
+#LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
+#LOCAL_MODULE              := wcd938x_slave_dlkm.ko
+#LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wcd938x/wcd938x_slave_dlkm.ko
+#LOCAL_MODULE_TAGS         := optional
+#LOCAL_MODULE_DEBUG_ENABLE := true
+#LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+#include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ############################ BOLERO CODEC  ###############################
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
@@ -230,24 +247,23 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 
 ########################### WSA881x CODEC  ################################
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
-LOCAL_MODULE              := wsa881x_dlkm.ko
-LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wsa881x_dlkm.ko
-LOCAL_MODULE_TAGS         := optional
-LOCAL_MODULE_DEBUG_ENABLE := true
-LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-include $(DLKM_DIR)/Build_external_kernelmodule.mk
-
+#include $(CLEAR_VARS)
+#LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
+#LOCAL_MODULE              := wsa881x_dlkm.ko
+#LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/wsa881x_dlkm.ko
+#LOCAL_MODULE_TAGS         := optional
+#LOCAL_MODULE_DEBUG_ENABLE := true
+#LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+#include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ########################### BOLERO MACRO ################################
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
-LOCAL_MODULE              := wsa_macro_dlkm.ko
-LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/bolero/wsa_macro_dlkm.ko
-LOCAL_MODULE_TAGS         := optional
-LOCAL_MODULE_DEBUG_ENABLE := true
-LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-include $(DLKM_DIR)/Build_external_kernelmodule.mk
+#include $(CLEAR_VARS)
+#LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
+#LOCAL_MODULE              := wsa_macro_dlkm.ko
+#LOCAL_MODULE_KBUILD_NAME  := asoc/codecs/bolero/wsa_macro_dlkm.ko
+#LOCAL_MODULE_TAGS         := optional
+#LOCAL_MODULE_DEBUG_ENABLE := true
+#LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+#include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###########################################################
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES           := $(AUDIO_SRC_FILES)
