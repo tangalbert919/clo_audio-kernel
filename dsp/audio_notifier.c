@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2017, 2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -136,9 +136,7 @@ static void audio_notifier_init_service(int service)
 	int i;
 
 	for (i = 0; i < AUDIO_NOTIFIER_MAX_DOMAINS; i++) {
-		if (service_data[service][i].state == UNINIT_SERVICE)
-			service_data[service][i].state =
-				AUDIO_NOTIFIER_SERVICE_DOWN;
+		service_data[service][i].state = AUDIO_NOTIFIER_SERVICE_DOWN;
 	}
 }
 #else
@@ -151,6 +149,17 @@ static void audio_notifier_init_service(int service)
 }
 #endif
 
+#ifdef CONFIG_MSM_QDSP6_PDR
+static bool audio_notifier_is_service_enabled(int service)
+{
+	int i;
+
+	for (i = 0; i < AUDIO_NOTIFIER_MAX_DOMAINS; i++)
+		if (service_data[service][i].state != AUDIO_NOTIFIER_SERVICE_DOWN)
+			return true;
+	return false;
+}
+#else
 static bool audio_notifier_is_service_enabled(int service)
 {
 	int i;
@@ -160,6 +169,8 @@ static bool audio_notifier_is_service_enabled(int service)
 			return true;
 	return false;
 }
+#endif
+
 
 static int audio_notifier_reg_service(int service, int domain)
 {

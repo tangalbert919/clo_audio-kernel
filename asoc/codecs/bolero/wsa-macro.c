@@ -205,6 +205,7 @@ enum {
  * @rx_0_count: RX0 interpolation users
  * @rx_1_count: RX1 interpolation users
  * @active_ch_mask: channel mask for all AIF DAIs
+ * @active_ch_cnt: channel count of all AIF DAIs
  * @rx_port_value: mixer ctl value of WSA RX MUXes
  * @wsa_io_base: Base address of WSA macro addr space
  */
@@ -228,6 +229,7 @@ struct wsa_macro_priv {
 	int rx_0_count;
 	int rx_1_count;
 	unsigned long active_ch_mask[WSA_MACRO_MAX_DAIS];
+	unsigned long active_ch_cnt[WSA_MACRO_MAX_DAIS];
 	int rx_port_value[WSA_MACRO_RX_MAX];
 	char __iomem *wsa_io_base;
 	struct platform_device *pdev_child_devices
@@ -807,7 +809,7 @@ static int wsa_macro_get_channel_map(struct snd_soc_dai *dai,
 	switch (dai->id) {
 	case WSA_MACRO_AIF_VI:
 		*tx_slot = wsa_priv->active_ch_mask[dai->id];
-		*tx_num = hweight_long(wsa_priv->active_ch_mask[dai->id]);
+		*tx_num = wsa_priv->active_ch_cnt[dai->id];
 		break;
 	case WSA_MACRO_AIF1_PB:
 	case WSA_MACRO_AIF_MIX1_PB:
@@ -2310,13 +2312,17 @@ static int wsa_macro_rx_mux_put(struct snd_kcontrol *kcontrol,
 
 	switch (rx_port_value) {
 	case 0:
-		clear_bit(bit_input,
-			  &wsa_priv->active_ch_mask[aif_rst]);
+		if (wsa_priv->active_ch_cnt[aif_rst]) {
+			clear_bit(bit_input,
+				  &wsa_priv->active_ch_mask[aif_rst]);
+			wsa_priv->active_ch_cnt[aif_rst]--;
+		}
 		break;
 	case 1:
 	case 2:
 		set_bit(bit_input,
 			&wsa_priv->active_ch_mask[rx_port_value]);
+		wsa_priv->active_ch_cnt[rx_port_value]++;
 		break;
 	default:
 		dev_err(wsa_dev,
@@ -2529,12 +2535,14 @@ static int wsa_macro_vi_feed_mixer_put(struct snd_kcontrol *kcontrol,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI])) {
 			set_bit(WSA_MACRO_TX0,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI]);
+			wsa_priv->active_ch_cnt[WSA_MACRO_AIF_VI]++;
 		}
 		if (spk_tx_id == WSA_MACRO_TX1 &&
 			!test_bit(WSA_MACRO_TX1,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI])) {
 			set_bit(WSA_MACRO_TX1,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI]);
+			wsa_priv->active_ch_cnt[WSA_MACRO_AIF_VI]++;
 		}
 	} else {
 		if (spk_tx_id == WSA_MACRO_TX0 &&
@@ -2542,12 +2550,14 @@ static int wsa_macro_vi_feed_mixer_put(struct snd_kcontrol *kcontrol,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI])) {
 			clear_bit(WSA_MACRO_TX0,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI]);
+			wsa_priv->active_ch_cnt[WSA_MACRO_AIF_VI]--;
 		}
 		if (spk_tx_id == WSA_MACRO_TX1 &&
 			test_bit(WSA_MACRO_TX1,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI])) {
 			clear_bit(WSA_MACRO_TX1,
 				&wsa_priv->active_ch_mask[WSA_MACRO_AIF_VI]);
+			wsa_priv->active_ch_cnt[WSA_MACRO_AIF_VI]--;
 		}
 	}
 	snd_soc_dapm_mixer_update_power(widget->dapm, kcontrol, enable, NULL);
@@ -3306,6 +3316,7 @@ static int wsa_macro_probe(struct platform_device *pdev)
 	pm_suspend_ignore_children(&pdev->dev, true);
 	pm_runtime_enable(&pdev->dev);
 	schedule_work(&wsa_priv->wsa_macro_add_child_devices_work);
+
 	return ret;
 reg_macro_fail:
 	mutex_destroy(&wsa_priv->mclk_lock);

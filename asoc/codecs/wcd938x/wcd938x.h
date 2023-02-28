@@ -72,7 +72,6 @@ int wcd938x_codec_force_enable_micbias_v2(struct snd_soc_component *wcd938x,
 int wcd938x_swr_dmic_register_notifier(struct snd_soc_component *wcd938x,
                                         struct notifier_block *nblock,
                                         bool enable);
-int wcd938x_codec_get_dev_num(struct snd_soc_component *component);
 
 static inline int wcd938x_slave_get_master_ch_val(int ch)
 {
@@ -126,10 +125,6 @@ static inline int wcd938x_slave_get_master_ch(int idx)
 	return 0;
 }
 static inline int wcd938x_slave_get_slave_ch_val(int ch)
-{
-	return 0;
-}
-static int wcd938x_codec_get_dev_num(struct snd_soc_component *component)
 {
 	return 0;
 }
