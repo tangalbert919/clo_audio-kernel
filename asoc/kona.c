@@ -7515,11 +7515,28 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       sizeof(msm_common_dai_links));
 		total_links += ARRAY_SIZE(msm_common_dai_links);
 
-		memcpy(msm_kona_dai_links + total_links,
-		       msm_bolero_fe_dai_links,
-		       sizeof(msm_bolero_fe_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_bolero_fe_dai_links);
+		rc = of_property_read_u32(dev->of_node, "qcom,wsa-bolero-codec",
+				&val);
+		if (rc) {
+			dev_dbg(dev, "%s: No DT match WSA BOLERO Codec interface\n",
+				__func__);
+		} else {
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): wsa bolero codec support present\n",
+					__func__);
+				memcpy(msm_kona_dai_links + total_links,
+			       	msm_bolero_fe_dai_links,
+			       	sizeof(msm_bolero_fe_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_bolero_fe_dai_links);
+
+				memcpy(msm_kona_dai_links + total_links,
+				       msm_wsa_cdc_dma_be_dai_links,
+				       sizeof(msm_wsa_cdc_dma_be_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
+			}
+		}
 
 		memcpy(msm_kona_dai_links + total_links,
 		       msm_common_misc_fe_dai_links,
@@ -7530,12 +7547,6 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       msm_common_be_dai_links,
 		       sizeof(msm_common_be_dai_links));
 		total_links += ARRAY_SIZE(msm_common_be_dai_links);
-
-		memcpy(msm_kona_dai_links + total_links,
-		       msm_wsa_cdc_dma_be_dai_links,
-		       sizeof(msm_wsa_cdc_dma_be_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
 
 		memcpy(msm_kona_dai_links + total_links,
 		       msm_rx_tx_cdc_dma_be_dai_links,
