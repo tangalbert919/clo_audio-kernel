@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
-
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/module.h>
@@ -557,6 +555,11 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	uint32_t fmt_type = FORMAT_LINEAR_PCM;
 	uint16_t bits_per_sample;
 	uint16_t sample_word_size;
+	uint16_t format_blk_bits_per_sample = 0;
+	uint16_t format_blk_sample_word_size = 0;
+	uint16_t format = 0;
+	uint16_t req_format = 0;
+	uint16_t input_file_format = 0;
 
 	if (!component) {
 		pr_err("%s: component is NULL\n", __func__);
@@ -598,7 +601,21 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	prtd->audio_client->stream_type = SNDRV_PCM_STREAM_PLAYBACK;
 	prtd->audio_client->fedai_id = soc_prtd->dai_link->id;
 
-	switch (params_format(params)) {
+	req_format = msm_pcm_asm_cfg_get(soc_prtd->dai_link->id, MSM_ASM_PLAYBACK_MODE);
+	input_file_format = params_format(params);
+
+	pr_debug("%s: fe_id:%d, req_format:%d, input_file_format:%d\n",__func__,
+			soc_prtd->dai_link->id, req_format, input_file_format);
+
+	if(req_format > input_file_format) {
+		format = req_format;
+		pr_debug("%s: enforce ASM bitwidth to %d from %d\n",__func__,
+				format,input_file_format);
+	}else {
+		format = input_file_format;
+	}
+
+	switch (format) {
 	case SNDRV_PCM_FORMAT_S32_LE:
 		bits_per_sample = 32;
 		sample_word_size = 32;
@@ -617,6 +634,10 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 		sample_word_size = 16;
 		break;
 	}
+
+	pr_debug("%s: fe_id:%d, bits_per_sample:%d, sample_word_size:%d\n",__func__,
+			soc_prtd->dai_link->id, bits_per_sample, sample_word_size);
+
 	if (prtd->compress_enable) {
 		fmt_type = FORMAT_GEN_COMPR;
 		pr_debug("%s: Compressed enabled!\n", __func__);
@@ -664,11 +685,32 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 		pr_err("%s: stream reg failed ret:%d\n", __func__, ret);
 		return ret;
 	}
+
+	/*Format block is configure with input file bits_per_sample*/
+	switch (input_file_format) {
+	case SNDRV_PCM_FORMAT_S32_LE:
+		format_blk_bits_per_sample = 32;
+		format_blk_sample_word_size = 32;
+		break;
+	case SNDRV_PCM_FORMAT_S24_LE:
+		format_blk_bits_per_sample = 24;
+		format_blk_sample_word_size = 32;
+		break;
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		format_blk_bits_per_sample = 24;
+		format_blk_sample_word_size = 24;
+		break;
+	case SNDRV_PCM_FORMAT_S16_LE:
+	default:
+		format_blk_bits_per_sample = 16;
+		format_blk_sample_word_size = 16;
+		break;
+	}
 	if (prtd->compress_enable) {
 		ret = q6asm_media_format_block_gen_compr(
 			prtd->audio_client, runtime->rate,
 			runtime->channels, !prtd->set_channel_map,
-			prtd->channel_map, bits_per_sample);
+			prtd->channel_map,format_blk_bits_per_sample);
 	} else {
 
 		if ((q6core_get_avcs_api_version_per_service(
@@ -678,15 +720,15 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			ret = q6asm_media_format_block_multi_ch_pcm_v5(
 				prtd->audio_client, runtime->rate,
 				runtime->channels, !chmap->set_channel_map,
-				chmap->channel_map, bits_per_sample,
-				sample_word_size, ASM_LITTLE_ENDIAN,
+				chmap->channel_map,format_blk_bits_per_sample,
+				format_blk_sample_word_size, ASM_LITTLE_ENDIAN,
 				DEFAULT_QF);
 		} else {
 			ret = q6asm_media_format_block_multi_ch_pcm_v4(
 				prtd->audio_client, runtime->rate,
 				runtime->channels, !prtd->set_channel_map,
-				prtd->channel_map, bits_per_sample,
-				sample_word_size, ASM_LITTLE_ENDIAN,
+				prtd->channel_map, format_blk_bits_per_sample,
+				format_blk_sample_word_size, ASM_LITTLE_ENDIAN,
 				DEFAULT_QF);
 		}
 	}
@@ -751,9 +793,11 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 		else if (params_format(params) == SNDRV_PCM_FORMAT_S32_LE)
 			bits_per_sample = 32;
 
-		/* ULL mode is not supported in capture path */
+		/* ULL mode is not supported in capture path so using LLNP insted of ULL */
 		if (pdata->perf_mode == LEGACY_PCM_MODE)
 			prtd->audio_client->perf_mode = LEGACY_PCM_MODE;
+		else if (pdata->perf_mode == ULTRA_LOW_LATENCY_PCM_MODE)
+			prtd->audio_client->perf_mode = LOW_LATENCY_PCM_NOPROC_MODE;
 		else
 			prtd->audio_client->perf_mode = LOW_LATENCY_PCM_MODE;
 
@@ -1251,6 +1295,13 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			xfer = size;
 		offset = prtd->in_frame_info[idx].offset;
 		pr_debug("Offset value = %d\n", offset);
+		if (offset >= size) {
+			pr_err("%s: Invalid dsp buf offset\n", __func__);
+			ret = -EFAULT;
+			q6asm_cpu_buf_release(OUT, prtd->audio_client);
+			goto fail;
+		}
+
 		if (size == 0 || size < prtd->pcm_count) {
 			memset(bufptr + offset + size, 0, prtd->pcm_count - size);
 			if (fbytes > prtd->pcm_count)
@@ -2382,13 +2433,16 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	const char *deviceNo		= "NN";
 	const char *suffix		= "App Type Cfg";
 	int ctl_len, ret = 0;
+	char kctl_name[SNDRV_CTL_ELEM_ID_NAME_MAXLEN] = {0};
 
 	if (pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream) {
 		ctl_len = strlen(playback_mixer_ctl_name) + 1 +
 				strlen(deviceNo) + 1 + strlen(suffix) + 1;
+		snprintf(kctl_name, ctl_len, "%s %d %s",
+			playback_mixer_ctl_name, rtd->pcm->device, suffix);
 		pr_debug("%s: Playback app type cntrl add\n", __func__);
 		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_PLAYBACK,
-					NULL, 1, ctl_len, rtd->dai_link->id,
+					NULL, 1, kctl_name, rtd->dai_link->id,
 					&app_type_info);
 		if (ret < 0) {
 			pr_err("%s: playback app type cntrl add failed: %d\n",
@@ -2396,8 +2450,6 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 			return ret;
 		}
 		kctl = app_type_info->kctl;
-		snprintf(kctl->id.name, ctl_len, "%s %d %s",
-			playback_mixer_ctl_name, rtd->pcm->device, suffix);
 		kctl->put = msm_pcm_playback_app_type_cfg_ctl_put;
 		kctl->get = msm_pcm_playback_app_type_cfg_ctl_get;
 	}
@@ -2405,9 +2457,11 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream) {
 		ctl_len = strlen(capture_mixer_ctl_name) + 1 +
 				strlen(deviceNo) + 1 + strlen(suffix) + 1;
+		snprintf(kctl_name, ctl_len, "%s %d %s",
+			capture_mixer_ctl_name, rtd->pcm->device, suffix);
 		pr_debug("%s: Capture app type cntrl add\n", __func__);
 		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_CAPTURE,
-					NULL, 1, ctl_len, rtd->dai_link->id,
+					NULL, 1, kctl_name, rtd->dai_link->id,
 					&app_type_info);
 		if (ret < 0) {
 			pr_err("%s: capture app type cntrl add failed: %d\n",
@@ -2415,8 +2469,6 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 			return ret;
 		}
 		kctl = app_type_info->kctl;
-		snprintf(kctl->id.name, ctl_len, "%s %d %s",
-			capture_mixer_ctl_name, rtd->pcm->device, suffix);
 		kctl->put = msm_pcm_capture_app_type_cfg_ctl_put;
 		kctl->get = msm_pcm_capture_app_type_cfg_ctl_get;
 	}
@@ -3754,6 +3806,9 @@ static int msm_pcm_probe(struct platform_device *pdev)
 			else if (!strcmp(latency_level, "ull-pp"))
 				pdata->perf_mode =
 					ULL_POST_PROCESSING_PCM_MODE;
+			else if (!strcmp(latency_level, "llnp"))
+				pdata->perf_mode =
+					LOW_LATENCY_PCM_NOPROC_MODE;
 		}
 	} else {
 		pdata->perf_mode = LEGACY_PCM_MODE;

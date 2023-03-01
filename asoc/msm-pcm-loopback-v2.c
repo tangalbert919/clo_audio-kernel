@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -357,6 +357,7 @@ static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_subs
 	struct asm_session_mtmx_strtr_param_window_v2_t asm_mtmx_strtr_window;
 	uint32_t param_id;
 	struct msm_pcm_pdata *pdata;
+	uint16_t format = 0;
 
 	if (!component) {
 		pr_err("%s: component is NULL\n", __func__);
@@ -415,6 +416,23 @@ static int msm_pcm_open(struct snd_soc_component *component, struct snd_pcm_subs
 		pcm->audio_client->fedai_id = rtd->dai_link->id;
 		pcm->audio_client->perf_mode = pdata->perf_mode;
 		pcm->audio_client->stream_type = substream->stream;
+
+		format = msm_pcm_asm_cfg_get(rtd->dai_link->id, MSM_ASM_LOOPBACK_MODE);
+		switch (format) {
+			case SNDRV_PCM_FORMAT_S32_LE:
+				bits_per_sample = 32;
+				break;
+			case SNDRV_PCM_FORMAT_S24_LE:
+			case SNDRV_PCM_FORMAT_S24_3LE:
+				bits_per_sample = 24;
+				break;
+			case SNDRV_PCM_FORMAT_S16_LE:
+			default:
+				bits_per_sample = 16;
+		}
+		pr_debug("%s: fe_id:%d, bits_per_sample:%d\n",__func__,
+			rtd->dai_link->id,bits_per_sample);
+
 		ret = q6asm_open_loopback_with_retry(pcm->audio_client,
 					bits_per_sample);
 		pcm->session_id = pcm->audio_client->session;
@@ -872,19 +890,20 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	const char *deviceNo		= "NN";
 	const char *suffix		= "App Type Cfg";
 	int ctl_len, ret = 0;
+	char kctl_name[SNDRV_CTL_ELEM_ID_NAME_MAXLEN] = {0};
 
 	if (pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream) {
 		ctl_len = strlen(playback_mixer_ctl_name) + 1 +
 				strlen(deviceNo) + 1 + strlen(suffix) + 1;
+		snprintf(kctl_name, ctl_len, "%s %d %s",
+			playback_mixer_ctl_name, rtd->pcm->device, suffix);
 		pr_debug("%s: Playback app type cntrl add\n", __func__);
 		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_PLAYBACK,
-					NULL, 1, ctl_len, rtd->dai_link->id,
+					NULL, 1, kctl_name, rtd->dai_link->id,
 					&app_type_info);
 		if (ret < 0)
 			return ret;
 		kctl = app_type_info->kctl;
-		snprintf(kctl->id.name, ctl_len, "%s %d %s",
-			playback_mixer_ctl_name, rtd->pcm->device, suffix);
 		kctl->put = msm_pcm_playback_app_type_cfg_ctl_put;
 		kctl->get = msm_pcm_playback_app_type_cfg_ctl_get;
 	}
@@ -892,15 +911,15 @@ static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
 	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream) {
 		ctl_len = strlen(capture_mixer_ctl_name) + 1 +
 				strlen(deviceNo) + 1 + strlen(suffix) + 1;
+		snprintf(kctl_name, ctl_len, "%s %d %s",
+			capture_mixer_ctl_name, rtd->pcm->device, suffix);
 		pr_debug("%s: Capture app type cntrl add\n", __func__);
 		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_CAPTURE,
-					NULL, 1, ctl_len, rtd->dai_link->id,
+					NULL, 1, kctl_name, rtd->dai_link->id,
 					&app_type_info);
 		if (ret < 0)
 			return ret;
 		kctl = app_type_info->kctl;
-		snprintf(kctl->id.name, ctl_len, "%s %d %s",
-			capture_mixer_ctl_name, rtd->pcm->device, suffix);
 		kctl->put = msm_pcm_capture_app_type_cfg_ctl_put;
 		kctl->get = msm_pcm_capture_app_type_cfg_ctl_get;
 	}
@@ -2301,14 +2320,31 @@ static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 static int msm_asoc_pcm_new(struct snd_soc_component *component, struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_card *card = rtd->card->snd_card;
+	struct snd_pcm *pcm = rtd->pcm;
 	int ret = 0;
 
 	if (!card->dev->coherent_dma_mask)
 		card->dev->coherent_dma_mask = DMA_BIT_MASK(32);
 
+	if (pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream) {
+		ret = snd_pcm_set_fixed_buffer(pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream,
+				SNDRV_DMA_TYPE_DEV, component->dev,
+				msm_pcm_hardware_playback.buffer_bytes_max);
+		if (ret)
+			dev_err(rtd->dev, "%s, playback pre alloc buffer failed\n", __func__);
+	}
+	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream) {
+		ret = snd_pcm_set_fixed_buffer(pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream,
+				SNDRV_DMA_TYPE_DEV, component->dev,
+				msm_pcm_hardware_capture.buffer_bytes_max);
+		if (ret)
+			dev_err(rtd->dev, "%s, capture pre alloc buffer failed\n", __func__);
+	}
+
 	ret = msm_pcm_add_controls(rtd);
 	if (ret)
 		dev_err(rtd->dev, "%s, kctl add failed\n", __func__);
+
 	return ret;
 }
 
