@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2019, 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -7221,7 +7221,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	msm_i2s_auxpcm_init(pdev);
 	is_initial_boot = true;
-	ret = audio_notifier_register("sm8150", AUDIO_NOTIFIER_ADSP_DOMAIN,
+	ret = audio_notifier_legacy_register("sm8150", AUDIO_NOTIFIER_ADSP_DOMAIN,
 				      &service_nb);
 	if (ret < 0)
 		pr_err("%s: Audio notifier register failed ret = %d\n",
@@ -7236,7 +7236,7 @@ err:
 
 static int msm_asoc_machine_remove(struct platform_device *pdev)
 {
-	audio_notifier_deregister("sm8150");
+	audio_notifier_legacy_deregister("sm8150");
 	msm_i2s_auxpcm_deinit();
 
 	msm_release_pinctrl(pdev);
