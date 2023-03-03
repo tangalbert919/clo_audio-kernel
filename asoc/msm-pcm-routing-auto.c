@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -52,6 +52,9 @@
 
 #define STRING_LENGTH_OF_INT 12
 #define MAX_USR_CTRL_CNT 128
+
+#define ASM_CFG_PARAM_MAX 4
+static int asm_cfg_params[ASM_CFG_PARAM_MAX];
 
 static struct mutex routing_lock;
 
@@ -340,6 +343,51 @@ int snd_pcm_add_volume_ctls(struct snd_pcm *pcm, int stream,
 }
 EXPORT_SYMBOL(snd_pcm_add_volume_ctls);
 #endif
+
+static void pcm_va_ctl_private_free(struct snd_kcontrol *kcontrol)
+{
+	struct snd_pcm_va_info *info = snd_kcontrol_chip(kcontrol);
+
+	kfree(info);
+}
+
+int snd_pcm_add_va_ctls(struct snd_pcm *pcm, int stream,
+			   unsigned long private_value,
+			   struct snd_pcm_va_info **info_ret,
+			   struct snd_kcontrol_new *knew)
+{
+	int err = 0;
+	struct snd_pcm_va_info *info = NULL;
+
+	if (!pcm || !knew)
+		return -EINVAL;
+
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->pcm = pcm;
+	info->stream = stream;
+	knew->device = pcm->device;
+	knew->count = pcm->streams[stream].substream_count;
+	knew->private_value = private_value;
+	info->kctl = snd_ctl_new1(knew, info);
+	if (!info->kctl) {
+		pr_err("%s: snd_ctl_new1 failed");
+		kfree(info);
+		return -ENOMEM;
+	}
+	info->kctl->private_free = pcm_va_ctl_private_free;
+	err = snd_ctl_add(pcm->card, info->kctl);
+	if (err < 0) {
+		kfree(info);
+		return -ENOMEM;
+	}
+	if (info_ret)
+		*info_ret = info;
+	return 0;
+}
+EXPORT_SYMBOL(snd_pcm_add_va_ctls);
 
 #ifndef SND_PCM_ADD_USR_CTL
 static int pcm_usr_ctl_info(struct snd_kcontrol *kcontrol,
@@ -4339,6 +4387,292 @@ static int msm_routing_afe_lb_tx_port_put(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
+
+struct msm_asm_config loopback_cfg[] = {
+	[MSM_FRONTEND_DAI_MULTIMEDIA1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA3] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA4] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA5] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA6] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA7] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA8] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA9] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA10] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA11] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA12] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA13] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA14] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA15] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA16] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA17] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA18] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA19] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA20] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA21] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA22] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA23] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA24] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA25] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA26] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA27] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA28] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA29] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA30] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA31] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA32] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA33] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA34] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOIP] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_AFE_RX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_AFE_TX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICE_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_DTMF_RX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_QCHAT] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOLTE_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM3] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM4] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM5] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM6] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM7] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM8] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICE2_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICEMMODE1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICEMMODE2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+};
+
+struct msm_asm_config playback_cfg[] = {
+	[MSM_FRONTEND_DAI_MULTIMEDIA1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA3] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA4] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA5] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA6] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA7] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA8] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA9] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA10] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA11] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA12] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA13] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA14] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA15] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA16] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA17] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA18] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA19] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA20] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA21] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA22] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA23] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA24] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA25] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA26] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA27] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA28] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA29] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA30] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA31] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA32] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA33] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA34] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOIP] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_AFE_RX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_AFE_TX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICE_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_DTMF_RX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_QCHAT] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOLTE_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM3] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM4] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM5] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM6] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM7] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM8] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICE2_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICEMMODE1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICEMMODE2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+};
+
+struct msm_asm_config capture_cfg[] = {
+	[MSM_FRONTEND_DAI_MULTIMEDIA1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA3] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA4] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA5] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA6] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA7] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA8] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA9] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA10] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA11] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA12] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA13] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA14] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA15] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA16] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA17] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA18] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA19] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA20] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA21] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA22] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA23] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA24] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA25] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA26] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA27] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA28] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA29] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA30] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA31] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA32] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA33] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_MULTIMEDIA34] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOIP] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_AFE_RX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_AFE_TX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICE_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_DTMF_RX] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_QCHAT] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOLTE_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM3] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM4] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM5] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM6] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM7] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_LSM8] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICE2_STUB] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICEMMODE1] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+	[MSM_FRONTEND_DAI_VOICEMMODE2] = {0, 0, SNDRV_PCM_FORMAT_S16_LE},
+};
+
+int msm_pcm_asm_cfg_get(int fe_id, int mode)
+{
+	int format = 0;
+	if (mode == MSM_ASM_PLAYBACK_MODE) {
+		format = playback_cfg[fe_id].bit_format;
+	}
+	else if(mode == MSM_ASM_CAPTURE_MODE) {
+		format = capture_cfg[fe_id].bit_format;
+	}
+	else if (mode == MSM_ASM_LOOPBACK_MODE) {
+		format = loopback_cfg[fe_id].bit_format;
+	}
+	return format;
+}
+EXPORT_SYMBOL(msm_pcm_asm_cfg_get);
+
+static int msm_pcm_get_format(int value)
+{
+	int format = 0;
+	switch (value) {
+	case 16:
+		format = SNDRV_PCM_FORMAT_S16_LE;
+		break;
+	case 24:
+		format = SNDRV_PCM_FORMAT_S24_LE;
+		break;
+	case 32:
+		format = SNDRV_PCM_FORMAT_S32_LE;
+		break;
+	default:
+		break;
+	}
+	return format;
+}
+
+static int msm_pcm_asm_format_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	int fe_id = 0, mode = 0, format = 0, set = 0;
+
+	mutex_lock(&routing_lock);
+	asm_cfg_params[0] = ucontrol->value.integer.value[0];
+	asm_cfg_params[1] = ucontrol->value.integer.value[1];
+	asm_cfg_params[2] = ucontrol->value.integer.value[2];
+	set =  ucontrol->value.integer.value[3];
+	mutex_unlock(&routing_lock);
+
+	if(set) {
+		fe_id  = asm_cfg_params[0];
+		mode   = asm_cfg_params[1];
+		format = msm_pcm_get_format(asm_cfg_params[2]);
+
+		pr_debug("%s: fe_id:%d, mode:%d, format:%d, set:%d\n",
+				__func__,fe_id,mode,format,set);
+
+		if((fe_id < MSM_FRONTEND_DAI_MULTIMEDIA1) ||
+		(fe_id >= MSM_FRONTEND_DAI_MAX)) {
+			pr_err("%s: Received invalid fe_id %lu\n", __func__, fe_id);
+			ret = -EINVAL;
+			goto done;
+		}
+		if((mode < MSM_ASM_PLAYBACK_MODE) ||
+		(mode >= MSM_ASM_MAX_MODE)) {
+			pr_err("%s: Received invalid mode %lu\n", __func__, mode);
+			ret = -EINVAL;
+			goto done;
+		}
+		if((format == SNDRV_PCM_FORMAT_S16_LE) ||
+			(format == SNDRV_PCM_FORMAT_S24_LE) ||
+			(format == SNDRV_PCM_FORMAT_S32_LE)) {
+				if(mode == MSM_ASM_PLAYBACK_MODE) {
+					playback_cfg[fe_id].fe_id = fe_id;
+					playback_cfg[fe_id].mode = mode;
+					playback_cfg[fe_id].bit_format = format;
+				} else if(mode == MSM_ASM_CAPTURE_MODE) {
+					capture_cfg[fe_id].fe_id = fe_id;
+					capture_cfg[fe_id].mode = mode;
+					capture_cfg[fe_id].bit_format = format;
+				} else if(mode == MSM_ASM_LOOPBACK_MODE) {
+					loopback_cfg[fe_id].fe_id = fe_id;
+					loopback_cfg[fe_id].mode = mode;
+					loopback_cfg[fe_id].bit_format = format;
+			}
+		}else {
+			pr_err("%s: Received invalid format %lu\n", __func__,
+					asm_cfg_params[2]);
+			ret = -EINVAL;
+			goto done;
+		}
+	}
+	done:
+	return ret;
+}
+
+static int msm_pcm_asm_format_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	mutex_lock(&routing_lock);
+	ucontrol->value.integer.value[0] = asm_cfg_params[0];
+	ucontrol->value.integer.value[1] = asm_cfg_params[1];
+	ucontrol->value.integer.value[2] = asm_cfg_params[2];
+	ucontrol->value.integer.value[3] = 0;
+	mutex_unlock(&routing_lock);
+
+	pr_debug("%s: fe_id:%d, mode:%d, format:%d, set:%d\n",__func__,
+			ucontrol->value.integer.value[0],
+			ucontrol->value.integer.value[1],
+			ucontrol->value.integer.value[2],
+			ucontrol->value.integer.value[3]);
+	return 0;
+}
+
+static const struct snd_kcontrol_new msm_asm_format_controls[] = {
+		SOC_SINGLE_MULTI_EXT("ASM Format", SND_SOC_NOPM,
+		0, 0xFFFF, 0, 4,
+		msm_pcm_asm_format_get,
+		msm_pcm_asm_format_put),
+};
+
 
 static const char *const ec_ref_rate_text[] = {"0", "8000", "16000",
 	"24000", "32000", "44100", "48000", "96000", "192000", "384000"};
@@ -32306,7 +32640,7 @@ static const struct snd_kcontrol_new
 		},
 };
 
-#define ASRC_PARAM_MAX				10
+#define ASRC_PARAM_MAX				7
 #define ASRC_SCHED_DELAY_MS 			50
 
 #define MODULE_ID_AUTO_ASRC			0x123A7000
@@ -32364,6 +32698,8 @@ struct asrc_config {
 };
 
 static struct asrc_config asrc_cfg[ASRC_PARAM_MAX];
+
+static int asrc_params[ASRC_PARAM_MAX], asrc_enable;
 
 static int sched_delay_ms = ASRC_SCHED_DELAY_MS;
 
@@ -32631,7 +32967,7 @@ static int asrc_enable_module(struct asrc_module_config_params *params)
 {
 	int ret = 0;
 	int module_id = MODULE_ID_AUTO_ASRC;
-	int instance_id = 0;
+	int instance_id = ((params->m_io == MODULE_PORT_IN) ? 0x8000 : 0);
 	int param_id = PARAM_ID_AUTO_ASRC_ENABLE;
 	int param_size = sizeof(params->enable);
 	void *param_module = (void *)&params->enable;
@@ -32666,7 +33002,7 @@ static int asrc_put_drift_to_module(
 {
 	int ret = 0;
 	int module_id = MODULE_ID_AUTO_ASRC;
-	int instance_id = 0;
+	int instance_id = ((params->m_io == MODULE_PORT_IN) ? 0x8000 : 0);
 	int param_id = ((params->m_io == MODULE_PORT_IN)
 			? PARAM_ID_AUTO_ASRC_INPUT_TIMING_STATS
 			: PARAM_ID_AUTO_ASRC_OUTPUT_TIMING_STATS);
@@ -32813,31 +33149,38 @@ static void asrc_drift_deinit(void)
 static int msm_dai_q6_asrc_config_get(
 	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
-	int i = DRIFT_SRC_AFE_PRI;
+	int i;
 
-	for (; i < DRIFT_SRC_MAX; ++i) {
-		mutex_lock(&asrc_cfg[i].lock);
+	for (i = 0; i < ASRC_PARAM_MAX; i++) {
+
 		ucontrol->value.integer.value[i] =
-			asrc_cfg[i].drift_src;
-		mutex_unlock(&asrc_cfg[i].lock);
+			asrc_params[i];
 	}
 	return 0;
 }
 
-static int msm_dai_q6_asrc_config_put(
+static int msm_dai_q6_asrc_start_get(
 	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = asrc_enable;
+	return 0;
+}
+
+static int asrc_start(void)
 {
 	int ret = 0, idx = 0, i = 0, be_id = -1, module_enabled = 0;
 	struct afe_param_id_dev_timing_stats timing_stats = {0};
 	struct asrc_module_config_params params = {0};
 
-	int enable = ucontrol->value.integer.value[0];
-	int fe_id  = ucontrol->value.integer.value[1];
-	int dir    = ucontrol->value.integer.value[2];
-	int be_afe = ucontrol->value.integer.value[3];
-	int m_io   = ucontrol->value.integer.value[4];
-	int param  = ucontrol->value.integer.value[5];
-	int delay  = ucontrol->value.integer.value[6];
+	int enable = asrc_params[0];
+	int fe_id  = asrc_params[1];
+	int dir    = asrc_params[2];
+	int be_afe = asrc_params[3];
+	int m_io   = asrc_params[4];
+	int param  = asrc_params[5];
+	int delay  = asrc_params[6];
+
+	memset(asrc_params,0,sizeof(asrc_params));
 
 	/* group device */
 	be_id = msm_pcm_get_be_id_from_port_id(be_afe & ~0x0100);
@@ -32951,11 +33294,43 @@ done:
 	return ret;
 }
 
+static int msm_dai_q6_asrc_config_put(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int iter;
+
+	for(iter=0; iter<ASRC_PARAM_MAX; iter++){
+		asrc_params[iter] = ucontrol->value.integer.value[iter];
+	}
+	return 0;
+}
+
+static int msm_dai_q6_asrc_start_put(
+	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = -1;
+	asrc_enable = ucontrol->value.integer.value[0];
+
+	if(asrc_enable)
+		ret = asrc_start();
+	else
+		pr_err(" %s : ASRC config is not set.\n",__func__);
+
+	return ret;
+}
+
 static const struct snd_kcontrol_new asrc_config_controls[] = {
 	SOC_SINGLE_MULTI_EXT("ASRC Config", SND_SOC_NOPM, 0,
 				 0xFFFF, 0, ASRC_PARAM_MAX,
 				 msm_dai_q6_asrc_config_get,
 				 msm_dai_q6_asrc_config_put),
+};
+
+static const struct snd_kcontrol_new asrc_start_controls[] = {
+	SOC_SINGLE_MULTI_EXT("ASRC Start", SND_SOC_NOPM, 0,
+				0xFFFF, 0, 1,
+				msm_dai_q6_asrc_start_get,
+				msm_dai_q6_asrc_start_put),
 };
 
 enum {
@@ -33126,6 +33501,9 @@ static int msm_routing_probe(struct snd_soc_component *component)
 	snd_soc_add_component_controls(component, adm_channel_config_controls,
 				ARRAY_SIZE(adm_channel_config_controls));
 
+	snd_soc_add_component_controls(component, msm_asm_format_controls,
+			ARRAY_SIZE(msm_asm_format_controls));
+
 	snd_soc_add_component_controls(component, aptx_dec_license_controls,
 					ARRAY_SIZE(aptx_dec_license_controls));
 	snd_soc_add_component_controls(
@@ -33138,6 +33516,8 @@ static int msm_routing_probe(struct snd_soc_component *component)
 				      ARRAY_SIZE(mclk_src_controls));
 	snd_soc_add_component_controls(component, asrc_config_controls,
 				      ARRAY_SIZE(asrc_config_controls));
+	snd_soc_add_component_controls(component, asrc_start_controls,
+					ARRAY_SIZE(asrc_start_controls));
 #ifdef CONFIG_MSM_INTERNAL_MCLK
 	snd_soc_add_component_controls(component, internal_mclk_control,
 				      ARRAY_SIZE(internal_mclk_control));

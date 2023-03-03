@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016, 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016, 2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __AUDIO_NOTIFIER_H_
@@ -28,7 +29,7 @@ enum {
 };
 
 /* Structure populated in void *data of nb function
- * callback used for audio_notifier_register
+ * callback used for audio_notifier_legacy_register
  */
 struct audio_notifier_cb_data {
 	int service;
@@ -38,7 +39,7 @@ struct audio_notifier_cb_data {
 #if IS_ENABLED(CONFIG_MSM_QDSP6_NOTIFIER)
 
 /*
- * Use audio_notifier_register to register any audio
+ * Use audio_notifier_legacy_register to register any audio
  * clients who need to be notified of a remote process.
  * This API will determine and register the client with
  * the best available subsystem (SSR or PDR) for that
@@ -65,29 +66,29 @@ struct audio_notifier_cb_data {
  * Returns:	Success: 0
  *		Error: -#
  */
-int audio_notifier_register(char *client_name, int domain,
+int audio_notifier_legacy_register(char *client_name, int domain,
 			    struct notifier_block *nb);
 
 /*
- * Use audio_notifier_deregister to deregister the clients from
- * all domains registered using audio_notifier_register that
+ * Use audio_notifier_legacy_deregister to deregister the clients from
+ * all domains registered using audio_notifier_legacy_register that
  * match the client name.
  *
- * client_name - Unique user name used in audio_notifier_register.
+ * client_name - Unique user name used in audio_notifier_legacy_register.
  * Returns:	Success: 0
  *		Error: -#
  */
-int audio_notifier_deregister(char *client_name);
+int audio_notifier_legacy_deregister(char *client_name);
 
 #else
 
-static inline int audio_notifier_register(char *client_name, int domain,
+static inline int audio_notifier_legacy_register(char *client_name, int domain,
 					  struct notifier_block *nb)
 {
 	return 0;
 }
 
-static inline int audio_notifier_deregister(char *client_name)
+static inline int audio_notifier_legacy_deregister(char *client_name)
 {
 	return 0;
 }
