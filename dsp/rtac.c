@@ -501,10 +501,19 @@ static void shift_popp(u32 copp_idx, u32 popp_idx)
 			&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
 			popp_topology,
 			sizeof(uint32_t));
+		memcpy(&rtac_adm_data.device[copp_idx].popp[popp_idx].
+			app_type,
+			&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
+			app_type,
+			sizeof(uint32_t));
+
 		memset(&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
 			popp, 0, sizeof(uint32_t));
 		memset(&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
 			popp_topology, 0, sizeof(uint32_t));
+		memset(&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
+			app_type, 0, sizeof(uint32_t));
+
 	}
 }
 
@@ -548,6 +557,8 @@ void rtac_remove_popp_from_adm_devices(u32 popp_id)
 				rtac_adm_data.device[i].popp[j].popp = 0;
 				rtac_adm_data.device[i].popp[j].
 					popp_topology = 0;
+				rtac_adm_data.device[i].popp[j].
+					app_type = 0;
 				rtac_adm_data.device[i].num_of_popp--;
 				shift_popp(i, j);
 			}
