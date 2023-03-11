@@ -33,10 +33,16 @@
 #include <sound/tlv.h>
 #include <asm/unaligned.h>
 #include <asoc/msm-cdc-pinctrl.h>
-
+#include <linux/of_gpio.h>
+#include <linux/io.h>
 #include "tas571x.h"
 
 #define TAS571X_MAX_SUPPLIES		6
+#define TLMM_BASE			0x500000
+#define REG_SIZE			0x1000
+#define TLMM_GPIO_CFG_REG_ADDR(n)	(TLMM_BASE + REG_SIZE*(n))
+#define TLMM_GPIO_CFG_EGPIO_EN		BIT(12)
+#define SPK_EN_GPIO			0x64
 
 struct tas571x_chip {
 	const char			*const *supply_names;
@@ -53,11 +59,14 @@ struct tas571x_private {
 	struct regulator_bulk_data	supplies[TAS571X_MAX_SUPPLIES];
 	struct clk			*mclk;
 	unsigned int			format;
-	struct gpio_desc		*reset_gpio;
-	struct gpio_desc		*pdn_gpio;
+	int reset_gpio;
+	int pdn_gpio;
+	int spk_en_gpio;
 	struct device_node		*wsa_clk_gpio_p;
 	struct snd_soc_component_driver	component_driver;
 };
+
+static void __iomem *tlmm_gpio100_cfg;
 
 static int tas571x_register_size(struct tas571x_private *priv, unsigned int reg)
 {
@@ -805,7 +814,11 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 	struct device *dev = &client->dev;
 	const struct of_device_id *of_id;
 	unsigned int val = 0;
+	uint16_t cfg_val=0;
+
 	int i, ret;
+
+	dev_info(dev, "%s: called\n", __func__);
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -850,24 +863,61 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 		goto disable_regs;
 	}
 
-	priv->pdn_gpio = devm_gpiod_get_optional(dev, "pdn", GPIOD_OUT_LOW);
-	if (IS_ERR(priv->pdn_gpio)) {
-		dev_err(dev, "error requesting pdn_gpio: %ld\n",
-			PTR_ERR(priv->pdn_gpio));
-		return PTR_ERR(priv->pdn_gpio);
+	/*
+	 * In the new h/w design, audio module is powered through a GPIO
+	 * This GPIO needs to be configured properly to drive 1.8V.
+	 */
+	tlmm_gpio100_cfg = ioremap(TLMM_GPIO_CFG_REG_ADDR(SPK_EN_GPIO), REG_SIZE);
+
+	cfg_val = readl_relaxed(tlmm_gpio100_cfg);
+
+	/* Configure the GPIO to drive 1.8V */
+	cfg_val |= TLMM_GPIO_CFG_EGPIO_EN;
+	writel_relaxed(cfg_val, tlmm_gpio100_cfg);
+
+	/* Lets wait for the configuration to settle in */
+	msleep(50);
+
+	/* Retrieve GPIO to power up the PA module */
+	priv->spk_en_gpio = of_get_named_gpio(dev->of_node,"spk-en-gpio", 0);
+	if(gpio_is_valid(priv->spk_en_gpio)){
+		ret = gpio_request(priv->spk_en_gpio, "spk-en-gpio");
+		if(ret<0){
+			dev_err(dev, "spk-en-gpio request failed\n", ret);
+			return ret;
+		}
+
+		if(gpio_direction_output(priv->spk_en_gpio, 1) < 0)
+			dev_err(dev, "error setting spk_en_gpio high\n");
 	}
 
-	priv->reset_gpio = devm_gpiod_get_optional(dev, "reset",
-						   GPIOD_OUT_HIGH);
-	if (IS_ERR(priv->reset_gpio)) {
-		dev_err(dev, "error requesting reset_gpio: %ld\n",
-			PTR_ERR(priv->reset_gpio));
-		return PTR_ERR(priv->reset_gpio);
-	} else if (priv->reset_gpio) {
-		/* pulse the active low reset line for ~100us */
-		usleep_range(100, 200);
-		gpiod_set_value(priv->reset_gpio, 0);
-		usleep_range(13500, 20000);
+	priv->pdn_gpio = of_get_named_gpio(dev->of_node,"pdn-gpios", 0);
+	if(gpio_is_valid(priv->pdn_gpio)){
+		ret = gpio_request(priv->pdn_gpio, "audio-pdn-gpio");
+		if(ret<0){
+			dev_err(dev, "audio-pdn-gpio request failed\n", ret);
+			return ret;
+		}
+
+		if(gpio_direction_output(priv->pdn_gpio, 0) < 0)
+			dev_err(dev, "error setting pdn-gpio low\n");
+	}
+
+	priv->reset_gpio = of_get_named_gpio(dev->of_node,"reset-gpios", 0);
+	if(gpio_is_valid(priv->pdn_gpio)){
+		ret = gpio_request(priv->reset_gpio, "audio-reset-gpio");
+		if(ret<0){
+			dev_err(dev, "audio-reset-gpio request failed\n", ret);
+			return ret;
+		}
+
+		/* Set the gpio HIGH */
+		if(gpio_direction_output(priv->reset_gpio, 1) < 0)
+			dev_err(dev, "error setting reset_gpio high\n");
+
+		/* Assert the gpio by setting LOW to reset the audio module */
+		if(gpio_direction_output(priv->reset_gpio, 0) < 0)
+			dev_err(dev,"error setting reset-gpio set low\n");
 	}
 
 	priv->wsa_clk_gpio_p = of_parse_phandle(dev->of_node,
@@ -915,9 +965,11 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 	if (ret)
 		goto disable_regs;
 
+	dev_info(dev, "%s: exited\n", __func__);
 	return ret;
 
 disable_regs:
+	dev_err(dev, "%s: exited due to %d\n", __func__, ret);
 	regulator_bulk_disable(priv->chip->num_supply_names, priv->supplies);
 	return ret;
 }
