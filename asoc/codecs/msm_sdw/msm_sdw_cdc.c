@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1747,7 +1748,7 @@ static int msm_sdw_notifier_service_cb(struct notifier_block *nb,
 	unsigned long timeout;
 	static bool initial_boot = true;
 
-	pr_debug("%s: Service opcode 0x%lx\n", __func__, opcode);
+	pr_info("%s: Service opcode 0x%lx\n", __func__, opcode);
 
 	mutex_lock(&msm_sdw->codec_mutex);
 	switch (opcode) {
