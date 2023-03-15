@@ -27,6 +27,7 @@
 #include <soc/swr-common.h>
 #include <dsp/q6afe-v2.h>
 #include <dsp/q6core.h>
+#include <soc/qcom/boot_stats.h>
 #include "device_event.h"
 #include "msm-pcm-routing-v2.h"
 #include "asoc/msm-cdc-pinctrl.h"
@@ -6210,6 +6211,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 
 	is_initial_boot = true;
+
+	update_marker("M - DRIVER Audio Ready");
 
 	return 0;
 err:
