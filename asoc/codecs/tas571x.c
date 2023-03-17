@@ -16,6 +16,10 @@
  * (at your option) any later version.
  */
 
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -43,6 +47,7 @@
 #define TLMM_GPIO_CFG_REG_ADDR(n)	(TLMM_BASE + REG_SIZE*(n))
 #define TLMM_GPIO_CFG_EGPIO_EN		BIT(12)
 #define SPK_EN_GPIO			0x64
+#define RETRY_CNT			5
 
 struct tas571x_chip {
 	const char			*const *supply_names;
@@ -805,6 +810,169 @@ static struct snd_soc_dai_driver tas571x_dai = {
 	.ops = &tas571x_dai_ops,
 };
 
+static int tas571x_codec_reset(struct tas571x_private *priv, bool state) {
+	int ret, i;
+	unsigned int val = 0;
+
+	pr_debug("%s: entered\n", __func__);
+
+	if (!priv) {
+		pr_err("%s: Invalid context passed\n", __func__);
+		return -1;
+	}
+
+	if (!state) {
+		/*
+		 * We are going to suspend. Prepare codec for power down
+		 * drive PDN and SPK_EN gpio Low and return
+		 */
+		if (gpio_is_valid(priv->pdn_gpio))
+			gpio_direction_output(priv->pdn_gpio, 0);
+
+		if (gpio_is_valid(priv->spk_en_gpio))
+			gpio_direction_output(priv->spk_en_gpio, 0);
+
+		pr_debug("%s: Codec suspended\n", __func__);
+		return 0;
+	}
+
+	/* Drive GPIO High to power up the PA module */
+	if (gpio_is_valid(priv->spk_en_gpio))
+		gpio_direction_output(priv->spk_en_gpio, 1);
+
+	if (gpio_is_valid(priv->pdn_gpio))
+		gpio_direction_output(priv->pdn_gpio, 0);
+
+	/*
+	 * Assert RESET pin to restore DAP to its default
+	 * and place the PWM to hard mute (high impedance)
+	 */
+	if (gpio_is_valid(priv->reset_gpio)) {
+		gpio_direction_output(priv->reset_gpio, 1);
+
+		/* Pulse the active low RESET pin for ~100uS */
+		usleep_range(100, 200);
+
+		gpio_direction_output(priv->reset_gpio, 0);
+	}
+
+	usleep_range(13500, 20000);
+
+	for(i=0; i<RETRY_CNT; i++) {
+		ret = regmap_read(priv->regmap, TAS571X_DEV_ID_REG, &val);
+		if(ret)
+			pr_debug("I2C read retry\n");
+
+		if (i == (RETRY_CNT-1) && ret) {
+			pr_err("I2C read failed ret: %d   Val: %d\n", ret, val);
+			goto disable_reg;
+		}
+
+		/* wait for 10mS before retrying i2c transaction */
+		msleep(10);
+	}
+
+	for(i=0; i<RETRY_CNT; i++) {
+		ret = regmap_write(priv->regmap, TAS571X_OSC_TRIM_REG, 0);
+		if (ret)
+			pr_debug("I2C write retry\n");
+
+		if (i == (RETRY_CNT-1) && ret) {
+			pr_err("I2C write failed ret: %d   Val: %d\n", ret, val);
+			goto disable_reg;
+		}
+
+		/* wait for 10mS before retrying i2c transaction */
+		msleep(10);
+	}
+
+	usleep_range(50000, 60000);
+
+	if (priv->chip->vol_reg_size == 2) {
+		/*
+		 * The master volume defaults to 0x3ff (mute), but we ignore
+		 * (zero) the LSB because the hardware step size is 0.125 dB
+		 * and TLV_DB_SCALE_ITEM has a resolution of 0.01 dB.
+		 */
+		ret = regmap_update_bits(priv->regmap, TAS571X_MVOL_REG, 1, 0);
+		if (ret) {
+			pr_err("%s: Error in regmap update bits\n", __func__);
+			goto disable_reg;
+		}
+
+		ret = regmap_read(priv->regmap, TAS571X_MVOL_REG, &val);
+		pr_debug("init volume level = 0x%x\n",val);
+		if(val==0x3ff || val==0x3fe){
+			pr_info("seting to unmute vol\n");
+			regmap_write(priv->regmap, TAS571X_MVOL_REG,0x011C);
+		}
+
+		ret = regmap_read(priv->regmap, TAS571X_MVOL_REG, &val);
+		pr_debug("post volume level = 0x%x\n", val);
+	}
+
+	pr_debug("%s: exited\n", __func__);
+	return 0;
+disable_reg:
+	pr_err("%s: Disabling codec regulators\n", __func__);
+	regulator_bulk_disable(priv->chip->num_supply_names, priv->supplies);
+	return ret;
+}
+
+#ifdef CONFIG_PM
+static int tas571x_codec_suspend(struct device *dev){
+	struct i2c_client *client = to_i2c_client(dev);
+	struct tas571x_private *priv = i2c_get_clientdata(client);
+
+	dev_dbg(dev, "%s: entered\n", __func__);
+
+	regcache_mark_dirty(priv->regmap);
+
+	regulator_bulk_disable(priv->chip->num_supply_names, priv->supplies);
+
+	tas571x_codec_reset(priv, false);
+
+	dev_dbg(dev, "%s: exited\n", __func__);
+
+	return 0;
+}
+
+static int tas571x_codec_resume(struct device *dev) {
+	struct i2c_client *client = to_i2c_client(dev);
+	struct tas571x_private *priv = i2c_get_clientdata(client);
+	int ret;
+
+	dev_dbg(dev, "%s: entered\n", __func__);
+
+	ret = regulator_bulk_enable(priv->chip->num_supply_names,
+                                    priv->supplies);
+        if (ret) {
+                dev_err(dev, "Failed to enable supplies: %d\n", ret);
+                return ret;
+        }
+
+	/* Restore codec state */
+	tas571x_codec_reset(priv, true);
+
+	ret = regcache_sync(priv->regmap);
+	if (ret < 0)
+		return ret;
+
+	dev_dbg(dev, "%s: exited\n", __func__);
+
+	return 0;
+}
+#else
+#define tas571x_codec_suspend NULL
+#define tas571x_codec_resume  NULL
+#endif
+
+static const struct dev_pm_ops tas571x_pm_ops = {
+        .suspend = tas571x_codec_suspend,
+        .resume = tas571x_codec_resume,
+};
+
+
 static const struct of_device_id tas571x_of_match[];
 
 static int tas571x_i2c_probe(struct i2c_client *client,
@@ -813,9 +981,7 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 	struct tas571x_private *priv;
 	struct device *dev = &client->dev;
 	const struct of_device_id *of_id;
-	unsigned int val = 0;
 	uint16_t cfg_val=0;
-
 	int i, ret;
 
 	dev_info(dev, "%s: called\n", __func__);
@@ -864,7 +1030,7 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 	}
 
 	/*
-	 * In the new h/w design, audio module is powered through a GPIO
+	 * Audio codec is powered through a GPIO
 	 * This GPIO needs to be configured properly to drive 1.8V.
 	 */
 	tlmm_gpio100_cfg = ioremap(TLMM_GPIO_CFG_REG_ADDR(SPK_EN_GPIO), REG_SIZE);
@@ -875,20 +1041,17 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 	cfg_val |= TLMM_GPIO_CFG_EGPIO_EN;
 	writel_relaxed(cfg_val, tlmm_gpio100_cfg);
 
-	/* Lets wait for the configuration to settle in */
+	/* Wait 50mS for the configuration to settle in */
 	msleep(50);
 
-	/* Retrieve GPIO to power up the PA module */
+	/* Retrieve GPIOs for Audio codec initialization */
 	priv->spk_en_gpio = of_get_named_gpio(dev->of_node,"spk-en-gpio", 0);
 	if(gpio_is_valid(priv->spk_en_gpio)){
 		ret = gpio_request(priv->spk_en_gpio, "spk-en-gpio");
 		if(ret<0){
 			dev_err(dev, "spk-en-gpio request failed\n", ret);
-			return ret;
+			goto disable_regs;
 		}
-
-		if(gpio_direction_output(priv->spk_en_gpio, 1) < 0)
-			dev_err(dev, "error setting spk_en_gpio high\n");
 	}
 
 	priv->pdn_gpio = of_get_named_gpio(dev->of_node,"pdn-gpios", 0);
@@ -896,68 +1059,32 @@ static int tas571x_i2c_probe(struct i2c_client *client,
 		ret = gpio_request(priv->pdn_gpio, "audio-pdn-gpio");
 		if(ret<0){
 			dev_err(dev, "audio-pdn-gpio request failed\n", ret);
-			return ret;
+			goto disable_regs;
 		}
-
-		if(gpio_direction_output(priv->pdn_gpio, 0) < 0)
-			dev_err(dev, "error setting pdn-gpio low\n");
 	}
 
 	priv->reset_gpio = of_get_named_gpio(dev->of_node,"reset-gpios", 0);
-	if(gpio_is_valid(priv->pdn_gpio)){
+	if(gpio_is_valid(priv->reset_gpio)){
 		ret = gpio_request(priv->reset_gpio, "audio-reset-gpio");
 		if(ret<0){
 			dev_err(dev, "audio-reset-gpio request failed\n", ret);
 			return ret;
 		}
-
-		/* Set the gpio HIGH */
-		if(gpio_direction_output(priv->reset_gpio, 1) < 0)
-			dev_err(dev, "error setting reset_gpio high\n");
-
-		/* Assert the gpio by setting LOW to reset the audio module */
-		if(gpio_direction_output(priv->reset_gpio, 0) < 0)
-			dev_err(dev,"error setting reset-gpio set low\n");
 	}
+
+       /* Reset audio codec */
+       tas571x_codec_reset(priv, true);
+
+       ret = regcache_sync(priv->regmap);
+       if (ret<0)
+               goto disable_regs;
 
 	priv->wsa_clk_gpio_p = of_parse_phandle(dev->of_node,
 				"qcom,wsa-analog-clk-gpio", 0);
 
-	ret = regmap_read(priv->regmap, TAS571X_DEV_ID_REG, &val);
-	if(ret) {
-		pr_err("I2C read failed ret: %d   Val: %d\n", ret, val);
-	}
-
-	ret = regmap_write(priv->regmap, TAS571X_OSC_TRIM_REG, 0);
-	if (ret)
-		goto disable_regs;
-
-	usleep_range(50000, 60000);
-
 	memcpy(&priv->component_driver, &tas571x_component, sizeof(priv->component_driver));
 	priv->component_driver.controls = priv->chip->controls;
 	priv->component_driver.num_controls = priv->chip->num_controls;
-
-	if (priv->chip->vol_reg_size == 2) {
-		/*
-		 * The master volume defaults to 0x3ff (mute), but we ignore
-		 * (zero) the LSB because the hardware step size is 0.125 dB
-		 * and TLV_DB_SCALE_ITEM has a resolution of 0.01 dB.
-		 */
-		ret = regmap_update_bits(priv->regmap, TAS571X_MVOL_REG, 1, 0);
-		if (ret)
-			goto disable_regs;
-
-		ret = regmap_read(priv->regmap, TAS571X_MVOL_REG, &val);
-		pr_err("init volume level = 0x%x\n",val);
-		if(val==0x3ff || val==0x3fe){
-			pr_err("seting to unmute vol\n");
-			regmap_write(priv->regmap, TAS571X_MVOL_REG,0x011C);
-		}
-
-		ret = regmap_read(priv->regmap, TAS571X_MVOL_REG, &val);
-		pr_err("post volume level = 0x%x\n", val);
-	}
 
 	ret = devm_snd_soc_register_component(&client->dev,
 				      &priv->component_driver,
@@ -1007,6 +1134,9 @@ static struct i2c_driver tas571x_i2c_driver = {
 	.driver = {
 		.name = "tas571x",
 		.of_match_table = of_match_ptr(tas571x_of_match),
+#ifdef CONFIG_PM
+		.pm = &tas571x_pm_ops,
+#endif
 	},
 	.probe = tas571x_i2c_probe,
 	.remove = tas571x_i2c_remove,
