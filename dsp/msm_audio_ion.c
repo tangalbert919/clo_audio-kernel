@@ -361,9 +361,9 @@ static int msm_audio_ion_buf_map(struct dma_buf *dma_buf, u64 *paddr,
 	if (IS_ERR_OR_NULL(*vaddr)) {
 		pr_err("%s: ION memory mapping for AUDIO failed\n", __func__);
 		rc = -ENOMEM;
-		mutex_lock(&(ion_data->list_mutex));
+		mutex_lock(&(msm_audio_ion_data->list_mutex));
 		msm_audio_dma_buf_unmap(dma_buf, ion_data);
-		mutex_unlock(&(ion_data->list_mutex));
+		mutex_unlock(&(msm_audio_ion_data->list_mutex));
 		goto err;
 	}
 
@@ -562,17 +562,17 @@ static int msm_audio_ion_free(struct dma_buf *dma_buf, struct msm_audio_ion_priv
 		return -EINVAL;
 	}
 
-	mutex_lock(&(ion_data->list_mutex));
+	mutex_lock(&(msm_audio_ion_data->list_mutex));
 	if (ion_data->smmu_enabled) {
 		ret = msm_audio_ion_unmap_kernel(dma_buf, ion_data);
 		if (ret) {
-			mutex_unlock(&(ion_data->list_mutex));
+			mutex_unlock(&(msm_audio_ion_data->list_mutex));
 			return ret;
 		}
 	}
 
 	msm_audio_dma_buf_unmap(dma_buf, ion_data);
-	mutex_unlock(&(ion_data->list_mutex));
+	mutex_unlock(&(msm_audio_ion_data->list_mutex));
 
 	return 0;
 }
