@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/debugfs.h>
@@ -27,7 +27,7 @@
 #define WAKELOCK_TIMEOUT	5000
 #define AFE_CLK_TOKEN	1024
 #define AFE_NOWAIT_TOKEN	2048
-
+#define MAX_VOC_SESSIONS	8
 #define SP_V4_NUM_MAX_SPKRS SP_V2_NUM_MAX_SPKRS
 #define MAX_LSM_SESSIONS 8
 
@@ -218,6 +218,7 @@ struct afe_ctl {
 	u32 afe_cal_mode[AFE_MAX_PORTS];
 
 	u16 dtmf_gen_rx_portid;
+	u16 dtmf_gen_rx_session_portid[MAX_VOC_SESSIONS];
 	struct audio_cal_info_spk_prot_cfg	prot_cfg;
 	struct afe_spkr_prot_calib_get_resp	calib_data;
 	struct audio_cal_info_sp_th_vi_ftm_cfg	th_ftm_cfg;
@@ -8520,6 +8521,24 @@ void afe_set_dtmf_gen_rx_portid(u16 port_id, int set)
 EXPORT_SYMBOL(afe_set_dtmf_gen_rx_portid);
 
 /**
+ * afe_set_dtmf_gen_rx_portid_session -
+ *         Set port_id for DTMF tone generation
+ *
+ * @port_id: AFE port id
+ * @set: set or reset port id value for dtmf gen
+ * @session_idx: session index of voice call
+ *
+ */
+void afe_set_dtmf_gen_rx_portid_session(u16 port_id, int set, int session_idx)
+{
+	if (set)
+		this_afe.dtmf_gen_rx_session_portid[session_idx] = port_id;
+	else if (this_afe.dtmf_gen_rx_session_portid[session_idx] == port_id)
+		this_afe.dtmf_gen_rx_session_portid[session_idx] = -1;
+}
+EXPORT_SYMBOL(afe_set_dtmf_gen_rx_portid_session);
+
+/**
  * afe_dtmf_generate_rx - command to generate AFE DTMF RX
  *
  * @duration_in_ms: Duration in ms for dtmf tone
@@ -8594,6 +8613,105 @@ fail_cmd:
 	return ret;
 }
 EXPORT_SYMBOL(afe_dtmf_generate_rx);
+
+/**
+ * afe_dtmf_generate_rx_session - command to generate AFE DTMF RX
+ *
+ * @duration_in_ms: Duration in ms for dtmf tone
+ * @high_freq: Higher frequency for dtmf
+ * @low_freq: lower frequency for dtmf
+ * @gain: Gain value for DTMF tone
+ * @session_idx: Session index of voice call
+ *
+ * Returns 0 on success, appropriate error code otherwise
+ */
+int afe_dtmf_generate_rx_session(int64_t duration_in_ms,
+				  uint16_t high_freq,
+				  uint16_t low_freq, uint16_t gain, int session_idx)
+{
+	int ret = 0;
+	int index = 0;
+	struct afe_dtmf_generation_command cmd_dtmf;
+
+	pr_debug("%s: DTMF AFE Gen\n", __func__);
+
+	memset(&cmd_dtmf, 0, sizeof(cmd_dtmf));
+
+	if (afe_validate_port(this_afe.dtmf_gen_rx_session_portid[session_idx]) < 0) {
+		pr_err("%s: Failed : Invalid Port id = 0x%x\n",
+		       __func__, this_afe.dtmf_gen_rx_session_portid[session_idx]);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+
+	if (this_afe.apr == NULL) {
+		this_afe.apr = apr_register("ADSP", "AFE", afe_callback,
+					    0xFFFFFFFF, &this_afe);
+		pr_debug("%s: Register AFE\n", __func__);
+		if (this_afe.apr == NULL) {
+			pr_err("%s: Unable to register AFE\n", __func__);
+			ret = -ENODEV;
+			return ret;
+		}
+		rtac_set_afe_handle(this_afe.apr);
+	}
+
+	pr_debug("%s: dur=%lld: hfreq=%d lfreq=%d gain=%d portid=0x%x\n",
+		__func__,
+		duration_in_ms, high_freq, low_freq, gain,
+		this_afe.dtmf_gen_rx_session_portid[session_idx]);
+
+	cmd_dtmf.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	cmd_dtmf.hdr.pkt_size = sizeof(cmd_dtmf);
+	cmd_dtmf.hdr.src_port = 0;
+	cmd_dtmf.hdr.dest_port = 0;
+	cmd_dtmf.hdr.token = 0;
+	cmd_dtmf.hdr.opcode = AFE_PORTS_CMD_DTMF_CTL;
+	cmd_dtmf.duration_in_ms = duration_in_ms;
+	cmd_dtmf.high_freq = high_freq;
+	cmd_dtmf.low_freq = low_freq;
+	cmd_dtmf.gain = gain;
+	cmd_dtmf.num_ports = 1;
+	cmd_dtmf.port_ids = q6audio_get_port_id(this_afe.dtmf_gen_rx_session_portid[session_idx]);
+
+	atomic_set(&this_afe.state, 1);
+	atomic_set(&this_afe.status, 0);
+	ret = apr_send_pkt(this_afe.apr, (uint32_t *) &cmd_dtmf);
+	if (ret < 0) {
+		pr_err("%s: AFE DTMF failed for num_ports:%d ids:0x%x\n",
+		       __func__, cmd_dtmf.num_ports, cmd_dtmf.port_ids);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	index = q6audio_get_port_index(this_afe.dtmf_gen_rx_session_portid[session_idx]);
+	if (index < 0 || index >= AFE_MAX_PORTS) {
+		pr_err("%s: AFE port index[%d] invalid!\n",
+				__func__, index);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	ret = wait_event_timeout(this_afe.wait[index],
+		(atomic_read(&this_afe.state) == 0),
+			msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret) {
+		pr_err("%s: wait_event timeout\n", __func__);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	if (atomic_read(&this_afe.status) > 0) {
+		pr_err("%s: config cmd failed [%s]\n",
+			__func__, adsp_err_get_err_str(
+			atomic_read(&this_afe.status)));
+		ret = adsp_err_get_lnx_err_code(
+				atomic_read(&this_afe.status));
+		goto fail_cmd;
+	}
+	return 0;
+fail_cmd:
+	return ret;
+}
+EXPORT_SYMBOL(afe_dtmf_generate_rx_session);
 
 static int afe_sidetone_iir(u16 tx_port_id)
 {
@@ -11892,7 +12010,7 @@ int __init afe_init(void)
 	atomic_set(&this_afe.clk_status, 0);
 	atomic_set(&this_afe.mem_map_cal_index, -1);
 	this_afe.apr = NULL;
-	this_afe.dtmf_gen_rx_portid = -1;
+	this_afe.dtmf_gen_rx_portid = AFE_PORT_ID_PRIMARY_MI2S_RX;
 	this_afe.mmap_handle = 0;
 	this_afe.vi_tx_port = -1;
 	this_afe.vi_rx_port = -1;
