@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/clk.h>
 #include <linux/delay.h>
@@ -9383,7 +9383,7 @@ static int msm_snd_card_tasha_late_probe(struct snd_soc_card *card)
 {
 	int ret = 0;
 
-	ret = audio_notifier_register("qcs405", AUDIO_NOTIFIER_ADSP_DOMAIN,
+	ret = audio_notifier_legacy_register("qcs405", AUDIO_NOTIFIER_ADSP_DOMAIN,
 				      &service_nb);
 	if (ret < 0)
 		pr_err("%s: Audio notifier register failed ret = %d\n",
@@ -10716,7 +10716,7 @@ err:
 
 static int msm_asoc_machine_remove(struct platform_device *pdev)
 {
-	audio_notifier_deregister("qcs405");
+	audio_notifier_legacy_deregister("qcs405");
 	msm_i2s_auxpcm_deinit();
 	msm_mdf_mem_deinit();
 
