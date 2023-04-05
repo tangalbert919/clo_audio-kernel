@@ -3021,6 +3021,7 @@ static int msm_routing_put_listen_mixer(struct snd_kcontrol *kcontrol,
 static void msm_pcm_routing_process_voice(u16 reg, u16 val, int set)
 {
 	u32 session_id = 0;
+	u32 session_idx = 0;
 	u16 path_type;
 	struct media_format_info voc_be_media_format;
 
@@ -3049,6 +3050,14 @@ static void msm_pcm_routing_process_voice(u16 reg, u16 val, int set)
 		pr_debug("%s(): set=%d port id=0x%x for dtmf generation\n",
 			 __func__, set, msm_bedais[reg].port_id);
 		afe_set_dtmf_gen_rx_portid(msm_bedais[reg].port_id, set);
+	}
+
+	if (session_id != 0 && afe_get_port_type(msm_bedais[reg].port_id) ==
+						MSM_AFE_PORT_TYPE_RX) {
+		pr_err("%s(): set=%d port id=0x%x for dtmf generation\n",
+			 __func__, set, msm_bedais[reg].port_id);
+		session_idx = voice_get_idx_for_session(session_id);
+		afe_set_dtmf_gen_rx_portid_session(msm_bedais[reg].port_id, set, session_idx);
 	}
 
 	if (afe_get_port_type(msm_bedais[reg].port_id) ==
@@ -9731,6 +9740,10 @@ static const struct snd_kcontrol_new rx_cdc_dma_rx_0_mixer_controls[] = {
 	SOC_DOUBLE_EXT("MultiMedia32", SND_SOC_NOPM,
 	MSM_BACKEND_DAI_RX_CDC_DMA_RX_0,
 	MSM_FRONTEND_DAI_MULTIMEDIA32, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
+	SOC_DOUBLE_EXT("DTMF", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_RX_CDC_DMA_RX_0,
+	MSM_FRONTEND_DAI_DTMF_RX, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
 };
 
@@ -35497,6 +35510,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"RX_CDC_DMA_RX_0 Audio Mixer", "MultiMedia26", "MM_DL26"},
 	{"RX_CDC_DMA_RX_0 Audio Mixer", "MultiMedia31", "MM_DL31"},
 	{"RX_CDC_DMA_RX_0 Audio Mixer", "MultiMedia32", "MM_DL32"},
+	{"RX_CDC_DMA_RX_0 Audio Mixer", "DTMF", "DTMF_DL_HL"},
 	{"RX_CDC_DMA_RX_0", NULL, "RX_CDC_DMA_RX_0 Audio Mixer"},
 
 	{"RX_CDC_DMA_RX_1 Audio Mixer", "MultiMedia1", "MM_DL1"},
@@ -36504,6 +36518,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"PROXY_RX", NULL, "PROXY_RX_Voice Mixer"},
 
 	{"RX_CDC_DMA_RX_0_Voice Mixer", "Voip", "VOIP_DL"},
+	{"RX_CDC_DMA_RX_0_Voice Mixer", "DTMF", "DTMF_DL_HL"},
 	{"RX_CDC_DMA_RX_0_Voice Mixer", "VoiceMMode1", "VOICEMMODE1_DL"},
 	{"RX_CDC_DMA_RX_0_Voice Mixer", "VoiceMMode2", "VOICEMMODE2_DL"},
 	{"RX_CDC_DMA_RX_0", NULL, "RX_CDC_DMA_RX_0_Voice Mixer"},

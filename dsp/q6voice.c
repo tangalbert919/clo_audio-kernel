@@ -454,6 +454,7 @@ int voice_get_idx_for_session(u32 session_id)
 
 	return idx;
 }
+EXPORT_SYMBOL(voice_get_idx_for_session);
 
 static struct voice_data *voice_get_session_by_idx(int idx)
 {
@@ -10278,7 +10279,7 @@ int __init voice_init(void)
 	/* set default value */
 	common.default_mute_val = 0;  /* default is un-mute */
 	common.default_sample_val = 8000;
-	common.default_vol_step_val = 0;
+	common.default_vol_step_val = 1;
 	common.default_vol_ramp_duration_ms = DEFAULT_VOLUME_RAMP_DURATION;
 	common.default_mute_ramp_duration_ms = DEFAULT_MUTE_RAMP_DURATION;
 	common.cvp_version = 0;
