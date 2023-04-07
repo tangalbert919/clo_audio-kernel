@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /*
  * Add support for 24 and 32bit format for ASM loopback and playback session.
@@ -16,6 +16,12 @@
  * made to the string names or the max name length corresponding
  * changes need to be made in the HAL to ensure they still match.
  */
+
+/* Max wait time for pcm availability in sec */
+#define MSM_PCM_CAPTURE_MAX_WAIT        4
+#define MSM_PCM_PLAYBACK_MAX_WAIT       4
+
+
 #define LPASS_BE_NAME_MAX_LENGTH 24
 #define LPASS_BE_PRI_I2S_RX "PRIMARY_I2S_RX"
 #define LPASS_BE_PRI_I2S_TX "PRIMARY_I2S_TX"

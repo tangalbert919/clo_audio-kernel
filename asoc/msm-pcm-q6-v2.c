@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /*
 * Add support for 24 and 32bit format for ASM loopback and playback session.
@@ -1255,9 +1255,11 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 		ret = wait_event_timeout(the_locks.eos_wait,
 					 !test_bit(CMD_EOS, &prtd->cmd_pending),
 					 timeout);
-		if (!ret)
+		if (!ret) {
 			pr_err("%s: CMD_EOS failed, cmd_pending 0x%lx\n",
 			       __func__, prtd->cmd_pending);
+			ret = -ETIMEDOUT;
+		}
 		q6asm_cmd(prtd->audio_client, CMD_CLOSE);
 		q6asm_audio_client_buf_free_contiguous(dir,
 					prtd->audio_client);
@@ -1269,7 +1271,7 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 	kfree(prtd);
 	runtime->private_data = NULL;
 	mutex_unlock(&pdata->lock);
-	return 0;
+	return ret;
 }
 
 static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
@@ -1325,6 +1327,14 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			xfer = size;
 		offset = prtd->in_frame_info[idx].offset;
 		pr_debug("Offset value = %d\n", offset);
+
+		if (offset >= size) {
+			pr_err("%s: Invalid dsp buf offset\n", __func__);
+			ret = -EFAULT;
+			q6asm_cpu_buf_release(OUT, prtd->audio_client);
+			goto fail;
+		}
+
 		if (size == 0 || size < prtd->pcm_count) {
 			memset(bufptr + offset + size, 0, prtd->pcm_count - size);
 			if (fbytes > prtd->pcm_count)
