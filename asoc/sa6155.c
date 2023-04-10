@@ -1,5 +1,5 @@
 /* Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /*
  * Copyright 2011, The Android Open Source Project
@@ -5273,6 +5273,42 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		SND_SOC_DAILINK_REG(multimedia5),
 	},
 	{
+		.name = MSM_DAILINK_NAME(LowLatency),
+		.stream_name = "MultiMedia35",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA35,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia35),
+	},
+	{
+		.name = MSM_DAILINK_NAME(LowLatency),
+		.stream_name = "MultiMedia36",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA36,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia36),
+	},
+	{
 		.name = "Listen 1 Audio Service",
 		.stream_name = "Listen 1 Audio Service",
 		.dynamic = 1,
@@ -6148,6 +6184,42 @@ static struct snd_soc_dai_link msm_custom_fe_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA20,
 		SND_SOC_DAILINK_REG(multimedia20),
+	},
+	{
+		.name = MSM_DAILINK_NAME(Media35),
+		.stream_name = "MultiMedia35",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA35,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia35),
+	},
+	{
+		.name = MSM_DAILINK_NAME(Media36),
+		.stream_name = "MultiMedia36",
+		.dynamic = 1,
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+		.async_ops = ASYNC_DPCM_SND_SOC_PREPARE,
+#endif /* CONFIG_AUDIO_QGKI */
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA36,
+		.ops = &msm_fe_qos_ops,
+		SND_SOC_DAILINK_REG(multimedia36),
 	},
 };
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/kthread.h>
@@ -454,6 +454,7 @@ int voice_get_idx_for_session(u32 session_id)
 
 	return idx;
 }
+EXPORT_SYMBOL(voice_get_idx_for_session);
 
 static struct voice_data *voice_get_session_by_idx(int idx)
 {
@@ -6872,6 +6873,46 @@ int voc_set_rx_vol_step(uint32_t session_id, uint32_t dir, uint32_t vol_step,
 EXPORT_SYMBOL(voc_set_rx_vol_step);
 
 /**
+ * voc_get_rx_vol_step -
+ *       command to get voice RX volume in step value
+ *
+ * @session_id: voice session ID
+ * @dir: direction RX or TX
+ * @vol_step: Volume step value
+ * @ramp_duration: Ramp duration in ms
+ *
+ * Returns 0 on success or -EINVAL on failure
+ */
+int voc_get_rx_vol_step(uint32_t session_id, uint32_t dir, uint32_t *vol_step,
+			uint32_t *ramp_duration)
+{
+	struct voice_data *v = NULL;
+	int ret = 0;
+	struct voice_session_itr itr;
+
+	pr_debug("%s session id = %#x ", __func__, session_id);
+
+	voice_itr_init(&itr, session_id);
+	while (voice_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			*vol_step = v->dev_rx.volume_step_value;
+			*ramp_duration = v->dev_rx.volume_ramp_duration_ms;
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+				session_id);
+
+			ret = -EINVAL;
+			break;
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(voc_get_rx_vol_step);
+
+/**
  * voc_set_device_config -
  *       Set voice path config for RX or TX
  *
@@ -10238,7 +10279,7 @@ int __init voice_init(void)
 	/* set default value */
 	common.default_mute_val = 0;  /* default is un-mute */
 	common.default_sample_val = 8000;
-	common.default_vol_step_val = 0;
+	common.default_vol_step_val = 1;
 	common.default_vol_ramp_duration_ms = DEFAULT_VOLUME_RAMP_DURATION;
 	common.default_mute_ramp_duration_ms = DEFAULT_MUTE_RAMP_DURATION;
 	common.cvp_version = 0;
