@@ -1440,7 +1440,8 @@ static struct snd_soc_dai_driver wsa_dai[] = {
 static int wsa881x_swr_probe(struct swr_device *pdev)
 {
 	int ret = 0;
-	struct wsa881x_priv *wsa881x;
+	struct wsa881x_priv *wsa881x = NULL;
+	struct snd_soc_component *component;
 	u8 devnum = 0;
 	bool pin_state_current = false;
 	struct wsa_ctrl_platform_data *plat_data = NULL;
@@ -1582,6 +1583,18 @@ static int wsa881x_swr_probe(struct swr_device *pdev)
 			__func__);
 		goto err_mem;
 	}
+
+	wsa881x->wsa881x_name_prefix = kstrndup(wsa881x_name_prefix_of,
+		strlen(wsa881x_name_prefix_of), GFP_KERNEL);
+
+	component = snd_soc_lookup_component(&pdev->dev, wsa881x->driver->name);
+	if (!component) {
+		dev_err(&pdev->dev, "%s: component is NULL \n", __func__);
+		ret = -EINVAL;
+		goto err_mem;
+	}
+
+	component->name_prefix = wsa881x->wsa881x_name_prefix;
 
 	wsa881x->bolero_np = of_parse_phandle(pdev->dev.of_node,
 					      "qcom,bolero-handle", 0);
